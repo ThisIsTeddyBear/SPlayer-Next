@@ -98,7 +98,6 @@ const onMenuSelect = (key: string): void => {
     <div class="flex-1 h-full min-w-4" />
     <!-- 右侧 -->
     <div class="flex items-center gap-2 sm:gap-3 shrink-0">
-      <NavUser />
       <SDropdownMenu :items="menuItems" @select="onMenuSelect">
         <template #trigger>
           <SButton class="app-no-drag shrink-0" variant="tertiary" circle :size="40">

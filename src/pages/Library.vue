@@ -12,6 +12,7 @@ import IconLucideListChecks from "~icons/lucide/list-checks";
 import * as player from "@/core/player";
 
 const { t } = useI18n();
+const route = useRoute();
 const libraryStore = useLibraryStore();
 const { tracks, scanDirs, scanning, scanProgress, initialized } = storeToRefs(libraryStore);
 
@@ -22,7 +23,7 @@ const playbackContext = computed<PlaybackContext>(() => ({
 }));
 
 /** 搜索关键词 */
-const searchQuery = ref("");
+const searchQuery = ref(typeof route.query.q === "string" ? route.query.q : "");
 
 /** 多选模式 */
 const songListRef = shallowRef<InstanceType<typeof SongList> | null>(null);

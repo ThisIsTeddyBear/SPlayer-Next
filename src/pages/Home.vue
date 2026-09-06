@@ -116,7 +116,7 @@ const trackNo = (index: number): string => String(index + 1).padStart(2, "0");
         </div>
       </SCard>
       <!-- 快捷入口 -->
-      <section class="grid grid-cols-4 gap-3">
+      <section class="grid grid-cols-1 gap-3">
         <SCard
           v-for="action in quickActions"
           :key="action.title"

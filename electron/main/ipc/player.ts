@@ -7,7 +7,6 @@ import { toCacheUrl } from "@main/utils/protocol";
 import { toMs } from "@main/utils/time";
 import * as mediaService from "@main/services/media";
 import * as nowPlaying from "@main/services/nowPlaying";
-import * as lastfm from "@main/services/lastfm";
 import * as neteaseScrobble from "@main/services/neteaseScrobble";
 import { fetchBytes } from "@main/utils/fetchBytes";
 import { getPlayer, resetPlayer, onPlayerCreated } from "@main/services/engine";
@@ -127,7 +126,6 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
           setTaskbarProgress(-1);
         }
         nowPlaying.onPlayStateChange(state);
-        lastfm.onState(state === "playing");
         neteaseScrobble.onState(state === "playing");
         const statusEvent = {
           type: "status",
@@ -148,7 +146,6 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
         sendToMain("player:event", { type: "ended" });
         wsBroadcast({ type: "ended" });
         mediaService.setPlayState({ status: "Paused" });
-        lastfm.onEnded();
         neteaseScrobble.onEnded();
         setTaskbarProgress(-1);
         break;
@@ -173,7 +170,6 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
         wsBroadcast(positionEvent);
         mediaService.setTimeline({ currentMs: posMs, totalMs: durMs });
         nowPlaying.onPosition(posMs, true);
-        lastfm.onPosition();
         neteaseScrobble.onPosition(posMs);
         if (store.get("system.taskbarProgress") && durMs > 0) setTaskbarProgress(posMs / durMs);
         break;
@@ -289,17 +285,6 @@ export const registerPlayerIpc = (): void => {
       applyDisplay(displayTitle, displayArtist, displayAlbum, localCover ?? undefined, durationMs);
       if (!isRemote) setTaskbarThumbnailCover(meta.cover);
       // Last.fm
-      const primaryArtist =
-        authoritative?.artists?.[0]?.name ??
-        parseArtists(meta.artist ?? "")[0]?.name ??
-        displayArtist;
-      lastfm.onTrackLoaded({
-        title: displayTitle,
-        artist: primaryArtist,
-        album: displayAlbum,
-        durationMs,
-        autoPlay,
-      });
       neteaseScrobble.onTrackLoaded(authoritative, options.context, durationMs, autoPlay);
       // 远端高清封面
       if (coverFetchUrl) {

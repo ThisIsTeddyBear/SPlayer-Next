@@ -8,7 +8,6 @@ import {
   disable as disableMedia,
   reloadDiscordConfig,
 } from "@main/services/media";
-import { reloadConfig as reloadLastfmConfig } from "@main/services/lastfm";
 import {
   setNormalizationEnabled,
   setEqualizerEnabled,
@@ -53,12 +52,6 @@ const applyConfigChange = (keyPath: string, value: unknown, previous: unknown): 
     case "media.discord.showWhenPaused":
     case "media.discord.displayMode":
       reloadDiscordConfig();
-      break;
-    case "lastfm.enabled":
-    case "lastfm.scrobble":
-    case "lastfm.nowPlaying":
-    case "lastfm.loveSync":
-      reloadLastfmConfig();
       break;
     case "player.loudnessNormalization":
       setNormalizationEnabled(value as boolean);

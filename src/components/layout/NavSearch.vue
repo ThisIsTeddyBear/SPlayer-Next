@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useDataStore } from "@/stores/data";
 import { useStatusStore } from "@/stores/status";
-import { getHotSearches, type HotSearchItem } from "@/apis/search/hot";
-import { getSearchSuggest, type SuggestData, type SuggestSimpleItem } from "@/apis/search/suggest";
+import type { HotSearchItem } from "@/apis/search/hot";
+import type { SuggestData, SuggestSimpleItem } from "@/apis/search/suggest";
 import { songsByIds as getNeteaseSongsByIds } from "@/apis/song/netease";
 import { formatCompact } from "@/utils/format";
 import { navigateToAlbum, navigateToArtist, navigateToPlaylist } from "@/utils/navigate";
@@ -37,12 +37,7 @@ const parsedLink = computed(() => parseMusicLink(trimmedQuery.value));
 const hotItems = ref<HotSearchItem[]>([]);
 
 const loadHot = async (): Promise<void> => {
-  try {
-    hotItems.value = await getHotSearches();
-  } catch (err) {
-    console.warn("[NavSearch] hot search failed:", err);
-    hotItems.value = [];
-  }
+  hotItems.value = [];
 };
 
 /** 搜索建议 */
@@ -50,11 +45,8 @@ const EMPTY_SUGGEST: SuggestData = { songs: [], albums: [], artists: [], playlis
 const suggest = ref<SuggestData>({ ...EMPTY_SUGGEST });
 
 const loadSuggest = useDebounceFn(async (keyword: string) => {
-  try {
-    suggest.value = await getSearchSuggest(keyword);
-  } catch (err) {
-    console.warn("[NavSearch] suggest failed:", err);
-  }
+  void keyword;
+  suggest.value = { ...EMPTY_SUGGEST };
 }, 300);
 
 type SuggestKind = "song" | "artist" | "album" | "playlist";
@@ -101,7 +93,7 @@ const submit = (raw: string): void => {
   const word = raw.trim();
   if (!word) return;
   data.addSearchHistory(word);
-  router.push({ name: "search", query: { q: word } });
+  router.push({ name: "library", query: { q: word } });
   dialogOpen.value = false;
 };
 
