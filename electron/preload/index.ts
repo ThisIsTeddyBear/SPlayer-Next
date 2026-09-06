@@ -194,6 +194,10 @@ const api = {
     getArtists: () => ipcRenderer.invoke("library:getArtists"),
     prefetchArtistImages: (artistNames: string[]) =>
       ipcRenderer.invoke("library:prefetchArtistImages", artistNames),
+    onArtistImage: (callback: (value: { artistName: string; image: string }) => void) => {
+      ipcRenderer.removeAllListeners("library:artistImage");
+      return subscribe("library:artistImage", callback);
+    },
     // 获取某专辑下的全部曲目
     getAlbumTracks: (albumName: string) => ipcRenderer.invoke("library:getAlbumTracks", albumName),
     // 获取某歌手的全部曲目

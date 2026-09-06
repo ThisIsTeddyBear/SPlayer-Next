@@ -41,6 +41,7 @@ interface FanartImage {
 }
 
 const inFlight = new Map<string, Promise<string | undefined>>();
+let musicBrainzQueue = Promise.resolve();
 
 const normalizeName = (name: string): string => name.trim().replace(/\s+/g, " ").toLowerCase();
 
@@ -127,6 +128,11 @@ const downloadImage = async (url: string): Promise<Buffer | null> => {
 };
 
 const findMusicBrainzArtist = async (name: string): Promise<string | undefined> => {
+  const requestTurn = musicBrainzQueue.then(
+    () => new Promise<void>((resolve) => setTimeout(resolve, 1_100)),
+  );
+  musicBrainzQueue = requestTurn.catch(() => {});
+  await requestTurn;
   const query = new URLSearchParams({ query: `artist:${name}`, fmt: "json", limit: "5" });
   const result = await requestJson<{ artists?: MusicBrainzArtist[] }>(
     `https://musicbrainz.org/ws/2/artist/?${query.toString()}`,
@@ -146,10 +152,16 @@ const findFanartImage = async (musicBrainzId: string, key: string): Promise<stri
 };
 
 const resolve = async (artistName: string): Promise<string | undefined> => {
-  const key = await getKey();
-  if (!key) return;
   const normalized = normalizeName(artistName);
   if (!normalized) return;
+  const cachedFileName = `${fileId(normalized)}.jpg`;
+  const cachedFilePath = path.join(getArtistCacheDir(), cachedFileName);
+  try {
+    await fs.access(cachedFilePath);
+    return toCacheUrl(cachedFilePath);
+  } catch {}
+  const key = await getKey();
+  if (!key) return;
   const index = await readIndex();
   const cached = index[normalized];
   const age = Date.now() - (cached?.checkedAt ?? 0);
@@ -166,12 +178,10 @@ const resolve = async (artistName: string): Promise<string | undefined> => {
   const imageUrl = musicBrainzId ? await findFanartImage(musicBrainzId, key) : undefined;
   const bytes = imageUrl ? await downloadImage(imageUrl) : null;
   if (!bytes) {
-    index[normalized] = { checkedAt: Date.now() };
-    await writeIndex(index);
     return;
   }
-  const fileName = `${fileId(normalized)}.jpg`;
-  const filePath = path.join(getArtistCacheDir(), fileName);
+  const fileName = cachedFileName;
+  const filePath = cachedFilePath;
   await fs.mkdir(getArtistCacheDir(), { recursive: true });
   await fs.writeFile(filePath, bytes);
   index[normalized] = { checkedAt: Date.now(), fileName };
@@ -198,6 +208,7 @@ export const getArtistImage = (artistName: string): Promise<string | undefined> 
 /** 并发预取歌手图片 */
 export const prefetchArtistImages = async (
   artistNames: string[],
+  onResolved?: (artistName: string, image: string) => void,
 ): Promise<Record<string, string>> => {
   const queue = [...new Set(artistNames.map((name) => name.trim()).filter(Boolean))];
   const results: Record<string, string> = {};
@@ -206,7 +217,10 @@ export const prefetchArtistImages = async (
     while (cursor < queue.length) {
       const name = queue[cursor++];
       const image = await getArtistImage(name);
-      if (image) results[normalizeName(name)] = image;
+      if (image) {
+        results[normalizeName(name)] = image;
+        onResolved?.(name, image);
+      }
     }
   };
   await Promise.all(Array.from({ length: Math.min(3, queue.length) }, worker));

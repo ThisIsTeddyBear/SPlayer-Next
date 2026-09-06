@@ -82,9 +82,12 @@ export const registerLibraryIpc = (): void => {
     }
   });
 
-  ipcMain.handle("library:prefetchArtistImages", async (_event, artistNames: string[]) => {
+  ipcMain.handle("library:prefetchArtistImages", async (event, artistNames: string[]) => {
     if (!Array.isArray(artistNames)) return { success: true, data: {} };
-    return { success: true, data: await prefetchArtistImages(artistNames.slice(0, 500)) };
+    const data = await prefetchArtistImages(artistNames.slice(0, 500), (artistName, image) => {
+      event.sender.send("library:artistImage", { artistName, image });
+    });
+    return { success: true, data };
   });
 
   // 获取某专辑下的全部曲目

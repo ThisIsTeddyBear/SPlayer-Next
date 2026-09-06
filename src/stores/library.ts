@@ -86,7 +86,11 @@ export const useLibraryStore = defineStore("library", () => {
       ...new Set(tracks.value.flatMap((track) => track.artists.map((artist) => artist.name))),
     ];
     if (!names.length) return;
+    const unsubscribe = window.api.library.onArtistImage(({ artistName, image }) => {
+      setArtistAvatar(artistName, image);
+    });
     const response = await window.api.library.prefetchArtistImages(names);
+    unsubscribe();
     if (!response.success || !response.data) return;
     artistAvatars.value = { ...artistAvatars.value, ...response.data };
   };
