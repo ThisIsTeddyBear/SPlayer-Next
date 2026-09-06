@@ -120,6 +120,13 @@ jobs:
           name: SPlayer-Next-Windows-setup-${{ matrix.arch }}
           path: dist/*-setup.exe
 
+      - name: Upload Windows Portable
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: SPlayer-Next-Windows-portable-${{ matrix.arch }}
+          path: dist/*-portable.exe
+
       # 上传构建产物 (macOS)
       - name: Upload macOS DMG
         if: runner.os == 'macOS'
