@@ -18,6 +18,7 @@ import { registerAiModelIpc } from "./aiModel";
 import { registerPlaylistIpc } from "./playlist";
 import { registerRecognitionIpc } from "./recognition";
 import { registerOpenccIpc } from "./opencc";
+import { registerArtistImagesIpc } from "./artistImages";
 
 /** 注册所有 IPC 处理 */
 export const registerIpcHandlers = (): void => {
@@ -25,6 +26,7 @@ export const registerIpcHandlers = (): void => {
   registerPlayerIpc();
   registerConfigIpc();
   registerLibraryIpc();
+  registerArtistImagesIpc();
   registerNowPlayingIpc();
   registerWindowIpc();
   registerPluginIpc();

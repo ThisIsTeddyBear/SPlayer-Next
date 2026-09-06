@@ -45,6 +45,8 @@ export interface LibraryApi {
   getAlbums: () => Promise<IpcResponse<AlbumSummary[]>>;
   /** 获取歌手聚合列表 */
   getArtists: () => Promise<IpcResponse<ArtistSummary[]>>;
+  /** 预取本地歌手的 Fanart.tv 头像 */
+  prefetchArtistImages: (artistNames: string[]) => Promise<IpcResponse<Record<string, string>>>;
   /** 获取某专辑下的全部曲目 */
   getAlbumTracks: (albumName: string) => Promise<IpcResponse<Track[]>>;
   /** 获取某歌手的全部曲目 */

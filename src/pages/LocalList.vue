@@ -40,7 +40,7 @@ const items = computed<CoverItem[]>(() => {
       ? source.value.map((item: ArtistSummary) => ({
           id: encodeURIComponent(item.name),
           title: item.name,
-          cover: item.cover,
+          cover: libraryStore.getArtistAvatar(item.name) ?? item.cover,
           subtitle: t("common.totalSongs", { count: item.trackCount }),
           trackCount: item.trackCount,
         }))
@@ -89,6 +89,7 @@ const handleClick = (item: CoverItem): void => {
 onMounted(async () => {
   source.value =
     mode === "artist" ? await libraryStore.getArtistList() : await libraryStore.getAlbumList();
+  if (mode === "artist") void libraryStore.loadArtistAvatars();
 });
 </script>
 

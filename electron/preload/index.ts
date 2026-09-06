@@ -192,6 +192,8 @@ const api = {
     getAlbums: () => ipcRenderer.invoke("library:getAlbums"),
     // 获取歌手聚合列表
     getArtists: () => ipcRenderer.invoke("library:getArtists"),
+    prefetchArtistImages: (artistNames: string[]) =>
+      ipcRenderer.invoke("library:prefetchArtistImages", artistNames),
     // 获取某专辑下的全部曲目
     getAlbumTracks: (albumName: string) => ipcRenderer.invoke("library:getAlbumTracks", albumName),
     // 获取某歌手的全部曲目
@@ -226,6 +228,12 @@ const api = {
     // 订阅扫描进度事件
     onScanProgress: (callback: (progress: unknown) => void) =>
       subscribe("library:scanProgress", callback),
+  },
+  artistImages: {
+    getStatus: () => ipcRenderer.invoke("artistImages:getStatus"),
+    savePersonalApiKey: (apiKey: string) =>
+      ipcRenderer.invoke("artistImages:savePersonalApiKey", apiKey),
+    clearPersonalApiKey: () => ipcRenderer.invoke("artistImages:clearPersonalApiKey"),
   },
   playlist: {
     list: () => ipcRenderer.invoke("playlist:list"),

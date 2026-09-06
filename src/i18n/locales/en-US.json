@@ -739,6 +739,7 @@
       "platformLogin": "Platform Login",
       "platformConfig": "Platform Config",
       "network": "Network & Proxy",
+      "artistImages": "Artist Images",
       "aboutApp": "About",
       "specialThanks": "Special Thanks",
       "developers": "Developers",
@@ -800,6 +801,17 @@
       "collapse": "Collapse",
       "commit": "Commit",
       "date": "Date"
+    },
+    "artistImages": {
+      "label": "Fanart.tv artist images",
+      "description": "Uses your personal Fanart.tv API key and MusicBrainz IDs to fetch artist portraits. Images are cached locally.",
+      "placeholder": "Personal Fanart.tv API key",
+      "connected": "Key saved",
+      "notConfigured": "Not configured",
+      "getKey": "Get a personal API key",
+      "saved": "Fanart.tv API key saved",
+      "saveFailed": "Could not save the Fanart.tv API key",
+      "cleared": "Fanart.tv API key removed"
     },
     "storeVersion": "Store",
     "language": {

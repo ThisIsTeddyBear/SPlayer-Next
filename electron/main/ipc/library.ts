@@ -21,6 +21,7 @@ import { getEngine } from "@main/services/engine";
 import { fetchBytes } from "@main/utils/fetchBytes";
 import { getCoverCacheDir } from "@main/utils/config";
 import { libraryLog } from "@main/utils/logger";
+import { prefetchArtistImages } from "@main/services/artistImages";
 import { ErrorCode } from "@shared/types/errors";
 import type { JsTagWriteRequest } from "@splayer/audio-engine";
 import type { TagEditRequest, TagWriteOutcome } from "@shared/types/tagEditor";
@@ -79,6 +80,11 @@ export const registerLibraryIpc = (): void => {
     } catch (_error) {
       return { success: false, error: ErrorCode.UNKNOWN };
     }
+  });
+
+  ipcMain.handle("library:prefetchArtistImages", async (_event, artistNames: string[]) => {
+    if (!Array.isArray(artistNames)) return { success: true, data: {} };
+    return { success: true, data: await prefetchArtistImages(artistNames.slice(0, 500)) };
   });
 
   // 获取某专辑下的全部曲目

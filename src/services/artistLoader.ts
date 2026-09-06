@@ -64,7 +64,9 @@ const loadLocal = async (id: string, options: LoadArtistOptions): Promise<void> 
   const profile = await libraryStore.getArtistProfile(artistName);
   if (options.signal?.aborted) return;
   options.onUpdate(profile);
-
+  if (!profile) return;
+  const avatar = await libraryStore.loadArtistAvatar(artistName);
+  if (!options.signal?.aborted && avatar) options.onUpdate({ ...profile, avatar });
 };
 
 const loadStreaming = async (id: string, options: LoadArtistOptions): Promise<void> => {

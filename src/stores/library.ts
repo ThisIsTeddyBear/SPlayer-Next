@@ -80,8 +80,23 @@ export const useLibraryStore = defineStore("library", () => {
     artistAvatars.value = { ...artistAvatars.value, [key]: avatar };
   };
 
-  /** 本地媒体库不再从第三方服务补全歌手头像 */
-  const loadArtistAvatars = async (): Promise<void> => {};
+  /** 预取本地媒体库中歌手的 Fanart.tv 头像 */
+  const loadArtistAvatars = async (): Promise<void> => {
+    const names = [
+      ...new Set(tracks.value.flatMap((track) => track.artists.map((artist) => artist.name))),
+    ];
+    if (!names.length) return;
+    const response = await window.api.library.prefetchArtistImages(names);
+    if (!response.success || !response.data) return;
+    artistAvatars.value = { ...artistAvatars.value, ...response.data };
+  };
+
+  const loadArtistAvatar = async (artistName: string): Promise<string | undefined> => {
+    const response = await window.api.library.prefetchArtistImages([artistName]);
+    if (!response.success || !response.data) return;
+    artistAvatars.value = { ...artistAvatars.value, ...response.data };
+    return getArtistAvatar(artistName);
+  };
 
   /** 将曲目写入 IndexedDB 缓存 */
   const cacheTracks = (items: Track[]): void => {
@@ -343,6 +358,7 @@ export const useLibraryStore = defineStore("library", () => {
     getArtistAvatar,
     setArtistAvatar,
     loadArtistAvatars,
+    loadArtistAvatar,
     getArtistList,
     getAlbumList,
     getAlbumCollection,
