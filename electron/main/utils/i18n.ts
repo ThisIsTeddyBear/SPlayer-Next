@@ -21,25 +21,6 @@ interface MainMessages {
 }
 
 const messages: Record<LocaleCode, MainMessages> = {
-  "zh-CN": {
-    prev: "上一曲",
-    play: "播放",
-    pause: "暂停",
-    next: "下一曲",
-    addToLiked: "添加到我喜欢",
-    removeFromLiked: "从我喜欢中移除",
-    shuffle: "随机播放",
-    sequential: "顺序播放",
-    repeatList: "列表循环",
-    repeatOne: "单曲循环",
-    openDesktopLyric: "开启桌面歌词",
-    closeDesktopLyric: "关闭桌面歌词",
-    openDynamicIsland: "开启灵动岛",
-    closeDynamicIsland: "关闭灵动岛",
-    openTaskbarLyric: "开启任务栏歌词",
-    closeTaskbarLyric: "关闭任务栏歌词",
-    quit: "退出",
-  },
   "en-US": {
     prev: "Previous",
     play: "Play",
@@ -61,7 +42,7 @@ const messages: Record<LocaleCode, MainMessages> = {
   },
 };
 
-let currentLocale: LocaleCode = "zh-CN";
+let currentLocale: LocaleCode = "en-US";
 
 /** 获取翻译文本 */
 export const t = (key: keyof MainMessages): string => messages[currentLocale][key];

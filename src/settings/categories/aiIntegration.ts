@@ -10,7 +10,7 @@ const aiIntegrationCategory: SettingCategory = {
   sections: [
     {
       id: "aiModel",
-      tag: { text: "未实现", type: "warning" },
+      tag: { text: "Not implemented", type: "warning" },
       items: [
         {
           key: "aiModelConfig",

@@ -139,7 +139,7 @@ export const useRecognitionSession = () => {
     } else if (input === "microphone") {
       await captureInRenderer();
     } else {
-      error.value = { code: "unsupported", message: "当前平台不支持采集系统声音" };
+      error.value = { code: "unsupported", message: "System audio capture is not supported on this platform" };
       phase.value = "error";
     }
   };

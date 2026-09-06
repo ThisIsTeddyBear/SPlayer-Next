@@ -62,9 +62,8 @@
       }
     },
     "preferences": {
-      "title": "Language & Theme",
-      "subtitle": "Pick your interface language and theme. You can fine-tune everything later in Settings.",
-      "languageLabel": "Interface Language",
+      "title": "Theme Preferences",
+      "subtitle": "Pick a theme and accent color. You can fine-tune everything later in Settings.",
       "modeLabel": "Theme Mode",
       "colorLabel": "Accent Color"
     },

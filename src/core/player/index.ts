@@ -1011,7 +1011,7 @@ export const playFile = async (filePath: string): Promise<void> => {
   await playNow(item, {
     originId: "local-file",
     originType: "track",
-    originName: "本地文件",
+    originName: "Local Files",
   });
 };
 
@@ -1025,7 +1025,7 @@ export const playFiles = async (filePaths: string[]): Promise<void> => {
   await playFrom(tracks, 0, {
     originId: "local-files",
     originType: "track",
-    originName: "本地文件",
+    originName: "Local Files",
   });
 };
 

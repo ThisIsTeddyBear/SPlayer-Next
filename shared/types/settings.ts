@@ -2,12 +2,11 @@ import type { PluginsConfig, PluginQuality } from "./plugin";
 import type { HotkeyConfig } from "./hotkey";
 import type { DownloadLyricFormat, DownloadFolderScheme } from "./download";
 
-/** 支持的语言代码 */
-export type LocaleCode = "zh-CN" | "en-US";
+/** Supported interface language code. */
+export type LocaleCode = "en-US";
 
-/** 语言选项 */
+/** Available interface languages. */
 export const LOCALES: { value: LocaleCode; label: string }[] = [
-  { value: "zh-CN", label: "简体中文" },
   { value: "en-US", label: "English" },
 ];
 

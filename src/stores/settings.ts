@@ -100,7 +100,7 @@ export const useSettingsStore = defineStore(
   "settings",
   () => {
     /** 界面语言 */
-    const locale = ref<LocaleCode>("zh-CN");
+    const locale = ref<LocaleCode>("en-US");
 
     /** 外观 */
     const appearance = reactive<AppearanceSettings>({

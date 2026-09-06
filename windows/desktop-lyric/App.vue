@@ -80,7 +80,7 @@ const placeholder = (key: string, mainText: string, subText?: string): DisplayIt
 };
 
 /** 艺术家显示文本 */
-const artistsText = computed<string>(() => formatArtists(track.value?.artists) || "未知艺术家");
+const artistsText = computed<string>(() => formatArtists(track.value?.artists) || "Unknown Artist");
 
 /** 实际渲染的歌词列表 */
 const displayItems = computed<DisplayItem[]>(() => {
@@ -275,7 +275,7 @@ onBeforeUnmount(() => {
         </button>
         <div class="song-info">
           <div class="song-title">{{ track?.title ?? "SPlayer Next Desktop Lyric" }}</div>
-          <div v-if="track" class="song-artist">{{ artistsText || "未知艺术家" }}</div>
+          <div v-if="track" class="song-artist">{{ artistsText || "Unknown Artist" }}</div>
         </div>
       </div>
       <div class="header-section header-center">

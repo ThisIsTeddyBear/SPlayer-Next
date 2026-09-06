@@ -25,13 +25,17 @@ app.use(i18n);
 
 // 初始化主题
 useThemeStore().init();
+const settings = useSettingsStore();
 
-// 同步语言设置
 watch(
-  () => useSettingsStore().locale,
-  (v) => {
-    i18n.global.locale.value = v;
-    window.api.system.setLocale(v);
+  () => settings.locale,
+  (locale) => {
+    if (locale !== "en-US") {
+      settings.locale = "en-US";
+      return;
+    }
+    i18n.global.locale.value = "en-US";
+    window.api.system.setLocale("en-US");
   },
   { immediate: true },
 );
