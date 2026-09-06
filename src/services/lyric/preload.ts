@@ -1,7 +1,6 @@
 import type { Track } from "@shared/types/player";
 import { useSettingsStore } from "@/stores/settings";
 import { useStreamingStore } from "@/stores/streaming";
-import { usePluginsStore } from "@/stores/plugins";
 import { resolveLyricForPreload, type ResolvedLyric } from "./resolve";
 
 type PreloadedLyricResult = { hit: false } | { hit: true; lyric: ResolvedLyric };
@@ -31,23 +30,11 @@ const buildTrackKey = (track: Track): string =>
 const buildContextKey = (): string => {
   const settings = useSettingsStore();
   const streaming = useStreamingStore();
-  const plugins = usePluginsStore();
   return JSON.stringify([
-    settings.lyric.lyricSourcePreference,
-    settings.lyric.lyricSourceOrder,
     settings.lyric.lyricFormatOrder,
-    settings.lyric.smartPreferOnline,
-    settings.lyric.preferPluginLyric,
-    settings.system.lyric.enableOnlineTTMLLyric,
     settings.system.localLyric.enableLocalTTMLOverride,
     settings.system.localLyric.repoDir,
     streaming.activeServerId ?? "",
-    plugins.list.map((plugin) => [
-      plugin.manifest.id,
-      plugin.enabled,
-      plugin.status.state,
-      plugin.status.state === "ready" ? plugin.status.sources : null,
-    ]),
   ]);
 };
 
@@ -62,7 +49,7 @@ export const invalidatePreloadedLyric = (): void => {
  * @param track - 候选歌曲
  */
 export const preloadLyricForTrack = (track: Track): void => {
-  if (track.source === "local") {
+  if (track.source !== "streaming") {
     invalidatePreloadedLyric();
     return;
   }

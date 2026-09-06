@@ -235,32 +235,7 @@ export const resolveTTMLOverlay = async (
  */
 export const resolveStreamingByPreference = async (
   track: Track,
-  shouldContinue: () => boolean = () => true,
-): Promise<ResolvedLyric | null> => {
-  const preference = useSettingsStore().lyric.lyricSourcePreference;
-  let serverLyric: ResolvedLyric | null = null;
-
-  if (preference === "self" || preference === "auto") {
-    serverLyric = await resolveStreamingLyric(track);
-    if (!shouldContinue()) return null;
-    if (preference === "self") return serverLyric;
-  }
-
-  const online = await resolveOnlineByPreference(track, {
-    hasLocal: !!serverLyric,
-    localFormat: serverLyric?.source.format ?? null,
-    shouldContinue,
-  });
-  if (!shouldContinue()) return null;
-  if (online) {
-    const ttml = await resolveTTMLOverlay(track, online);
-    if (!shouldContinue()) return null;
-    return ttml ?? { source: online.source, input: online.input };
-  }
-  if (serverLyric || preference === "auto") return serverLyric;
-
-  return resolveStreamingLyric(track);
-};
+): Promise<ResolvedLyric | null> => resolveStreamingLyric(track);
 
 /**
  * 从本地 TTML 仓库解析歌词
