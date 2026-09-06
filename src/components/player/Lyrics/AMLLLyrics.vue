@@ -29,6 +29,8 @@ const props = withDefaults(
     showWordRomanization?: boolean;
     /** 挂载时的初始播放时间（毫秒） */
     initialTime?: number;
+    /** 是否正在选择歌词行校准时间 */
+    syncPicking?: boolean;
   }>(),
   {
     playing: false,
@@ -40,6 +42,7 @@ const props = withDefaults(
     showLineRomanization: true,
     showWordRomanization: true,
     initialTime: 0,
+    syncPicking: false,
   },
 );
 
@@ -100,7 +103,7 @@ const handleLineClick = (e: Event) => {
   const lineData = amllEvent.line?.getLine();
   if (lineData && typeof lineData.startTime === "number") {
     emit("seek", lineData.startTime);
-    playerRef.value?.setCurrentTime(lineData.startTime, true);
+    if (!props.syncPicking) playerRef.value?.setCurrentTime(lineData.startTime, true);
   }
 };
 

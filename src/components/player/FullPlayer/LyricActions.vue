@@ -2,7 +2,6 @@
 import { useMediaStore } from "@/stores/media";
 import { useStatusStore } from "@/stores/status";
 import { useSettingsDialog } from "@/settings/useSettingsDialog";
-import { getCurrentTime } from "@/services/playback";
 import { formatSignedSec } from "@/utils/time";
 
 defineProps<{
@@ -49,18 +48,19 @@ const advanceLyric = (): void => writeOffset(songOffset.value + LYRIC_OFFSET_STE
 const delayLyric = (): void => writeOffset(songOffset.value - LYRIC_OFFSET_STEP);
 const resetLyricOffset = (): void => writeOffset(0);
 
-const syncLyricToNow = (): void => {
-  const playbackTime = getCurrentTime();
-  const targetTime = playbackTime + songOffset.value;
-  const line = media.parsedLyric.reduce<(typeof media.parsedLyric)[number] | null>(
-    (nearest, candidate) =>
-      !nearest || Math.abs(candidate.startTime - targetTime) < Math.abs(nearest.startTime - targetTime)
-        ? candidate
-        : nearest,
-    null,
-  );
-  if (line) writeOffset(line.startTime - playbackTime);
+/** 切换歌词校时选择模式 */
+const toggleLyricSyncPick = (): void => {
+  if (!hasLyric.value) return;
+  media.lyricSyncPicking = !media.lyricSyncPicking;
 };
+
+/** 通过 Esc 取消歌词校时选择 */
+const cancelLyricSyncPick = (event: KeyboardEvent): void => {
+  if (event.key === "Escape") media.lyricSyncPicking = false;
+};
+
+onMounted(() => window.addEventListener("keydown", cancelLyricSyncPick));
+onBeforeUnmount(() => window.removeEventListener("keydown", cancelLyricSyncPick));
 </script>
 
 <template>
@@ -84,6 +84,34 @@ const syncLyricToNow = (): void => {
     >
       <template #icon><IconLucideCopy /></template>
     </SButton>
+    <SButton
+      type="cover"
+      variant="ghost"
+      circle
+      :size="40"
+      :disabled="!media.canRomanize || media.romanizationLoading"
+      :title="media.romanizationVisible ? 'Show native lyrics' : 'Show romanized lyrics'"
+      @click="media.toggleRomanization()"
+    >
+      <template #icon>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="size-5"
+          aria-hidden="true"
+        >
+          <path
+            d="M8.8 20v-4.1l1.9.2a2.3 2.3 0 0 0 2.164-2.1V8.3A5.37 5.37 0 0 0 2 8.25c0 2.8.656 3.054 1 4.55a5.77 5.77 0 0 1 .029 2.758L2 20"
+          />
+          <path d="M19.8 17.8a7.5 7.5 0 0 0 .003-10.603" />
+          <path d="M17 15a3.5 3.5 0 0 0-.025-4.975" />
+        </svg>
+      </template>
+    </SButton>
     <div class="h-px w-6 bg-cover/25 my-1" />
     <SButton
       type="cover"
@@ -91,8 +119,10 @@ const syncLyricToNow = (): void => {
       circle
       :size="40"
       :disabled="!hasLyric"
-      title="Sync lyrics to now"
-      @click="syncLyricToNow"
+      :class="media.lyricSyncPicking ? 'bg-cover/15 ring-1 ring-cover/50' : ''"
+      :title="media.lyricSyncPicking ? 'Click the lyric being sung now' : 'Sync lyrics to now'"
+      :aria-label="media.lyricSyncPicking ? 'Click the lyric being sung now' : 'Sync lyrics to now'"
+      @click="toggleLyricSyncPick"
     >
       <template #icon><IconLucideTimerReset /></template>
     </SButton>

@@ -16,6 +16,7 @@ const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const USER_AGENT = "SPlayer-Next/1.0 (artist artwork lookup)";
+const PREFETCH_CONCURRENCY = 8;
 
 interface StoredCredentials {
   encryptedPersonalApiKey: string;
@@ -42,6 +43,9 @@ interface FanartImage {
 
 const inFlight = new Map<string, Promise<string | undefined>>();
 let musicBrainzQueue = Promise.resolve();
+let cacheIndex: CacheIndex | undefined;
+let cacheIndexLoad: Promise<CacheIndex> | undefined;
+let indexWriteQueue = Promise.resolve();
 
 const normalizeName = (name: string): string => name.trim().replace(/\s+/g, " ").toLowerCase();
 
@@ -75,19 +79,23 @@ const getKey = async (): Promise<string> => {
 };
 
 const readIndex = async (): Promise<CacheIndex> => {
-  try {
-    return JSON.parse(
-      await fs.readFile(path.join(getArtistCacheDir(), INDEX_FILE), "utf8"),
-    ) as CacheIndex;
-  } catch {
-    return {};
-  }
+  if (cacheIndex) return cacheIndex;
+  cacheIndexLoad ??= fs
+    .readFile(path.join(getArtistCacheDir(), INDEX_FILE), "utf8")
+    .then((contents) => JSON.parse(contents) as CacheIndex)
+    .catch(() => ({}));
+  cacheIndex = await cacheIndexLoad;
+  return cacheIndex;
 };
 
-const writeIndex = async (index: CacheIndex): Promise<void> => {
+const writeIndex = async (): Promise<void> => {
   const dir = getArtistCacheDir();
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(path.join(dir, INDEX_FILE), JSON.stringify(index), "utf8");
+  const index = await readIndex();
+  indexWriteQueue = indexWriteQueue.then(async () => {
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, INDEX_FILE), JSON.stringify(index), "utf8");
+  });
+  await indexWriteQueue;
 };
 
 const requestJson = async <T>(url: string): Promise<T | null> => {
@@ -185,7 +193,7 @@ const resolve = async (artistName: string): Promise<string | undefined> => {
   await fs.mkdir(getArtistCacheDir(), { recursive: true });
   await fs.writeFile(filePath, bytes);
   index[normalized] = { checkedAt: Date.now(), fileName };
-  await writeIndex(index);
+  await writeIndex();
   return toCacheUrl(filePath);
 };
 
@@ -223,7 +231,8 @@ export const prefetchArtistImages = async (
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(3, queue.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(PREFETCH_CONCURRENCY, queue.length) }, worker));
+  libraryLog.info(`Fanart 歌手图片预取完成: ${Object.keys(results).length}/${queue.length}`);
   return results;
 };
 
@@ -245,7 +254,7 @@ export const savePersonalApiKey = async (apiKey: string): Promise<ArtistImagePro
   for (const [name, entry] of Object.entries(index)) {
     if (!entry.fileName) delete index[name];
   }
-  await writeIndex(index);
+  await writeIndex();
   return getArtistImageProviderStatus();
 };
 

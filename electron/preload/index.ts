@@ -404,6 +404,7 @@ const api = {
       ipcRenderer.invoke("apis:setCookie", platform, cookie),
   },
   lyrics: {
+    romanize: (lines: string[]) => ipcRenderer.invoke("lyrics:romanize", lines),
     // 按 id 直取某平台歌词
     matchById: (platform: string, id: string) =>
       ipcRenderer.invoke("lyrics:matchById", platform, id),

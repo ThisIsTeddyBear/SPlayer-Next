@@ -124,7 +124,15 @@ const coverCentered = computed(() => {
   return !showLyric.value || (settings.player.autoCenterCover && !hasLyric.value);
 });
 
+/** 处理歌词行点击；校时选择时只写入偏移而不跳转播放 */
 const handleLyricSeek = async (timeMs: number): Promise<void> => {
+  if (media.lyricSyncPicking) {
+    const trackId = media.track?.id;
+    media.lyricSyncPicking = false;
+    // 歌词时间由播放时间加偏移驱动，故需以选中行时间减实际播放时间。
+    if (trackId) window.api.nowPlaying.setLyricOffset(trackId, timeMs - getCurrentTime());
+    return;
+  }
   await player.seek(timeMs);
   if (!isPlaying.value) await player.play();
 };
@@ -306,6 +314,7 @@ const toggleLyric = (): void => {
             <!-- 歌词容器 -->
             <div
               class="lyric-area relative flex-1 min-h-0"
+              :class="media.lyricSyncPicking ? 'cursor-crosshair' : ''"
               :style="{
                 fontSize: lyricFontSize,
                 fontWeight: String(settings.lyric.fontWeight),
@@ -328,8 +337,9 @@ const toggleLyric = (): void => {
                 :hide-passed-lines="settings.lyric.hidePassedLines"
                 :enable-blur="settings.lyric.enableBlur"
                 :show-translation="settings.lyric.showTranslation"
-                :show-line-romanization="settings.lyric.amllShowLineRomanization"
+                :show-line-romanization="media.romanizationVisible"
                 :show-word-romanization="settings.lyric.amllShowWordRomanization"
+                :sync-picking="media.lyricSyncPicking"
                 @seek="handleLyricSeek"
               >
                 <template #bottom>
@@ -363,7 +373,7 @@ const toggleLyric = (): void => {
                 :enable-float-animation="settings.lyric.enableFloatAnimation"
                 :enable-emphasize-effect="settings.lyric.enableEmphasizeEffect"
                 :show-translation="settings.lyric.showTranslation"
-                :show-romanization="settings.lyric.showRomanization"
+                :show-romanization="media.romanizationVisible"
                 @seek="handleLyricSeek"
               >
                 <template #bottom>

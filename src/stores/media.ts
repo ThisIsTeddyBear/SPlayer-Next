@@ -41,6 +41,14 @@ export const useMediaStore = defineStore("media", () => {
   /** 当前歌词解析结果 */
   const parsedLyric = shallowRef<LyricLine[]>([]);
 
+  /** 当前曲目的罗马音显示状态 */
+  const romanizationVisible = ref(true);
+  /** 是否正在按需生成罗马音 */
+  const romanizationLoading = ref(false);
+
+  /** 是否正在等待用户选择校准时间的歌词行 */
+  const lyricSyncPicking = ref(false);
+
   /** 当前歌词文件制作者列表 */
   const lyricAuthors = ref<string[]>([]);
 
@@ -128,6 +136,8 @@ export const useMediaStore = defineStore("media", () => {
     parsedLyric.value = [];
     lyricAuthors.value = [];
     lyricIndex.value = -1;
+    romanizationLoading.value = false;
+    lyricSyncPicking.value = false;
     lyricLoading.value = true;
     syncToMain();
   };
@@ -175,6 +185,8 @@ export const useMediaStore = defineStore("media", () => {
     activeLyric.value = hasContent ? source : null;
     lyricContent.value = hasContent ? input : null;
     parsedLyric.value = nextLines;
+    romanizationVisible.value = settings.lyric.showRomanization;
+    lyricSyncPicking.value = false;
     lyricAuthors.value =
       hasContent && source && input ? extractLyricAuthors(input.content, source.format) : [];
     lyricIndex.value = -1;
@@ -190,6 +202,46 @@ export const useMediaStore = defineStore("media", () => {
         parsedLyric.value = transformed;
         syncToMain();
       });
+    }
+  };
+
+  /** 当前歌词是否可显示或生成罗马音 */
+  const canRomanize = computed(() =>
+    parsedLyric.value.some(
+      (line) =>
+        Boolean(line.romanLyric) ||
+        /[^\u0000-\u024f\u2000-\u206f]/u.test(line.words.map((word) => word.word).join("")),
+    ),
+  );
+
+  /** 切换当前曲目的罗马音显示，并在需要时按需生成 */
+  const toggleRomanization = async (): Promise<void> => {
+    if (!canRomanize.value) return;
+    romanizationVisible.value = !romanizationVisible.value;
+    if (!romanizationVisible.value || romanizationLoading.value) return;
+    const lines = parsedLyric.value;
+    const missing = [
+      ...new Set(
+        lines
+          .filter((line) => !line.romanLyric)
+          .map((line) => line.words.map((word) => word.word).join(""))
+          .filter((text) => /[^\u0000-\u024f\u2000-\u206f]/u.test(text)),
+      ),
+    ];
+    if (!missing.length) return;
+    romanizationLoading.value = true;
+    try {
+      const readings = await window.api.lyrics.romanize(missing);
+      if (parsedLyric.value !== lines) return;
+      parsedLyric.value = lines.map((line) => {
+        if (line.romanLyric) return line;
+        const text = line.words.map((word) => word.word).join("");
+        const romanLyric = readings[text];
+        return romanLyric ? { ...line, romanLyric } : line;
+      });
+      syncToMain();
+    } finally {
+      romanizationLoading.value = false;
     }
   };
 
@@ -209,6 +261,9 @@ export const useMediaStore = defineStore("media", () => {
     activeLyric.value = null;
     lyricContent.value = null;
     parsedLyric.value = [];
+    romanizationVisible.value = true;
+    romanizationLoading.value = false;
+    lyricSyncPicking.value = false;
     lyricAuthors.value = [];
     lyricLoading.value = false;
     lyricIndex.value = -1;
@@ -223,6 +278,10 @@ export const useMediaStore = defineStore("media", () => {
     lyricContent,
     lyricFormat,
     parsedLyric,
+    romanizationVisible,
+    romanizationLoading,
+    lyricSyncPicking,
+    canRomanize,
     lyricAuthors,
     lyricLoading,
     lyricIndex,
@@ -232,6 +291,7 @@ export const useMediaStore = defineStore("media", () => {
     patchCover,
     resetLyricState,
     setLyric,
+    toggleRomanization,
     updateLyricIndex,
     clear,
   };
