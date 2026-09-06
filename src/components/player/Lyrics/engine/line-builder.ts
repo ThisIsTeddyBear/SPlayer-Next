@@ -44,6 +44,7 @@ export const buildLineElements = (
   const wordMeasurements: WordMeasurement[][] = new Array(lineCount);
   const lineAnimTargets: WordAnimTarget[][] = new Array(lineCount);
   const isBgAbove: boolean[] = new Array(lineCount).fill(false);
+  const singerColors = new Map<string, number>();
 
   // 是否视为逐字
   const hasMultiWordLine = lines.some((line) => line.words.length > 1);
@@ -51,8 +52,11 @@ export const buildLineElements = (
   // 背景人声行：首词早于主行则置于主行上方
   for (let i = 1; i < lineCount; i++) {
     const bg = lines[i];
-    const main = lines[i - 1];
-    if (!bg.isBG || main.isBG) continue;
+    if (!bg.isBG) continue;
+    let mainIdx = i - 1;
+    while (mainIdx >= 0 && lines[mainIdx].isBG) mainIdx--;
+    const main = lines[mainIdx];
+    if (!main) continue;
     const bgStart = bg.words[0]?.startTime ?? bg.startTime;
     const mainStart = main.words[0]?.startTime ?? main.startTime;
     isBgAbove[i] = bgStart < mainStart;
@@ -62,7 +66,25 @@ export const buildLineElements = (
   for (let i = 0; i < lineCount; i++) {
     const line = lines[i];
     const lineEl = document.createElement("div");
-    lineEl.className = "lp-line" + (line.isDuet ? " duet" : "") + (line.isBG ? " bg" : "");
+    const alignment = line.alignment ?? (line.isDuet ? "end" : "start");
+    lineEl.className = [
+      "lp-line",
+      line.isDuet ? "duet" : "",
+      line.isBG ? "bg" : "",
+      `align-${alignment}`,
+      line.singerRole ? `role-${line.singerRole}` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    if (line.singerId) {
+      let colorIndex = singerColors.get(line.singerId);
+      if (colorIndex === undefined) {
+        colorIndex = singerColors.size;
+        singerColors.set(line.singerId, colorIndex);
+      }
+      lineEl.style.setProperty("--lp-singer-color", `var(--lp-singer-${colorIndex % 6})`);
+      lineEl.dataset.singer = line.singerName || line.singerId;
+    }
     const mainDiv = document.createElement("div");
     mainDiv.className = "lp-main";
 

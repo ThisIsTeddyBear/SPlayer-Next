@@ -22,6 +22,9 @@ export type LyricSource = "external" | "embedded" | "online";
 /** 歌词行语言；und-Latn 表示语言未知的拉丁文字 */
 export type LyricLanguage = "ja" | "ko" | "zh-CN" | "und-Latn";
 
+export type LyricSingerRole = "lead" | "background" | "response" | "group";
+export type LyricLineAlignment = "start" | "center" | "end";
+
 /** 歌词数据 */
 export type LyricData = {
   source: LyricSource;
@@ -71,6 +74,10 @@ export interface LyricLine {
   isBG: boolean;
   /** 是否为对唱歌词行 */
   isDuet: boolean;
+  singerId?: string;
+  singerName?: string;
+  singerRole?: LyricSingerRole;
+  alignment?: LyricLineAlignment;
 }
 
 /**

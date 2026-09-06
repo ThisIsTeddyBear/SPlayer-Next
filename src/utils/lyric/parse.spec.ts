@@ -2,6 +2,46 @@ import { describe, expect, it } from "vitest";
 import { bestExternalIndex, detectFormat, parseLyric } from "./parse";
 
 describe("lyric parse", () => {
+  it("preserves TTML singer roles, agent names, lanes, and multiple backing vocals", () => {
+    const lines = parseLyric(
+      {
+        content: `
+          <tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+            <head><metadata>
+              <ttm:agent xml:id="lead" type="person"><ttm:name>Lead</ttm:name></ttm:agent>
+              <ttm:agent xml:id="reply" type="person"><ttm:name>Reply</ttm:name></ttm:agent>
+              <ttm:agent xml:id="choir" type="group"><ttm:name>Choir</ttm:name></ttm:agent>
+            </metadata></head>
+            <body><div>
+              <p begin="0s" end="4s" ttm:agent="lead">Lead<span ttm:role="x-bg">Backing one</span><span ttm:role="x-bg">Backing two</span></p>
+              <p begin="1s" end="3s" ttm:agent="reply">Response</p>
+              <p begin="2s" end="4s" ttm:agent="choir">Together</p>
+            </div></body>
+          </tt>`,
+      },
+      "ttml",
+    );
+
+    expect(lines.map((line) => line.singerRole)).toEqual([
+      "lead",
+      "background",
+      "background",
+      "response",
+      "group",
+    ]);
+    expect(lines.map((line) => line.alignment)).toEqual([
+      "start",
+      "center",
+      "center",
+      "end",
+      "center",
+    ]);
+    expect(lines[1].singerId).toBe("lead");
+    expect(lines[1].singerName).toBe("Lead");
+    expect(lines[3].isDuet).toBe(true);
+    expect(lines[4].isDuet).toBe(false);
+  });
+
   it("根据内容识别常见歌词格式", () => {
     expect(detectFormat("[00:01.00]歌词")).toBe("lrc");
     expect(detectFormat("1\n00:00:01,000 --> 00:00:02,000\n歌词")).toBe("srt");

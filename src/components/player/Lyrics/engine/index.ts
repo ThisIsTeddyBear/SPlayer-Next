@@ -515,14 +515,12 @@ export class LyricRenderer {
     // 检测新激活的行
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      if (line.isBG) continue;
       if (
         line.startTime <= currentTime &&
         line.endTime > currentTime &&
         !this.activeLineSet.has(i)
       ) {
         activated.push(i);
-        if (lines[i + 1]?.isBG) activated.push(i + 1);
       }
     }
 
@@ -533,9 +531,8 @@ export class LyricRenderer {
         deactivated.add(lineIdx);
         continue;
       }
-      if (line.isBG) {
-        if (!this.activeLineSet.has(lineIdx - 1) || deactivated.has(lineIdx - 1))
-          deactivated.add(lineIdx);
+      if (line.singerRole) {
+        if (line.startTime > currentTime || line.endTime <= currentTime) deactivated.add(lineIdx);
         continue;
       }
       const nextLine = lines[lineIdx + 1];
@@ -592,16 +589,10 @@ export class LyricRenderer {
     // 扫描并激活目标时间对应的行
     const lines = this.lines;
     for (let i = 0; i < lines.length; i++) {
-      if (lines[i].isBG) continue;
       if (lines[i].startTime <= targetTime && lines[i].endTime > targetTime) {
         this.activeLineSet.add(i);
         this.lineElements[i]?.classList.add("active");
         this.activateLineAnimations(i, targetTime);
-        if (lines[i + 1]?.isBG) {
-          this.activeLineSet.add(i + 1);
-          this.lineElements[i + 1]?.classList.add("active");
-          this.activateLineAnimations(i + 1, targetTime);
-        }
       }
     }
 

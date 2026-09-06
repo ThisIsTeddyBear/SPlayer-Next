@@ -52,6 +52,16 @@ const initialLyricTimeMs = ref(0);
 const displayTrack = computed(() => media.track ?? status.currentTrack);
 const hasLyric = computed(() => media.parsedLyric.length > 0 || media.lyricLoading);
 const hasTrack = computed(() => !!displayTrack.value);
+const useAmlLyrics = computed(
+  () =>
+    settings.lyric.engine === "amll" &&
+    !media.parsedLyric.some(
+      (line) =>
+        line.singerRole === "response" ||
+        line.singerRole === "group" ||
+        line.singerRole === "background",
+    ),
+);
 
 /** 精确播放时间（毫秒） */
 const { start: startTick, stop: stopTick } = usePlaybackTime((currentMs) => {
@@ -180,7 +190,6 @@ const toggleLyric = (): void => {
     showLyric.value = !showLyric.value;
   }
 };
-
 </script>
 
 <template>
@@ -279,7 +288,11 @@ const toggleLyric = (): void => {
           <!-- 右侧 -->
           <div
             class="group absolute inset-y-0 right-0 pr-20 flex flex-col transition-opacity duration-600 ease-[cubic-bezier(0.4,0,0.2,1)]"
-            :class="coverCentered || status.fullQueueOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'"
+            :class="
+              coverCentered || status.fullQueueOpen
+                ? 'opacity-0 pointer-events-none'
+                : 'opacity-100'
+            "
             :style="{ width: fullscreenCover ? '50%' : `calc(100% - ${coverWidth})` }"
           >
             <!-- 全屏封面 -->
@@ -305,7 +318,7 @@ const toggleLyric = (): void => {
               }"
             >
               <AMLLLyrics
-                v-if="lyricMounted && hasLyric && settings.lyric.engine === 'amll'"
+                v-if="lyricMounted && hasLyric && useAmlLyrics"
                 ref="lyricRef"
                 :lyric-lines="media.parsedLyric"
                 :initial-time="initialLyricTimeMs"

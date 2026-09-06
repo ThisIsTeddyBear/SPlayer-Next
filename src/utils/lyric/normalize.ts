@@ -46,7 +46,7 @@ export const normalizeLyricLines = (lines: LyricLine[]): void => {
   let consecutiveBg = 0;
   for (const line of lines) {
     if (line.isBG) {
-      if (++consecutiveBg > 1) line.isBG = false;
+      if (++consecutiveBg > 1 && line.singerRole !== "background") line.isBG = false;
     } else {
       consecutiveBg = 0;
     }
@@ -57,10 +57,14 @@ export const normalizeLyricLines = (lines: LyricLine[]): void => {
     const line = lines[lineIdx];
     if (line.isBG) continue;
 
-    const bg = lines[lineIdx + 1];
-    if (!bg?.isBG) continue;
+    const backgrounds: LyricLine[] = [];
+    for (let bgIdx = lineIdx + 1; lines[bgIdx]?.isBG; bgIdx++) backgrounds.push(lines[bgIdx]);
+    if (backgrounds.length === 0) continue;
+    if (backgrounds.some((bg) => bg.singerRole === "background")) continue;
 
-    const allWords = [...line.words, ...bg.words].filter((word) => word.word.trim().length > 0);
+    const allWords = [...line.words, ...backgrounds.flatMap((bg) => bg.words)].filter(
+      (word) => word.word.trim().length > 0,
+    );
     if (allWords.length === 0) continue;
 
     let minStart = line.startTime;
@@ -69,11 +73,17 @@ export const normalizeLyricLines = (lines: LyricLine[]): void => {
       if (word.startTime < minStart) minStart = word.startTime;
       if (word.endTime > maxEnd) maxEnd = word.endTime;
     }
-    minStart = Math.min(minStart, bg.startTime);
-    maxEnd = Math.max(maxEnd, bg.endTime);
+    for (const bg of backgrounds) {
+      minStart = Math.min(minStart, bg.startTime);
+      maxEnd = Math.max(maxEnd, bg.endTime);
+    }
 
-    line.startTime = bg.startTime = minStart;
-    line.endTime = bg.endTime = maxEnd;
+    line.startTime = minStart;
+    line.endTime = maxEnd;
+    for (const bg of backgrounds) {
+      bg.startTime = minStart;
+      bg.endTime = maxEnd;
+    }
   }
 
   // 修正非刻意重叠（≤100ms 或不足下一行时长 10% 的重叠视作时间误差）

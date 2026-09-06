@@ -11,7 +11,7 @@
  * - 逐字间有意义的空格保留
  */
 
-import type { LyricLine, LyricWord } from "@shared/types/lyrics";
+import type { LyricLine, LyricSingerRole, LyricWord } from "@shared/types/lyrics";
 import { parseTTMLTime } from "./timestamp";
 
 /**
@@ -54,18 +54,55 @@ const getWordText = (el: Element): string => {
  * @param doc XML 文档
  * @returns 主唱 agent id 与 id→type 映射
  */
-const collectAgents = (doc: Document): { mainAgent: string; agentTypes: Map<string, string> } => {
-  const agentTypes = new Map<string, string>();
+interface TtmlAgent {
+  type: string;
+  name: string;
+}
+
+const normalizeAlignment = (value: string | null): "start" | "center" | "end" | undefined => {
+  switch (value?.toLowerCase()) {
+    case "left":
+    case "start":
+      return "start";
+    case "center":
+      return "center";
+    case "right":
+    case "end":
+      return "end";
+    default:
+      return undefined;
+  }
+};
+
+const collectRegionAlignments = (doc: Document): Map<string, "start" | "center" | "end"> => {
+  const alignments = new Map<string, "start" | "center" | "end">();
+  for (const el of Array.from(doc.querySelectorAll("*"))) {
+    if (el.localName !== "region") continue;
+    const id = el.getAttribute("xml:id") || getAttr(el, "id");
+    const alignment = normalizeAlignment(getAttr(el, "textAlign"));
+    if (id && alignment) alignments.set(id, alignment);
+  }
+  return alignments;
+};
+
+const collectAgents = (doc: Document): { mainAgent: string; agents: Map<string, TtmlAgent> } => {
+  const agents = new Map<string, TtmlAgent>();
   let mainAgent = "";
   for (const el of Array.from(doc.querySelectorAll("*"))) {
     if (el.localName !== "agent") continue;
     const id = el.getAttribute("xml:id") || getAttr(el, "id");
     if (!id) continue;
-    const type = el.getAttribute("type") || "";
-    agentTypes.set(id, type);
+    const type = getAttr(el, "type") || "";
+    const name =
+      getAttr(el, "name") ||
+      Array.from(el.children)
+        .find((child) => child.localName === "name")
+        ?.textContent?.trim() ||
+      "";
+    agents.set(id, { type, name });
     if (!mainAgent && type === "person") mainAgent = id;
   }
-  return { mainAgent: mainAgent || "v1", agentTypes };
+  return { mainAgent: mainAgent || "v1", agents };
 };
 
 /**
@@ -316,7 +353,8 @@ export const parseTTML = (text: string, preferredLang = ""): LyricLine[] => {
     throw new Error("Invalid TTML XML");
   }
 
-  const { mainAgent, agentTypes } = collectAgents(doc);
+  const { mainAgent, agents } = collectAgents(doc);
+  const regionAlignments = collectRegionAlignments(doc);
   const translations = collectTranslations(doc, preferredLang);
   const transliterations = collectTransliterations(doc);
   const lines: LyricLine[] = [];
@@ -329,20 +367,36 @@ export const parseTTML = (text: string, preferredLang = ""): LyricLine[] => {
     isBG: boolean,
     isDuet: boolean,
     parentKey: string | null,
+    inheritedAgent = "",
   ): void => {
     const begin = getAttr(el, "begin");
     const end = getAttr(el, "end");
-    const lineAgent = getAttr(el, "agent");
+    const lineAgent = getAttr(el, "agent") || inheritedAgent;
+    const agent = lineAgent ? agents.get(lineAgent) : undefined;
+    const isGroup = agent?.type === "group";
+    const singerRole: LyricSingerRole = isBG
+      ? "background"
+      : isGroup
+        ? "group"
+        : lineAgent && lineAgent !== mainAgent
+          ? "response"
+          : "lead";
+    const alignment =
+      normalizeAlignment(getAttr(el, "textAlign")) ??
+      regionAlignments.get(getAttr(el, "region") || "") ??
+      (isBG || isGroup ? "center" : singerRole === "response" ? "end" : "start");
 
     const line: LyricLine = {
       words: [],
       translatedLyric: "",
       romanLyric: "",
       isBG,
+      singerId: lineAgent || undefined,
+      singerName: agent?.name || undefined,
+      singerRole,
+      alignment,
       // 合唱（type="group"）行居中、不算对唱，仅非主唱的个人 agent 才右对齐
-      isDuet: isBG
-        ? isDuet
-        : !!lineAgent && lineAgent !== mainAgent && agentTypes.get(lineAgent) !== "group",
+      isDuet: isBG ? isDuet : singerRole === "response",
       startTime: begin ? parseTTMLTime(begin) : 0,
       endTime: end ? parseTTMLTime(end) : 0,
     };
@@ -396,7 +450,7 @@ export const parseTTML = (text: string, preferredLang = ""): LyricLine[] => {
 
         if (role === "x-bg") {
           // 背景歌词行，递归解析
-          parseParagraph(span, true, line.isDuet, itunesKey);
+          parseParagraph(span, true, line.isDuet, itunesKey, lineAgent);
           bgCount++;
         } else if (role === "x-translation") {
           // 行内翻译，可能多语言并存，先收集候选
@@ -473,7 +527,7 @@ export const parseTTML = (text: string, preferredLang = ""): LyricLine[] => {
   // 遍历所有带时间标记的 <p> 元素
   for (const p of Array.from(doc.querySelectorAll("p"))) {
     if (getAttr(p, "begin") && getAttr(p, "end")) {
-      parseParagraph(p, false, false, null);
+      parseParagraph(p, getAttr(p, "role") === "x-bg", false, null);
     }
   }
 

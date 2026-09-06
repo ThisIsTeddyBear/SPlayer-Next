@@ -1,10 +1,4 @@
-import type {
-  PlayerState,
-  AudioDevice,
-  RepeatMode,
-  ShuffleMode,
-  Track,
-} from "@shared/types/player";
+import type { PlayerState, AudioDevice, RepeatMode, ShuffleMode } from "@shared/types/player";
 import type { Platform } from "@shared/types/platform";
 import type { ContentScope } from "@/types/collection";
 import type { SortField, SortOrder } from "@/types/list";
