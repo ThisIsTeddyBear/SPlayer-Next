@@ -21,6 +21,12 @@ const COVER_EDGE_MARGIN = 3;
 const MIN_COVER_CHROMA = 8;
 /** 彩色区域至少覆盖该比例，避免少量点缀色覆盖大面积中性色 */
 const MIN_COLORFUL_POPULATION_RATIO = 0.12;
+const SINGER_LANE_COUNT = 6;
+
+interface CoverColorExtraction {
+  primary: string | null;
+  singerColors: string[];
+}
 
 /** 将 ARGB 整数转为 HEX 字符串 */
 const argbToHex = (argb: number): string => {
@@ -68,6 +74,38 @@ const pickRepresentativeCoverColor = (colors: Map<number, number>): number | nul
     }
   }
   return best;
+};
+
+/** 从封面量化色中选出色相足够分离的歌手轨道颜色 */
+const pickSingerCoverColors = (colors: Map<number, number>, primary: number): string[] => {
+  const candidates = [...colors.entries()]
+    .filter(([argb]) => {
+      const hct = Hct.fromInt(argb);
+      return hct.chroma >= MIN_COVER_CHROMA && hct.tone >= 12 && hct.tone <= 92;
+    })
+    .sort(([, left], [, right]) => right - left)
+    .map(([argb]) => argb);
+  const selected = [primary];
+  for (const candidate of candidates) {
+    if (selected.length >= SINGER_LANE_COUNT) break;
+    const hue = Hct.fromInt(candidate).hue;
+    if (
+      selected.every(
+        (picked) => Math.abs(((Hct.fromInt(picked).hue - hue + 540) % 360) - 180) >= 20,
+      )
+    ) {
+      selected.push(candidate);
+    }
+  }
+
+  const base = Hct.fromInt(primary);
+  while (selected.length < SINGER_LANE_COUNT) {
+    const offset = selected.length * 28;
+    selected.push(
+      Hct.from((base.hue + offset) % 360, Math.max(18, base.chroma), base.tone).toInt(),
+    );
+  }
+  return selected.map(toCoverBaseColor);
 };
 
 /** 把真实代表色约束到适合作为背景基色的范围 */
@@ -175,9 +213,12 @@ export const extractColorFromImage = (img: HTMLImageElement | null): void => {
   const themeStore = useThemeStore();
   if (!img || !useSettingsStore().player.followCoverColor) {
     themeStore.coverColor = null;
+    themeStore.coverSingerColors = [];
     return;
   }
-  themeStore.coverColor = extractColorFromImageElement(img);
+  const colors = extractColorFromImageElement(img);
+  themeStore.coverColor = colors.primary;
+  themeStore.coverSingerColors = colors.singerColors;
 };
 
 /**
@@ -191,6 +232,7 @@ export const extractColorFromUrl = (url: string | null): void => {
   const token = ++coverColorToken;
   if (!url || !useSettingsStore().player.followCoverColor) {
     themeStore.coverColor = null;
+    themeStore.coverSingerColors = [];
     return;
   }
   if (/^https?:\/\//i.test(url)) {
@@ -201,11 +243,14 @@ export const extractColorFromUrl = (url: string | null): void => {
   img.crossOrigin = "anonymous";
   img.onload = () => {
     if (token !== coverColorToken || !useSettingsStore().player.followCoverColor) return;
-    themeStore.coverColor = extractColorFromImageElement(img);
+    const colors = extractColorFromImageElement(img);
+    themeStore.coverColor = colors.primary;
+    themeStore.coverSingerColors = colors.singerColors;
   };
   img.onerror = () => {
     if (token !== coverColorToken) return;
     themeStore.coverColor = null;
+    themeStore.coverSingerColors = [];
   };
   img.src = url;
 };
@@ -219,6 +264,7 @@ const loadColorFromRemote = async (url: string, token: number): Promise<void> =>
     if (token !== coverColorToken || !settings.player.followCoverColor) return;
     if (!result.success || !result.data) {
       themeStore.coverColor = null;
+      themeStore.coverSingerColors = [];
       return;
     }
     const blob = new Blob([new Uint8Array(result.data)]);
@@ -229,7 +275,9 @@ const loadColorFromRemote = async (url: string, token: number): Promise<void> =>
         URL.revokeObjectURL(blobUrl);
         return;
       }
-      themeStore.coverColor = extractColorFromImageElement(img);
+      const colors = extractColorFromImageElement(img);
+      themeStore.coverColor = colors.primary;
+      themeStore.coverSingerColors = colors.singerColors;
       URL.revokeObjectURL(blobUrl);
     };
     img.onerror = () => {
@@ -238,12 +286,14 @@ const loadColorFromRemote = async (url: string, token: number): Promise<void> =>
         return;
       }
       themeStore.coverColor = null;
+      themeStore.coverSingerColors = [];
       URL.revokeObjectURL(blobUrl);
     };
     img.src = blobUrl;
   } catch {
     if (token !== coverColorToken) return;
     themeStore.coverColor = null;
+    themeStore.coverSingerColors = [];
   }
 };
 
@@ -255,7 +305,7 @@ export const extractColorFromImageUrl = (url: string): Promise<string | null> =>
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.onload = () => resolve(extractColorFromImageElement(img));
+    img.onload = () => resolve(extractColorFromImageElement(img).primary);
     img.onerror = () => resolve(null);
     img.src = url;
   });
@@ -265,12 +315,12 @@ export const extractColorFromImageUrl = (url: string): Promise<string | null> =>
  * 从 HTMLImageElement 提取主色 HEX，纯计算，不操作 store
  * @returns 主色 HEX 或 null（单调/低彩度时）
  */
-const extractColorFromImageElement = (img: HTMLImageElement): string | null => {
+const extractColorFromImageElement = (img: HTMLImageElement): CoverColorExtraction => {
   const canvas = document.createElement("canvas");
   canvas.width = COVER_SAMPLE_SIZE;
   canvas.height = COVER_SAMPLE_SIZE;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return null;
+  if (!ctx) return { primary: null, singerColors: [] };
   // 跨域无 CORS 头会污染 canvas；图片状态异常时 drawImage 也可能抛错
   let data: Uint8ClampedArray;
   try {
@@ -289,7 +339,7 @@ const extractColorFromImageElement = (img: HTMLImageElement): string | null => {
   } catch {
     canvas.width = 0;
     canvas.height = 0;
-    return null;
+    return { primary: null, singerColors: [] };
   }
   // RGBA → ARGB int
   const pixels: number[] = [];
@@ -302,14 +352,17 @@ const extractColorFromImageElement = (img: HTMLImageElement): string | null => {
       for (let j = 0; j < weight; j++) pixels.push(argb);
     }
   }
-  if (pixels.length === 0) return null;
+  if (pixels.length === 0) return { primary: null, singerColors: [] };
   const quantized = QuantizerCelebi.quantize(pixels, 128);
   const picked = pickRepresentativeCoverColor(quantized);
-  if (!picked) return null;
+  if (!picked) return { primary: null, singerColors: [] };
   // 释放 canvas GPU 资源
   canvas.width = 0;
   canvas.height = 0;
-  return toCoverBaseColor(picked);
+  return {
+    primary: toCoverBaseColor(picked),
+    singerColors: pickSingerCoverColors(quantized, picked),
+  };
 };
 
 /**
@@ -318,6 +371,7 @@ const extractColorFromImageElement = (img: HTMLImageElement): string | null => {
 export const applyThemeToDOM = (
   palette: ThemePalette,
   coverColorHex: string | null,
+  coverSingerColors: string[],
   isDark: boolean,
 ): void => {
   const root = document.documentElement;
@@ -330,5 +384,13 @@ export const applyThemeToDOM = (
     coverColorHex ? hexToRgb(toCoverUiColor(coverColorHex)) : "239 239 239",
   );
   root.style.setProperty("--s-cover-base", coverColorHex ? hexToRgb(coverColorHex) : "20 20 28");
+  const singerColors = coverSingerColors.length > 0 ? coverSingerColors : [coverColorHex];
+  for (let index = 0; index < SINGER_LANE_COUNT; index++) {
+    const color = singerColors[index % singerColors.length];
+    root.style.setProperty(
+      `--s-cover-singer-${index}`,
+      color ? hexToRgb(toCoverUiColor(color)) : "239 239 239",
+    );
+  }
   root.classList.toggle("dark", isDark);
 };

@@ -44,8 +44,7 @@ export const buildLineElements = (
   const wordMeasurements: WordMeasurement[][] = new Array(lineCount);
   const lineAnimTargets: WordAnimTarget[][] = new Array(lineCount);
   const isBgAbove: boolean[] = new Array(lineCount).fill(false);
-  const singerColors = new Map<string, number>();
-
+  const singerLanes = new Map<string, number>();
   // 是否视为逐字
   const hasMultiWordLine = lines.some((line) => line.words.length > 1);
 
@@ -77,12 +76,12 @@ export const buildLineElements = (
       .filter(Boolean)
       .join(" ");
     if (line.singerId) {
-      let colorIndex = singerColors.get(line.singerId);
-      if (colorIndex === undefined) {
-        colorIndex = singerColors.size;
-        singerColors.set(line.singerId, colorIndex);
+      let lane = singerLanes.get(line.singerId);
+      if (lane === undefined) {
+        lane = singerLanes.size;
+        singerLanes.set(line.singerId, lane);
       }
-      lineEl.style.setProperty("--lp-singer-color", `var(--lp-singer-${colorIndex % 6})`);
+      lineEl.style.setProperty("--lp-singer-color", `rgb(var(--s-cover-singer-${lane % 6}))`);
       lineEl.dataset.singer = line.singerName || line.singerId;
     }
     const mainDiv = document.createElement("div");

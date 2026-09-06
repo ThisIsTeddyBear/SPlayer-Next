@@ -47,7 +47,9 @@ export const useQueuePanel = (options: UseQueuePanelOptions) => {
     statusStore.playIndex = -1;
     clearQueue();
     mediaStore.clear();
-    useThemeStore().coverColor = null;
+    const theme = useThemeStore();
+    theme.coverColor = null;
+    theme.coverSingerColors = [];
     clearConfirmOpen.value = false;
   };
 

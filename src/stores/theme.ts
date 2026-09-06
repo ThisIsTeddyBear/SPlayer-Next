@@ -24,6 +24,8 @@ export const useThemeStore = defineStore(
     const globalTint = ref(false);
     /** 封面取色 HEX */
     const coverColor = ref<string | null>(null);
+    /** 封面提取出的歌手轨道颜色 */
+    const coverSingerColors = ref<string[]>([]);
     /** 外观风格 */
     const appearanceStyle = ref<AppearanceStyle>("solid");
     /** 图片背景配置 */
@@ -83,7 +85,7 @@ export const useThemeStore = defineStore(
           ? SOLID_PALETTE_DARK
           : SOLID_PALETTE_LIGHT
         : generatePalette(effectiveColor.value, isDark.value, effectiveGlobalTint.value);
-      applyThemeToDOM(palette, coverColor.value, isDark.value);
+      applyThemeToDOM(palette, coverColor.value, coverSingerColors.value, isDark.value);
       document.documentElement.dataset.appearanceStyle = effectiveStyle.value;
     };
 
@@ -125,8 +127,17 @@ export const useThemeStore = defineStore(
         },
       );
       // 影响渲染的值变化
-      watch([isDark, effectiveColor, source, effectiveGlobalTint, coverColor, effectiveStyle], () =>
-        apply(),
+      watch(
+        [
+          isDark,
+          effectiveColor,
+          source,
+          effectiveGlobalTint,
+          coverColor,
+          coverSingerColors,
+          effectiveStyle,
+        ],
+        () => apply(),
       );
     };
 
@@ -136,6 +147,7 @@ export const useThemeStore = defineStore(
       customColor,
       globalTint,
       coverColor,
+      coverSingerColors,
       appearanceStyle,
       imageBackground,
       imageBackgroundColor,

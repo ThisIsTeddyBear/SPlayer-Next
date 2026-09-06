@@ -58,15 +58,6 @@
   }
 }
 
-.lp-root {
-  --lp-singer-0: #ffffff;
-  --lp-singer-1: #8dd7ff;
-  --lp-singer-2: #ffb8d2;
-  --lp-singer-3: #b8f2d0;
-  --lp-singer-4: #ffd68a;
-  --lp-singer-5: #d3b7ff;
-}
-
 .lp-line.align-center {
   text-align: center;
   transform-origin: center;
