@@ -8,7 +8,7 @@ const MAX_LINE_LENGTH = 1_500;
 const CACHE_LIMIT = 1_800;
 const cache = new Map<string, string>();
 
-const hasNativeScript = (value: string): boolean => /[^\u0000-\u024f\u2000-\u206f]/u.test(value);
+const hasNativeScript = (value: string): boolean => /[^\u0020-\u024f\u2000-\u206f]/u.test(value);
 
 const normalizeReading = (value: string): string =>
   value

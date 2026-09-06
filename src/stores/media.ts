@@ -210,7 +210,7 @@ export const useMediaStore = defineStore("media", () => {
     parsedLyric.value.some(
       (line) =>
         Boolean(line.romanLyric) ||
-        /[^\u0000-\u024f\u2000-\u206f]/u.test(line.words.map((word) => word.word).join("")),
+        /[^\u0020-\u024f\u2000-\u206f]/u.test(line.words.map((word) => word.word).join("")),
     ),
   );
 
@@ -225,7 +225,7 @@ export const useMediaStore = defineStore("media", () => {
         lines
           .filter((line) => !line.romanLyric)
           .map((line) => line.words.map((word) => word.word).join(""))
-          .filter((text) => /[^\u0000-\u024f\u2000-\u206f]/u.test(text)),
+          .filter((text) => /[^\u0020-\u024f\u2000-\u206f]/u.test(text)),
       ),
     ];
     if (!missing.length) return;
