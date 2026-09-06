@@ -20,7 +20,6 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const libraryStore = useLibraryStore();
-const { artistAvatars } = storeToRefs(libraryStore);
 
 const mode: Mode = route.name === "album-list" ? "album" : "artist";
 
@@ -41,7 +40,7 @@ const items = computed<CoverItem[]>(() => {
       ? source.value.map((item: ArtistSummary) => ({
           id: encodeURIComponent(item.name),
           title: item.name,
-          cover: artistAvatars.value[item.name.trim().toLowerCase()] ?? item.cover,
+          cover: item.cover,
           subtitle: t("common.totalSongs", { count: item.trackCount }),
           trackCount: item.trackCount,
         }))
@@ -90,8 +89,6 @@ const handleClick = (item: CoverItem): void => {
 onMounted(async () => {
   source.value =
     mode === "artist" ? await libraryStore.getArtistList() : await libraryStore.getAlbumList();
-  // 拉取当前列表中尚未缓存的歌手头像
-  if (mode === "artist") libraryStore.loadArtistAvatars();
 });
 </script>
 

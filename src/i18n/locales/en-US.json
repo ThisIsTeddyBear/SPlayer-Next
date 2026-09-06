@@ -394,12 +394,13 @@
     "emptyKeyword": "Type a keyword to start searching",
     "noResults": "No matching results",
     "noResultsHint": "Try another keyword or switch the source",
+    "lyricsUnavailable": "Lyrics are not indexed in the local library yet.",
     "errorTitle": "Search failed",
     "tabs": {
       "songs": "Songs",
       "albums": "Albums",
       "artists": "Artists",
-      "playlists": "Playlists"
+      "lyrics": "Lyrics"
     }
   },
   "streaming": {
@@ -2240,8 +2241,8 @@
   "tagEditor": {
     "title": "Edit Metadata",
     "replaceCover": "Replace Cover",
-    "onlineMatch": "Auto Match Tags",
-    "matchHint": "Don't want to fill tags manually?",
+    "onlineMatch": "Match Library Tags",
+    "matchHint": "Use metadata from a matching track in your library.",
     "noMatches": "No matches found",
     "lyricsPlaceholder": "Plain text lyrics, written to the file tag as-is",
     "saveSuccess": "Metadata saved",

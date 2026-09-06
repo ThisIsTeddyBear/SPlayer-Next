@@ -2,22 +2,20 @@
 defineOptions({ name: "SearchPage" });
 
 import type { Track } from "@shared/types/player";
-import { ALL_PLATFORMS, PLATFORM_SHORT_NAME, type Platform } from "@shared/types/platform";
 import type { CoverItem } from "@/types/artist";
-import { searchSongs, searchAlbums, searchArtists, searchPlaylists } from "@/apis/search";
 import SongList from "@/components/list/SongList.vue";
 import CoverList from "@/components/list/CoverList.vue";
-import { useStatusStore } from "@/stores/status";
-import { navigateToAlbum, navigateToArtist, navigateToPlaylist } from "@/utils/navigate";
+import { useLibraryStore } from "@/stores/library";
+import { navigateToAlbum, navigateToArtist } from "@/utils/navigate";
 
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
-const status = useStatusStore();
+const libraryStore = useLibraryStore();
 
-type TabKey = "songs" | "albums" | "artists" | "playlists";
+type TabKey = "songs" | "albums" | "artists" | "lyrics";
 
-const TAB_KEYS: readonly TabKey[] = ["songs", "albums", "artists", "playlists"];
+const TAB_KEYS: readonly TabKey[] = ["songs", "albums", "artists", "lyrics"];
 
 const PAGE_SIZE = 50;
 
@@ -31,10 +29,8 @@ const tabs = computed(() => [
   { key: "songs", label: t("search.tabs.songs") },
   { key: "albums", label: t("search.tabs.albums") },
   { key: "artists", label: t("search.tabs.artists") },
-  { key: "playlists", label: t("search.tabs.playlists") },
+  { key: "lyrics", label: t("search.tabs.lyrics") },
 ]);
-
-const platformTabs = ALL_PLATFORMS.map((key) => ({ key, label: PLATFORM_SHORT_NAME[key] }));
 
 interface TabState<T> {
   items: T[];
@@ -58,18 +54,70 @@ const states = reactive({
   songs: createState<Track>(),
   albums: createState<CoverItem>(),
   artists: createState<CoverItem>(),
-  playlists: createState<CoverItem>(),
+  lyrics: createState<Track>(),
 });
 
 const error = ref("");
 
 /** 派发到 apis 层的统一调用 */
-const fetchers = {
-  songs: searchSongs,
-  albums: searchAlbums,
-  artists: searchArtists,
-  playlists: searchPlaylists,
-} as const;
+const normalize = (value: string): string => value.trim().toLocaleLowerCase();
+
+const matches = (values: Array<string | undefined>, query: string): boolean =>
+  values.some((value) => normalize(value ?? "").includes(query));
+
+const localResults = (tab: TabKey): Array<Track | CoverItem> => {
+  const query = normalize(keyword.value);
+  if (!query) return [];
+  const tracks = libraryStore.tracks;
+  if (tab === "songs") {
+    return tracks.filter((track) =>
+      matches(
+        [
+          track.title,
+          track.comment,
+          track.album?.name,
+          track.album?.artist,
+          ...track.artists.map((artist) => artist.name),
+        ],
+        query,
+      ),
+    );
+  }
+  if (tab === "albums") {
+    const albums = new Map<string, CoverItem>();
+    for (const track of tracks) {
+      const name = track.album?.name?.trim();
+      if (!name || albums.has(name)) continue;
+      if (!matches([name, track.album?.artist, ...track.artists.map((artist) => artist.name)], query)) {
+        continue;
+      }
+      albums.set(name, {
+        id: encodeURIComponent(name),
+        title: name,
+        cover: track.album?.cover ?? track.cover,
+        subtitle: track.album?.artist ?? track.artists.map((artist) => artist.name).join(" / "),
+      });
+    }
+    return [...albums.values()];
+  }
+  if (tab === "artists") {
+    const artists = new Map<string, CoverItem>();
+    for (const track of tracks) {
+      for (const artist of track.artists) {
+        const name = artist.name.trim();
+        if (!name || artists.has(name) || !matches([name], query)) continue;
+        artists.set(name, {
+          id: encodeURIComponent(name),
+          title: name,
+          cover: artist.avatar ?? track.cover,
+          subtitle: "",
+        });
+      }
+    }
+    return [...artists.values()];
+  }
+  return [];
+};
 
 /**
  * 拉取指定 tab
@@ -88,21 +136,13 @@ const fetchTab = async (tab: TabKey, append: boolean): Promise<void> => {
   }
   error.value = "";
   try {
+    const all = localResults(tab);
     const offset = append ? state.items.length : 0;
-    const result = await (fetchers[tab] as typeof searchSongs)(
-      status.searchPlatform,
-      keyword.value,
-      offset,
-      PAGE_SIZE,
-    );
-    const items = result.items.map((item) => markRaw(item));
-    if (append) {
-      (state.items as Track[]).push(...(items as Track[]));
-    } else {
-      state.items = items as Track[];
-    }
-    state.total = result.total;
-    state.hasMore = result.hasMore;
+    const items = all.slice(offset, offset + PAGE_SIZE).map((item) => markRaw(item));
+    if (append) (state.items as Array<Track | CoverItem>).push(...items);
+    else state.items = items as Track[];
+    state.total = all.length;
+    state.hasMore = offset + items.length < all.length;
     state.loaded = true;
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
@@ -125,7 +165,6 @@ const resetStates = (): void => {
 };
 
 let lastLoadedKeyword = "";
-let lastLoadedPlatform = status.searchPlatform;
 
 /** 仅在当前处于搜索路由时同步路由参数，避免离开到其他页面时因 query 为空而误清空状态 */
 const syncFromRoute = (): void => {
@@ -140,11 +179,8 @@ const syncFromRoute = (): void => {
   keyword.value = q;
 
   const keywordChanged = q !== lastLoadedKeyword;
-  const platformChanged = status.searchPlatform !== lastLoadedPlatform;
-
-  if (keywordChanged || platformChanged) {
+  if (keywordChanged) {
     lastLoadedKeyword = q;
-    lastLoadedPlatform = status.searchPlatform;
     resetStates();
     if (q) fetchTab(tab, false);
   } else if (q && !states[tab].loaded) {
@@ -152,7 +188,7 @@ const syncFromRoute = (): void => {
   }
 };
 
-watch(() => [route.name, route.query.q, route.query.tab, status.searchPlatform], syncFromRoute, {
+watch(() => [route.name, route.query.q, route.query.tab, libraryStore.tracks], syncFromRoute, {
   immediate: true,
 });
 
@@ -160,9 +196,9 @@ const onTabSwitch = (key: string): void => {
   router.replace({ query: { ...route.query, tab: key } });
 };
 
-const onPlatformSwitch = (key: string): void => {
-  status.searchPlatform = key as Platform;
-};
+onMounted(() => {
+  if (!libraryStore.initialized) void libraryStore.load();
+});
 
 /** 失败后重试加载当前 tab */
 const onRetry = (): void => {
@@ -204,16 +240,6 @@ const isEmptyResult = computed(() => {
             {{ t("search.titleSuffix") }}
           </span>
         </h1>
-        <!-- 平台切换 -->
-        <div class="shrink-0 w-40">
-          <STabs
-            :model-value="status.searchPlatform"
-            :tabs="platformTabs"
-            type="segment"
-            round
-            @update:model-value="onPlatformSwitch"
-          />
-        </div>
       </div>
       <STabs :model-value="activeTab" :tabs="tabs" @update:model-value="onTabSwitch" />
     </div>
@@ -257,7 +283,9 @@ const isEmptyResult = computed(() => {
       <div class="text-center text-on-surface-variant/60">
         <IconLucideSearchX class="size-14 mx-auto mb-4 opacity-30" />
         <div class="text-sm mb-1">{{ t("search.noResults") }}</div>
-        <div class="text-xs opacity-70">{{ t("search.noResultsHint") }}</div>
+        <div class="text-xs opacity-70">
+          {{ activeTab === "lyrics" ? t("search.lyricsUnavailable") : t("search.noResultsHint") }}
+        </div>
       </div>
     </div>
     <!-- 各 tab 内容 -->
@@ -265,7 +293,7 @@ const isEmptyResult = computed(() => {
       <SongList
         v-if="activeTab === 'songs'"
         :items="states.songs.items"
-        :source="status.searchPlatform"
+        source="local"
         :show-size="false"
         :has-more="states.songs.hasMore"
         :loading-more="states.songs.loadingMore"
@@ -280,7 +308,7 @@ const isEmptyResult = computed(() => {
         :has-more="states.albums.hasMore"
         :loading-more="states.albums.loadingMore"
         @click="
-          (item) => navigateToAlbum(item.title, { source: status.searchPlatform, albumId: item.id })
+          (item) => navigateToAlbum(item.title)
         "
         @reach-bottom="onReachBottom('albums')"
       />
@@ -296,22 +324,18 @@ const isEmptyResult = computed(() => {
         :loading-more="states.artists.loadingMore"
         @click="
           (item) =>
-            navigateToArtist(item.title, { source: status.searchPlatform, artistId: item.id })
+            navigateToArtist(item.title)
         "
         @reach-bottom="onReachBottom('artists')"
       />
-      <CoverList
+      <SongList
         v-else
-        :items="states.playlists.items"
-        :padding-x="20"
-        :padding-top="8"
-        :padding-bottom="20"
-        :has-more="states.playlists.hasMore"
-        :loading-more="states.playlists.loadingMore"
-        @click="
-          (item) => navigateToPlaylist(item.id, { source: status.searchPlatform, name: item.title })
-        "
-        @reach-bottom="onReachBottom('playlists')"
+        :items="states.lyrics.items"
+        source="local"
+        :show-size="false"
+        :has-more="states.lyrics.hasMore"
+        :loading-more="states.lyrics.loadingMore"
+        @reach-bottom="onReachBottom('lyrics')"
       />
     </div>
   </div>

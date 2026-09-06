@@ -65,15 +65,6 @@ const loadLocal = async (id: string, options: LoadArtistOptions): Promise<void> 
   if (options.signal?.aborted) return;
   options.onUpdate(profile);
 
-  // 头像异步补：本地无头像时去主进程取一次，命中后再次 onUpdate
-  if (profile && !profile.avatar) {
-    const res = await window.api.library.fetchArtistAvatar(artistName);
-    if (options.signal?.aborted) return;
-    if (res.success && res.data) {
-      libraryStore.setArtistAvatar(artistName, res.data);
-      options.onUpdate({ ...profile, avatar: res.data });
-    }
-  }
 };
 
 const loadStreaming = async (id: string, options: LoadArtistOptions): Promise<void> => {

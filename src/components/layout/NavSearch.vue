@@ -44,8 +44,14 @@ const submit = (value = searchQuery.value): void => {
   const keyword = value.trim();
   if (!keyword) return;
   data.addSearchHistory(keyword);
-  router.push({ name: "library", query: { q: keyword } });
+  router.push({ name: "search", query: { q: keyword } });
   dialogOpen.value = false;
+};
+
+const onSearchKeydown = (event: KeyboardEvent): void => {
+  if (event.key !== "Enter" || event.isComposing) return;
+  event.preventDefault();
+  submit();
 };
 
 const openSearch = async (): Promise<void> => {
@@ -80,7 +86,12 @@ watch(dialogOpen, (open) => {
   <SDialog v-model:open="dialogOpen" :closable="false" :content-style="{ padding: 0 }" width="560px" top="12vh">
     <div class="flex flex-col">
       <div class="px-4 pt-4 pb-3">
-        <NavSearchInput v-model="searchQuery" :placeholder="t('nav.searchPlaceholder')" @search="submit" />
+        <NavSearchInput
+          v-model="searchQuery"
+          :placeholder="t('nav.searchPlaceholder')"
+          @keydown="onSearchKeydown"
+          @search="submit"
+        />
       </div>
       <div class="max-h-[65vh] overflow-y-auto px-4 pb-4 flex flex-col gap-4">
         <template v-if="query">

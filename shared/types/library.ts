@@ -75,10 +75,6 @@ export interface LibraryApi {
   writeTags: (edits: TagEditRequest[]) => Promise<IpcResponse<TagWriteOutcome[]>>;
   /** 弹出文件选择器，选择封面图片（返回路径与预览 dataUrl） */
   pickCoverImage: () => Promise<IpcResponse<{ path: string; dataUrl: string }>>;
-  /** 获取本地歌手头像 */
-  fetchArtistAvatar: (artistName: string) => Promise<IpcResponse<string | null>>;
-  /** 批量预取歌手头像 */
-  prefetchArtistAvatars: (artistNames: string[]) => Promise<IpcResponse<Record<string, string>>>;
   /** 订阅扫描进度事件 */
   onScanProgress: (callback: (progress: ScanProgress) => void) => () => void;
 }

@@ -18,7 +18,6 @@ import {
 } from "@main/database";
 import { startScan, cancelScan, isScanning, scannedToUpsert } from "@main/services/scanner";
 import { getEngine } from "@main/services/engine";
-import { fetchArtistAvatar, prefetchArtistAvatars } from "@main/apis/musicbrainz";
 import { fetchBytes } from "@main/utils/fetchBytes";
 import { getCoverCacheDir } from "@main/utils/config";
 import { libraryLog } from "@main/utils/logger";
@@ -193,31 +192,6 @@ export const registerLibraryIpc = (): void => {
   // 获取已配置的扫描目录列表
   ipcMain.handle("library:getScanDirs", () => {
     return { success: true, data: store.get("library.scanDirs") };
-  });
-
-  // 获取歌手头像（MusicBrainz + TheAudioDB）
-  ipcMain.handle("library:fetchArtistAvatar", async (_event, artistName: string) => {
-    try {
-      const url = await fetchArtistAvatar(artistName);
-      return { success: true, data: url };
-    } catch (error) {
-      libraryLog.error(`获取歌手头像失败 [${artistName}]:`, error);
-      return { success: false, error: ErrorCode.UNKNOWN };
-    }
-  });
-
-  // 预取歌手头像
-  ipcMain.handle("library:prefetchArtistAvatars", async (_event, artistNames: string[]) => {
-    try {
-      if (!Array.isArray(artistNames) || artistNames.length === 0) {
-        return { success: true, data: {} };
-      }
-      const data = await prefetchArtistAvatars(artistNames);
-      return { success: true, data };
-    } catch (error) {
-      libraryLog.error("预取歌手头像失败:", error);
-      return { success: false, error: ErrorCode.UNKNOWN };
-    }
   });
 
   // 读取本地文件的可编辑标签

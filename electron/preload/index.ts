@@ -223,12 +223,6 @@ const api = {
     writeTags: (edits: TagEditRequest[]) => ipcRenderer.invoke("library:writeTags", edits),
     // 弹出文件选择器，选择封面图片
     pickCoverImage: () => ipcRenderer.invoke("library:pickCoverImage"),
-    // 获取歌手头像
-    fetchArtistAvatar: (artistName: string) =>
-      ipcRenderer.invoke("library:fetchArtistAvatar", artistName),
-    // 预取歌手头像
-    prefetchArtistAvatars: (artistNames: string[]) =>
-      ipcRenderer.invoke("library:prefetchArtistAvatars", artistNames),
     // 订阅扫描进度事件
     onScanProgress: (callback: (progress: unknown) => void) =>
       subscribe("library:scanProgress", callback),

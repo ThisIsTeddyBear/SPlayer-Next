@@ -7,7 +7,6 @@ import { toCacheUrl } from "@main/utils/protocol";
 import { toMs } from "@main/utils/time";
 import * as mediaService from "@main/services/media";
 import * as nowPlaying from "@main/services/nowPlaying";
-import * as neteaseScrobble from "@main/services/neteaseScrobble";
 import { fetchBytes } from "@main/utils/fetchBytes";
 import { getPlayer, resetPlayer, onPlayerCreated } from "@main/services/engine";
 import {
@@ -126,7 +125,6 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
           setTaskbarProgress(-1);
         }
         nowPlaying.onPlayStateChange(state);
-        neteaseScrobble.onState(state === "playing");
         const statusEvent = {
           type: "status",
           data: {
@@ -146,7 +144,6 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
         sendToMain("player:event", { type: "ended" });
         wsBroadcast({ type: "ended" });
         mediaService.setPlayState({ status: "Paused" });
-        neteaseScrobble.onEnded();
         setTaskbarProgress(-1);
         break;
       }
@@ -154,7 +151,6 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
         // 音源失效（网络中断 / URL 过期）
         sendToMain("player:event", { type: "sourceError" });
         mediaService.setPlayState({ status: "Paused" });
-        neteaseScrobble.onState(false);
         setTaskbarProgress(-1);
         break;
       }
@@ -170,7 +166,6 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
         wsBroadcast(positionEvent);
         mediaService.setTimeline({ currentMs: posMs, totalMs: durMs });
         nowPlaying.onPosition(posMs, true);
-        neteaseScrobble.onPosition(posMs);
         if (store.get("system.taskbarProgress") && durMs > 0) setTaskbarProgress(posMs / durMs);
         break;
       }
@@ -285,7 +280,6 @@ export const registerPlayerIpc = (): void => {
       applyDisplay(displayTitle, displayArtist, displayAlbum, localCover ?? undefined, durationMs);
       if (!isRemote) setTaskbarThumbnailCover(meta.cover);
       // Last.fm
-      neteaseScrobble.onTrackLoaded(authoritative, options.context, durationMs, autoPlay);
       // 远端高清封面
       if (coverFetchUrl) {
         void fetchBytes(coverFetchUrl).then((buf) => {

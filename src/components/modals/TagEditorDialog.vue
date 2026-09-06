@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import type { Track } from "@shared/types/player";
-import { ALL_PLATFORMS, PLATFORM_SHORT_NAME, type Platform } from "@shared/types/platform";
 import type { TrackTags, TagEditRequest } from "@shared/types/tagEditor";
-import { useStatusStore } from "@/stores/status";
-import { searchSongs } from "@/apis/search";
+import { useLibraryStore } from "@/stores/library";
 import { rankTagCandidates, type RankedTagCandidate } from "@/utils/tagMatch";
 import * as player from "@/core/player";
 import { toast } from "@/composables/useToast";
@@ -108,24 +106,20 @@ const pickCover = async (): Promise<void> => {
 const newCoverUrl = ref<string | null>(null);
 
 /** 在线匹配平台，初始值跟随搜索页偏好，命名与搜索页同源 */
-const matchPlatform = ref<Platform>(useStatusStore().searchPlatform);
-const platformOptions = ALL_PLATFORMS.map((key) => ({
-  value: key,
-  label: PLATFORM_SHORT_NAME[key],
-}));
+const libraryStore = useLibraryStore();
 
 const matching = ref(false);
 const candidates = shallowRef<RankedTagCandidate[]>([]);
 const candidatesVisible = ref(false);
 
-/** 用表单当前的标题 + 艺术家联网搜索候选 */
+/** 用表单当前的标题和艺术家搜索本地候选 */
 const handleOnlineMatch = async (): Promise<void> => {
   const keyword = `${form.title.trim()} ${form.artist.trim()}`.trim();
   if (!keyword || matching.value) return;
   matching.value = true;
   try {
-    const result = await searchSongs(matchPlatform.value, keyword, 0, 10);
-    const ranked = rankTagCandidates(result.items, {
+    if (!libraryStore.initialized) await libraryStore.load();
+    const ranked = rankTagCandidates(libraryStore.tracks, {
       title: form.title,
       artist: form.artist,
       album: form.album,
@@ -138,18 +132,6 @@ const handleOnlineMatch = async (): Promise<void> => {
     toast.error(t("errors.NETWORK_ERROR"));
   } finally {
     matching.value = false;
-  }
-};
-
-/** 选中候选后拉取该平台歌词 */
-const fillLyricFromCandidate = async (track: Track): Promise<void> => {
-  // 特殊 ID 处理
-  const lookupId = matchPlatform.value === "qqmusic" ? (track.extId ?? track.id) : track.id;
-  try {
-    const resp = await window.api.lyrics.matchById(matchPlatform.value, lookupId);
-    if (resp.ok && resp.data?.content) form.lyrics = resp.data.content;
-  } catch {
-    // 拉取失败保留现有歌词，不打断匹配流程
   }
 };
 
@@ -166,7 +148,6 @@ const applyCandidate = (candidate: RankedTagCandidate): void => {
     newCoverPreview.value = coverUrl;
   }
   candidatesVisible.value = false;
-  void fillLyricFromCandidate(online);
 };
 
 /** 文本字段 diff */
@@ -253,9 +234,6 @@ const handleSave = async (): Promise<void> => {
       <SCard size="small" variant="primary">
         <div class="flex items-center gap-2">
           <span class="flex-1 text-sm text-on-surface">{{ t("tagEditor.matchHint") }}</span>
-          <div class="w-24 shrink-0">
-            <SSelect v-model="matchPlatform" :options="platformOptions" />
-          </div>
           <SButton
             type="primary"
             size="small"

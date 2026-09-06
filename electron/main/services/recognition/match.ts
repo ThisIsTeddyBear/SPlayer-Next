@@ -2,8 +2,11 @@
  * 听歌识曲结果适配
  */
 
-import { callNetease } from "@main/apis/netease";
+import { randomBytes } from "node:crypto";
+import { fetchWithProxy } from "@main/utils/proxy";
 import { recognitionLog } from "@main/utils/logger";
+
+const MATCH_URL = "https://interface.music.163.com/api/music/audio/match";
 
 /** 匹配接口返回的原始歌曲信息 */
 export interface MatchedSong {
@@ -34,13 +37,25 @@ export const matchAudio = async (
   durationSec: number,
 ): Promise<MatchResult> => {
   try {
-    const response = await callNetease("audio_match", {
-      audioFP: fingerprint,
-      duration: durationSec,
+    const params = new URLSearchParams({
+      sessionId: randomBytes(8).toString("hex"),
+      algorithmCode: "shazam_v2",
+      duration: String(durationSec),
+      rawdata: fingerprint,
+      times: "1",
+      decrypt: "1",
     });
-    const body = response.body as MatchResponse;
-    if (body.code !== 200) {
-      recognitionLog.error(`音频匹配接口错误: code=${body.code}`);
+    const response = await fetchWithProxy(`${MATCH_URL}?${params}`, {
+      headers: {
+        Accept: "application/json",
+        Referer: "https://music.163.com/",
+        "User-Agent": "Mozilla/5.0",
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+    const body = (await response.json()) as MatchResponse;
+    if (!response.ok || body.code !== 200) {
+      recognitionLog.error(`音频匹配接口错误: HTTP ${response.status}, code=${body.code}`);
       return { ok: false, code: "network" };
     }
     const songs = (body.data?.result ?? [])

@@ -80,23 +80,8 @@ export const useLibraryStore = defineStore("library", () => {
     artistAvatars.value = { ...artistAvatars.value, [key]: avatar };
   };
 
-  /** 批量预取头像 */
-  const loadArtistAvatars = async (): Promise<void> => {
-    const list = await getArtistList();
-    const names = list
-      .filter((item) => !artistAvatars.value[normalizeArtistName(item.name)])
-      .map((item) => item.name);
-    if (!names.length) return;
-    const res = await window.api.library.prefetchArtistAvatars(names);
-    if (!res.success || !res.data) return;
-    const patch: Record<string, string> = {};
-    for (const [key, avatar] of Object.entries(res.data)) {
-      if (avatar) patch[key] = avatar;
-    }
-    if (Object.keys(patch).length > 0) {
-      artistAvatars.value = { ...artistAvatars.value, ...patch };
-    }
-  };
+  /** 本地媒体库不再从第三方服务补全歌手头像 */
+  const loadArtistAvatars = async (): Promise<void> => {};
 
   /** 将曲目写入 IndexedDB 缓存 */
   const cacheTracks = (items: Track[]): void => {
