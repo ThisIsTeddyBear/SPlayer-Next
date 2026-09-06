@@ -181,9 +181,6 @@ const toggleLyric = (): void => {
   }
 };
 
-const showComments = (): void => {
-  if (displayTrack.value) status.showComments(displayTrack.value);
-};
 </script>
 
 <template>
@@ -424,16 +421,6 @@ const showComments = (): void => {
                   <template #off><IconFavoriteOutline /></template>
                 </SIconSwap>
               </template>
-            </SButton>
-            <SButton
-              type="cover"
-              variant="ghost"
-              size="large"
-              circle
-              :disabled="!hasTrack"
-              @click="showComments"
-            >
-              <template #icon><IconLucideMessageCircle /></template>
             </SButton>
             <SButton
               v-if="displayTrack?.source === 'local' || displayTrack?.source === 'netease'"

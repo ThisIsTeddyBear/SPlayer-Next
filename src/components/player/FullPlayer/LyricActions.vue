@@ -2,6 +2,7 @@
 import { useMediaStore } from "@/stores/media";
 import { useStatusStore } from "@/stores/status";
 import { useSettingsDialog } from "@/settings/useSettingsDialog";
+import { getCurrentTime } from "@/services/playback";
 import { formatSignedSec } from "@/utils/time";
 
 defineProps<{
@@ -15,7 +16,7 @@ const status = useStatusStore();
 const settingsDialog = useSettingsDialog();
 
 /** 歌词偏移步长（ms） */
-const LYRIC_OFFSET_STEP = 500;
+const LYRIC_OFFSET_STEP = 100;
 
 /** 偏移弹层是否打开；打开期间按钮组保持可见 */
 const offsetPopoverOpen = ref(false);
@@ -47,6 +48,19 @@ const offsetInputMs = computed<number>({
 const advanceLyric = (): void => writeOffset(songOffset.value + LYRIC_OFFSET_STEP);
 const delayLyric = (): void => writeOffset(songOffset.value - LYRIC_OFFSET_STEP);
 const resetLyricOffset = (): void => writeOffset(0);
+
+const syncLyricToNow = (): void => {
+  const playbackTime = getCurrentTime();
+  const targetTime = playbackTime + songOffset.value;
+  const line = media.parsedLyric.reduce<(typeof media.parsedLyric)[number] | null>(
+    (nearest, candidate) =>
+      !nearest || Math.abs(candidate.startTime - targetTime) < Math.abs(nearest.startTime - targetTime)
+        ? candidate
+        : nearest,
+    null,
+  );
+  if (line) writeOffset(line.startTime - playbackTime);
+};
 </script>
 
 <template>
@@ -71,6 +85,17 @@ const resetLyricOffset = (): void => writeOffset(0);
       <template #icon><IconLucideCopy /></template>
     </SButton>
     <div class="h-px w-6 bg-cover/25 my-1" />
+    <SButton
+      type="cover"
+      variant="ghost"
+      circle
+      :size="40"
+      :disabled="!hasLyric"
+      title="Sync lyrics to now"
+      @click="syncLyricToNow"
+    >
+      <template #icon><IconLucideTimerReset /></template>
+    </SButton>
     <SButton
       type="cover"
       variant="ghost"

@@ -6,7 +6,6 @@ import type { DropdownMenuItem } from "@/components/ui/SDropdownMenu.vue";
 import * as player from "@/core/player";
 import { useSettingsStore } from "@/stores/settings";
 import { usePluginsStore } from "@/stores/plugins";
-import { useStatusStore } from "@/stores/status";
 import { useCopyText } from "@/composables/useCopyText";
 import { toast } from "@/composables/useToast";
 import { buildDownloadQualityItems } from "@/composables/useDownload";
@@ -23,7 +22,6 @@ import IconTrash2 from "~icons/lucide/trash-2";
 import IconListMinus from "~icons/lucide/list-minus";
 import IconCloudOff from "~icons/lucide/cloud-off";
 import IconSearch from "~icons/lucide/search";
-import IconMessageCircle from "~icons/lucide/message-circle";
 import IconMoreHorizontal from "~icons/lucide/more-horizontal";
 import IconPuzzle from "~icons/lucide/puzzle";
 
@@ -61,7 +59,6 @@ export const useTrackMenu = (
 ) => {
   const { t } = useI18n();
   const router = useRouter();
-  const status = useStatusStore();
   const settings = useSettingsStore();
   const plugins = usePluginsStore();
   const { copy } = useCopyText();
@@ -145,11 +142,6 @@ export const useTrackMenu = (
         label: t("songList.context.searchSame"),
         icon: markRaw(IconSearch),
         separator: true,
-      },
-      {
-        key: "comments",
-        label: t("comments.name"),
-        icon: markRaw(IconMessageCircle),
       },
       {
         key: "more",
@@ -257,9 +249,6 @@ export const useTrackMenu = (
         break;
       case "searchSame":
         router.push({ path: "/search", query: { q: current.title } });
-        break;
-      case "comments":
-        status.showComments(current);
         break;
       case "copyTitle":
         await copy(current.title);

@@ -25,6 +25,13 @@ const playbackContext = computed<PlaybackContext>(() => ({
 /** 搜索关键词 */
 const searchQuery = ref(typeof route.query.q === "string" ? route.query.q : "");
 
+watch(
+  () => route.query.q,
+  (query) => {
+    searchQuery.value = typeof query === "string" ? query : "";
+  },
+);
+
 /** 多选模式 */
 const songListRef = shallowRef<InstanceType<typeof SongList> | null>(null);
 

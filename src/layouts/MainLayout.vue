@@ -39,7 +39,6 @@ const cachedViews = [
   "Download",
   "Daily",
   "Favorites",
-  "Cloud",
   "LocalList",
   "Folders",
   "SearchPage",
@@ -172,5 +171,4 @@ const playerBarInnerClass = computed(() => {
   <!-- 更新弹窗 -->
   <UpdateDialog />
   <!-- 评论弹窗 -->
-  <MusicCommentsDialog />
 </template>

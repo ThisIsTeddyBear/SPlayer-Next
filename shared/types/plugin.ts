@@ -518,17 +518,6 @@ export interface PluginMatchCoverResult {
 }
 
 /** 插件市场条目 */
-export interface MarketPlugin {
-  id: string;
-  name: string;
-  author: string;
-  type: PluginType;
-  version: string;
-  description: string;
-  homepage: string;
-  updateUrl: string;
-}
-
 /** 渲染端插件 API */
 export interface PluginsApi {
   /** 列出所有已安装插件 */
@@ -580,7 +569,6 @@ export interface PluginsApi {
   /** 经插件兜底匹配封面：host 复用同一次匹配，再 musicPic */
   matchCover: (args: PluginMatchCoverArgs) => Promise<PluginMatchCoverResult>;
   /** 拉取插件市场列表 */
-  market: () => Promise<{ ok: boolean; plugins: MarketPlugin[]; error?: string }>;
   /** 订阅插件状态变化 */
   onStatus: (cb: (info: PluginInfo) => void) => () => void;
 }

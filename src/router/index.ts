@@ -53,11 +53,6 @@ const router = createRouter({
           component: () => import("@/pages/Favorites.vue"),
         },
         {
-          path: "cloud",
-          name: "cloud",
-          component: () => import("@/pages/Cloud.vue"),
-        },
-        {
           path: "collection/:source/:type/:id",
           name: "collection",
           component: () => import("@/pages/Collection.vue"),

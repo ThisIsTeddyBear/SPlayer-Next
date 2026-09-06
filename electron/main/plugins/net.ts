@@ -6,13 +6,12 @@
  */
 
 import { net } from "electron";
-import type { HostRequestOptions, HostRequestResult, MarketPlugin } from "@shared/types/plugin";
+import type { HostRequestOptions, HostRequestResult } from "@shared/types/plugin";
 import {
   REQUEST_DEFAULT_TIMEOUT,
   REQUEST_MAX_TIMEOUT,
   INSTALL_URL_MAX_SIZE,
   INSTALL_URL_TIMEOUT,
-  PLUGIN_REGISTRY_URL,
   PluginErrorCodes,
 } from "@shared/defaults/plugin-api";
 
@@ -48,19 +47,6 @@ export const fetchScript = async (url: string): Promise<string> => {
 };
 
 /** 拉取插件市场索引 */
-export const fetchMarket = async (): Promise<MarketPlugin[]> => {
-  const resp = await net.fetch(PLUGIN_REGISTRY_URL, {
-    method: "GET",
-    redirect: "follow",
-    signal: AbortSignal.timeout(INSTALL_URL_TIMEOUT),
-  });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  const data = JSON.parse(await resp.text()) as { plugins?: MarketPlugin[] };
-  return Array.isArray(data.plugins)
-    ? data.plugins.filter((item) => item?.id && item?.updateUrl)
-    : [];
-};
-
 /** 校验并发起请求；抛出的错误携带 code 字段 */
 export const hostRequest = async (
   url: string,

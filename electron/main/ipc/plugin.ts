@@ -12,7 +12,7 @@ import type { PluginInfo } from "@shared/types/plugin";
 import { pluginRegistry } from "@main/plugins/registry";
 import { resolveUrl, invokeMenu } from "@main/plugins/router";
 import { matchLyric, matchCover } from "@main/plugins/metadata";
-import { fetchScript, fetchMarket } from "@main/plugins/net";
+import { fetchScript } from "@main/plugins/net";
 import { broadcast } from "@main/utils/broadcast";
 import { coreLog } from "@main/utils/logger";
 
@@ -54,15 +54,6 @@ export const registerPluginIpc = (): void => {
   });
 
   // 拉取插件市场索引
-  ipcMain.handle("plugin:market", async () => {
-    try {
-      return { ok: true, plugins: await fetchMarket() };
-    } catch (err) {
-      coreLog.warn("[plugin] market fetch failed:", err);
-      return { ok: false, plugins: [], error: err instanceof Error ? err.message : String(err) };
-    }
-  });
-
   // 从远端 URL 下载并安装
   ipcMain.handle("plugin:installFromUrl", async (_evt, url: string) => {
     try {
