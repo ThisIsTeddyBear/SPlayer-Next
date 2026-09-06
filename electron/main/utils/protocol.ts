@@ -1,4 +1,5 @@
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { net, protocol, session } from "electron";
 import { getAppCacheDir } from "./config";
 
@@ -50,7 +51,7 @@ const cacheHandler = (request: Request): Response | Promise<Response> => {
   if (resolved !== root && !resolved.startsWith(rootWithSep)) {
     return new Response(null, { status: 403 });
   }
-  return net.fetch(`file://${resolved.replace(/\\/g, "/")}`);
+  return net.fetch(pathToFileURL(resolved).toString());
 };
 
 /**
