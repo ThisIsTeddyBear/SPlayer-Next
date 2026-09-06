@@ -233,12 +233,6 @@ const api = {
     onScanProgress: (callback: (progress: unknown) => void) =>
       subscribe("library:scanProgress", callback),
   },
-  artistImages: {
-    getStatus: () => ipcRenderer.invoke("artistImages:getStatus"),
-    savePersonalApiKey: (apiKey: string) =>
-      ipcRenderer.invoke("artistImages:savePersonalApiKey", apiKey),
-    clearPersonalApiKey: () => ipcRenderer.invoke("artistImages:clearPersonalApiKey"),
-  },
   playlist: {
     list: () => ipcRenderer.invoke("playlist:list"),
     get: (id: string) => ipcRenderer.invoke("playlist:get", id),

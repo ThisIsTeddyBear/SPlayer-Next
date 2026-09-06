@@ -1,81 +1,53 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { safeStorage } from "electron";
-import { writeFileSync as atomicWriteSync } from "atomically";
-import { fetchWithProxy } from "@main/utils/proxy";
 import { getArtistCacheDir } from "@main/utils/config";
-import { configDir } from "@main/utils/paths";
-import { toCacheUrl } from "@main/utils/protocol";
 import { libraryLog } from "@main/utils/logger";
-import type { ArtistImageProviderStatus } from "@shared/types/artistImages";
+import { fetchWithProxy } from "@main/utils/proxy";
+import { toCacheUrl } from "@main/utils/protocol";
 
-const CREDENTIALS_FILE = path.join(configDir, "fanart.json");
-const INDEX_FILE = "index.json";
-const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const MISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const INDEX_FILE = "audiodb-index.json";
+const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
+const MISS_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const USER_AGENT = "SPlayer-Next/1.0 (artist artwork lookup)";
 const PREFETCH_CONCURRENCY = 8;
-
-interface StoredCredentials {
-  encryptedPersonalApiKey: string;
-}
+const MUSICBRAINZ_INTERVAL_MS = 1_100;
+const USER_AGENT = "SPlayer-Next/1.0 (https://github.com/ThisIsTeddyBear/SPlayer-Next)";
 
 interface CacheEntry {
   checkedAt: number;
   fileName?: string;
 }
 
-type CacheIndex = Record<string, CacheEntry>;
-
 interface MusicBrainzArtist {
   id: string;
   name: string;
   score?: number;
+  aliases?: { name?: string }[];
 }
 
-interface FanartImage {
-  url?: string;
-  likes?: string;
-  lang?: string;
+interface AudioDbArtist {
+  strArtistThumb?: string;
 }
+
+type CacheIndex = Record<string, CacheEntry>;
 
 const inFlight = new Map<string, Promise<string | undefined>>();
-let musicBrainzQueue = Promise.resolve();
 let cacheIndex: CacheIndex | undefined;
 let cacheIndexLoad: Promise<CacheIndex> | undefined;
 let indexWriteQueue = Promise.resolve();
+let nextMusicBrainzRequestAt = 0;
 
 const normalizeName = (name: string): string => name.trim().replace(/\s+/g, " ").toLowerCase();
 
 const fileId = (value: string): string => createHash("sha256").update(value).digest("hex");
 
-const encrypt = (value: string): string => {
-  if (!value) return "";
-  if (!safeStorage.isEncryptionAvailable()) return Buffer.from(value, "utf8").toString("base64");
-  return safeStorage.encryptString(value).toString("base64");
-};
-
-const decrypt = (value: string): string => {
-  if (!value) return "";
-  try {
-    const buffer = Buffer.from(value, "base64");
-    return safeStorage.isEncryptionAvailable()
-      ? safeStorage.decryptString(buffer)
-      : buffer.toString("utf8");
-  } catch {
-    return "";
-  }
-};
-
-const getKey = async (): Promise<string> => {
-  try {
-    const raw = JSON.parse(await fs.readFile(CREDENTIALS_FILE, "utf8")) as StoredCredentials;
-    return decrypt(raw.encryptedPersonalApiKey).trim();
-  } catch {
-    return "";
-  }
+/** 遵守 MusicBrainz 每秒一次的公开 API 速率限制 */
+const waitForMusicBrainzTurn = async (): Promise<void> => {
+  const now = Date.now();
+  const delay = Math.max(0, nextMusicBrainzRequestAt - now);
+  nextMusicBrainzRequestAt = Math.max(now, nextMusicBrainzRequestAt) + MUSICBRAINZ_INTERVAL_MS;
+  if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
 };
 
 const readIndex = async (): Promise<CacheIndex> => {
@@ -98,27 +70,33 @@ const writeIndex = async (): Promise<void> => {
   await indexWriteQueue;
 };
 
-const requestJson = async <T>(url: string): Promise<T | null> => {
+const requestJson = async <T>(url: string): Promise<T | undefined> => {
   try {
     const response = await fetchWithProxy(url, {
       headers: { Accept: "application/json", "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(10_000),
     });
-    if (!response.ok) return null;
+    if (!response.ok) return;
     return (await response.json()) as T;
   } catch {
-    return null;
+    return;
   }
 };
 
-const downloadImage = async (url: string): Promise<Buffer | null> => {
+const downloadImage = async (url: string): Promise<Buffer | undefined> => {
   try {
     const response = await fetchWithProxy(url, {
       headers: { Accept: "image/avif,image/webp,image/*,*/*;q=0.8", "User-Agent": USER_AGENT },
       signal: AbortSignal.timeout(15_000),
     });
-    const type = (response.headers.get("content-type") ?? "").toLowerCase();
-    if (!response.ok || !response.body || (!type.startsWith("image/") && type !== "")) return null;
+    const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+    if (
+      !response.ok ||
+      !response.body ||
+      (!contentType.startsWith("image/") && contentType !== "")
+    ) {
+      return;
+    }
     const chunks: Uint8Array[] = [];
     let total = 0;
     const reader = response.body.getReader();
@@ -126,90 +104,100 @@ const downloadImage = async (url: string): Promise<Buffer | null> => {
       const { done, value } = await reader.read();
       if (done) break;
       total += value.length;
-      if (total > MAX_IMAGE_BYTES) return null;
+      if (total > MAX_IMAGE_BYTES) return;
       chunks.push(value);
     }
-    return total ? Buffer.concat(chunks, total) : null;
+    return total ? Buffer.concat(chunks, total) : undefined;
   } catch {
-    return null;
+    return;
   }
 };
 
+const matchesArtistName = (artist: MusicBrainzArtist, normalizedName: string): boolean =>
+  normalizeName(artist.name) === normalizedName ||
+  Boolean(artist.aliases?.some((alias) => normalizeName(alias.name ?? "") === normalizedName));
+
 const findMusicBrainzArtist = async (name: string): Promise<string | undefined> => {
-  const requestTurn = musicBrainzQueue.then(
-    () => new Promise<void>((resolve) => setTimeout(resolve, 1_100)),
-  );
-  musicBrainzQueue = requestTurn.catch(() => {});
-  await requestTurn;
-  const query = new URLSearchParams({ query: `artist:${name}`, fmt: "json", limit: "5" });
+  await waitForMusicBrainzTurn();
+  const query = new URLSearchParams({
+    query: `artist:${JSON.stringify(name)}`,
+    fmt: "json",
+    limit: "10",
+  });
   const result = await requestJson<{ artists?: MusicBrainzArtist[] }>(
     `https://musicbrainz.org/ws/2/artist/?${query.toString()}`,
   );
-  const normalized = normalizeName(name);
+  const normalizedName = normalizeName(name);
   const artists = result?.artists ?? [];
-  return (artists.find((artist) => normalizeName(artist.name) === normalized) ?? artists[0])?.id;
+  const exact = artists.filter((artist) => matchesArtistName(artist, normalizedName));
+  if (exact.length) {
+    return exact.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]?.id;
+  }
+  return artists
+    .filter((artist) => (artist.score ?? 0) >= 95)
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]?.id;
 };
 
-const findFanartImage = async (musicBrainzId: string, key: string): Promise<string | undefined> => {
-  const data = await requestJson<{ artistthumb?: FanartImage[] }>(
-    `https://webservice.fanart.tv/v3.2/music/${encodeURIComponent(musicBrainzId)}?client_key=${encodeURIComponent(key)}`,
+const findAudioDbImage = async (musicBrainzId: string): Promise<string | undefined> => {
+  const result = await requestJson<{ artists?: AudioDbArtist[] }>(
+    `https://www.theaudiodb.com/api/v1/json/2/artist-mb.php?i=${encodeURIComponent(musicBrainzId)}`,
   );
-  return (data?.artistthumb ?? [])
-    .filter((image): image is FanartImage & { url: string } => Boolean(image.url))
-    .sort((a, b) => Number(b.likes ?? 0) - Number(a.likes ?? 0))[0]?.url;
+  return result?.artists?.find((artist) => Boolean(artist.strArtistThumb))?.strArtistThumb;
+};
+
+const existingCachedImage = async (fileName: string | undefined): Promise<string | undefined> => {
+  if (!fileName) return;
+  const filePath = path.join(getArtistCacheDir(), fileName);
+  try {
+    await fs.access(filePath);
+    return toCacheUrl(filePath);
+  } catch {
+    return;
+  }
 };
 
 const resolve = async (artistName: string): Promise<string | undefined> => {
-  const normalized = normalizeName(artistName);
-  if (!normalized) return;
-  const cachedFileName = `${fileId(normalized)}.jpg`;
-  const cachedFilePath = path.join(getArtistCacheDir(), cachedFileName);
-  try {
-    await fs.access(cachedFilePath);
-    return toCacheUrl(cachedFilePath);
-  } catch {}
-  const key = await getKey();
-  if (!key) return;
+  const normalizedName = normalizeName(artistName);
+  if (!normalizedName) return;
   const index = await readIndex();
-  const cached = index[normalized];
+  const cached = index[normalizedName];
+  const cachedImage = await existingCachedImage(cached?.fileName);
   const age = Date.now() - (cached?.checkedAt ?? 0);
-  if (cached && age < (cached.fileName ? CACHE_TTL_MS : MISS_TTL_MS)) {
-    if (!cached.fileName) return;
-    const filePath = path.join(getArtistCacheDir(), cached.fileName);
-    try {
-      await fs.access(filePath);
-      return toCacheUrl(filePath);
-    } catch {}
-  }
+  if (cached && age < (cached.fileName ? CACHE_TTL_MS : MISS_TTL_MS)) return cachedImage;
 
   const musicBrainzId = await findMusicBrainzArtist(artistName);
-  const imageUrl = musicBrainzId ? await findFanartImage(musicBrainzId, key) : undefined;
-  const bytes = imageUrl ? await downloadImage(imageUrl) : null;
+  const imageUrl = musicBrainzId ? await findAudioDbImage(musicBrainzId) : undefined;
+  const bytes = imageUrl ? await downloadImage(imageUrl) : undefined;
   if (!bytes) {
-    return;
+    index[normalizedName] = cachedImage
+      ? { checkedAt: Date.now(), fileName: cached?.fileName }
+      : { checkedAt: Date.now() };
+    await writeIndex();
+    return cachedImage;
   }
-  const fileName = cachedFileName;
-  const filePath = cachedFilePath;
+
+  const fileName = `${fileId(`audiodb:${normalizedName}`)}.jpg`;
+  const filePath = path.join(getArtistCacheDir(), fileName);
   await fs.mkdir(getArtistCacheDir(), { recursive: true });
   await fs.writeFile(filePath, bytes);
-  index[normalized] = { checkedAt: Date.now(), fileName };
+  index[normalizedName] = { checkedAt: Date.now(), fileName };
   await writeIndex();
   return toCacheUrl(filePath);
 };
 
 /** 获取单个歌手头像，重复请求复用同一任务 */
 export const getArtistImage = (artistName: string): Promise<string | undefined> => {
-  const normalized = normalizeName(artistName);
-  if (!normalized) return Promise.resolve(undefined);
-  const existing = inFlight.get(normalized);
+  const normalizedName = normalizeName(artistName);
+  if (!normalizedName) return Promise.resolve(undefined);
+  const existing = inFlight.get(normalizedName);
   if (existing) return existing;
   const task = resolve(artistName)
     .catch((error) => {
-      libraryLog.warn(`Fanart 歌手图片获取失败: ${artistName}`, error);
+      libraryLog.warn(`TheAudioDB 歌手图片获取失败: ${artistName}`, error);
       return undefined;
     })
-    .finally(() => inFlight.delete(normalized));
-  inFlight.set(normalized, task);
+    .finally(() => inFlight.delete(normalizedName));
+  inFlight.set(normalizedName, task);
   return task;
 };
 
@@ -232,34 +220,6 @@ export const prefetchArtistImages = async (
     }
   };
   await Promise.all(Array.from({ length: Math.min(PREFETCH_CONCURRENCY, queue.length) }, worker));
-  libraryLog.info(`Fanart 歌手图片预取完成: ${Object.keys(results).length}/${queue.length}`);
+  libraryLog.info(`TheAudioDB 歌手图片预取完成: ${Object.keys(results).length}/${queue.length}`);
   return results;
-};
-
-/** 获取不暴露密钥的配置状态 */
-export const getArtistImageProviderStatus = async (): Promise<ArtistImageProviderStatus> => ({
-  hasPersonalApiKey: Boolean(await getKey()),
-});
-
-/** 保存个人密钥并清除旧的失败缓存 */
-export const savePersonalApiKey = async (apiKey: string): Promise<ArtistImageProviderStatus> => {
-  const value = apiKey.trim();
-  if (!value) throw new Error("Fanart.tv personal API key is required");
-  await fs.mkdir(configDir, { recursive: true });
-  atomicWriteSync(
-    CREDENTIALS_FILE,
-    JSON.stringify({ encryptedPersonalApiKey: encrypt(value) }, null, 2),
-  );
-  const index = await readIndex();
-  for (const [name, entry] of Object.entries(index)) {
-    if (!entry.fileName) delete index[name];
-  }
-  await writeIndex();
-  return getArtistImageProviderStatus();
-};
-
-/** 移除个人密钥 */
-export const clearPersonalApiKey = async (): Promise<ArtistImageProviderStatus> => {
-  await fs.rm(CREDENTIALS_FILE, { force: true });
-  return getArtistImageProviderStatus();
 };

@@ -80,7 +80,7 @@ export const useLibraryStore = defineStore("library", () => {
     artistAvatars.value = { ...artistAvatars.value, [key]: avatar };
   };
 
-  /** 预取本地媒体库中歌手的 Fanart.tv 头像 */
+  /** 预取本地媒体库中歌手头像 */
   const loadArtistAvatars = async (): Promise<void> => {
     const names = [
       ...new Set(tracks.value.flatMap((track) => track.artists.map((artist) => artist.name))),

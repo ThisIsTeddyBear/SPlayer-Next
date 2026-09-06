@@ -30,7 +30,6 @@ import { UpdateApi } from "@shared/types/update";
 import { AiModelApi } from "@shared/types/ai";
 import { PlaylistApi } from "@shared/types/playlist";
 import { OpenccApi } from "@shared/types/opencc";
-import { ArtistImagesApi } from "@shared/types/artistImages";
 
 declare global {
   interface Window {
@@ -70,7 +69,6 @@ declare global {
         getPathForFile: (file: File) => string;
       };
       library: LibraryApi;
-      artistImages: ArtistImagesApi;
       playlist: PlaylistApi;
       window: WindowApi;
       desktopLyric: DesktopLyricApi;

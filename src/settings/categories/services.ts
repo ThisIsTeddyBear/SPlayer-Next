@@ -3,7 +3,6 @@ import { useSettingsStore } from "@/stores/settings";
 import { toast } from "@/composables/useToast";
 import i18n from "@/i18n";
 import ExternalApiStatusCard from "@/components/settings/custom/ExternalApiStatusCard.vue";
-import ArtistImageProviderConfig from "@/components/settings/custom/ArtistImageProviderConfig.vue";
 import IconLucideGlobe from "~icons/lucide/globe";
 
 const servicesCategory: SettingCategory = {
@@ -67,18 +66,6 @@ const servicesCategory: SettingCategory = {
           type: "switch",
           binding: { store: "settings", path: "system.system.neteaseRealIp" },
           defaultValue: false,
-        },
-      ],
-    },
-    {
-      id: "artistImages",
-      items: [
-        {
-          key: "artistImages",
-          type: "custom",
-          component: ArtistImageProviderConfig,
-          fullWidth: true,
-          searchable: false,
         },
       ],
     },
