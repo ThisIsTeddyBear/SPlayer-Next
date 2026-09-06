@@ -31,27 +31,27 @@ interface ModeItem {
 const MODES: ModeItem[] = [
   {
     key: "DEFAULT",
-    title: "默认模式",
-    desc: "沿着目前喜好继续聆听",
+    title: "Default",
+    desc: "Continue based on your current preferences",
   },
   {
     key: "FAMILIAR",
-    title: "熟悉模式",
-    desc: "喜欢过的歌曲与相似推荐",
+    title: "Familiar",
+    desc: "Songs you liked and similar recommendations",
   },
   {
     key: "EXPLORE",
-    title: "探索模式",
-    desc: "偏好曲风与潜力好歌",
+    title: "Explore",
+    desc: "Preferred styles and promising new songs",
   },
   {
     key: "SCENE_RCMD",
-    title: "场景模式",
-    desc: "根据特定场景与氛围推荐",
+    title: "Scene",
+    desc: "Recommendations for a specific setting and mood",
   },
 ];
 
-/** 场景子模式分类与标签 */
+/** Scene submode categories and labels. */
 interface SubModeCategory {
   category: string;
   items: Array<{ key: PersonalFmSubMode; label: string }>;
@@ -59,69 +59,69 @@ interface SubModeCategory {
 
 const SUBMODE_CATEGORIES: SubModeCategory[] = [
   {
-    category: "生活场景",
+    category: "Everyday activities",
     items: [
-      { key: "EXERCISE", label: "运动" },
-      { key: "FOCUS", label: "专注" },
-      { key: "SLEEP_HELP", label: "助眠" },
-      { key: "COMMUTE", label: "出行" },
-      { key: "COFFEE_SHOP", label: "咖啡馆" },
-      { key: "TAKE_SHOWER", label: "洗澡" },
-      { key: "GAMES", label: "游戏" },
+      { key: "EXERCISE", label: "Exercise" },
+      { key: "FOCUS", label: "Focus" },
+      { key: "SLEEP_HELP", label: "Sleep" },
+      { key: "COMMUTE", label: "Commute" },
+      { key: "COFFEE_SHOP", label: "Coffee shop" },
+      { key: "TAKE_SHOWER", label: "Shower" },
+      { key: "GAMES", label: "Gaming" },
     ],
   },
   {
-    category: "心情氛围",
+    category: "Mood",
     items: [
-      { key: "RELAX", label: "放松" },
-      { key: "CHEERFUL", label: "欢快" },
-      { key: "NIGHT_EMO", label: "伤感" },
-      { key: "CURE", label: "治愈" },
-      { key: "LYRICAL", label: "抒情" },
-      { key: "SWEET", label: "情歌" },
-      { key: "INSPIRATIONAL", label: "励志" },
-      { key: "RAINY", label: "雨天" },
+      { key: "RELAX", label: "Relax" },
+      { key: "CHEERFUL", label: "Cheerful" },
+      { key: "NIGHT_EMO", label: "Melancholy" },
+      { key: "CURE", label: "Comforting" },
+      { key: "LYRICAL", label: "Lyrical" },
+      { key: "SWEET", label: "Love songs" },
+      { key: "INSPIRATIONAL", label: "Inspirational" },
+      { key: "RAINY", label: "Rainy day" },
     ],
   },
   {
-    category: "曲风流派",
+    category: "Genres and languages",
     items: [
-      { key: "GUOFENG", label: "国风" },
-      { key: "CHINESE", label: "华语" },
-      { key: "ENGLISH", label: "欧美" },
-      { key: "YUEYU", label: "粤语" },
-      { key: "JAPANESE", label: "日语" },
+      { key: "GUOFENG", label: "Chinese traditional" },
+      { key: "CHINESE", label: "Chinese" },
+      { key: "ENGLISH", label: "Western" },
+      { key: "YUEYU", label: "Cantonese" },
+      { key: "JAPANESE", label: "Japanese" },
       { key: "K_POP", label: "K-Pop" },
-      { key: "FRANCH", label: "法语" },
-      { key: "GLOBAL", label: "全球" },
-      { key: "ELECTRONIC", label: "电音" },
-      { key: "RAP", label: "说唱" },
-      { key: "ROCK", label: "摇滚" },
-      { key: "FOLK", label: "民谣" },
-      { key: "ACG", label: "二次元" },
-      { key: "LIGHT", label: "轻音乐" },
-      { key: "JAZZ", label: "爵士" },
-      { key: "GUDIAN", label: "古典" },
+      { key: "FRANCH", label: "French" },
+      { key: "GLOBAL", label: "Global" },
+      { key: "ELECTRONIC", label: "Electronic" },
+      { key: "RAP", label: "Rap" },
+      { key: "ROCK", label: "Rock" },
+      { key: "FOLK", label: "Folk" },
+      { key: "ACG", label: "Anime and games" },
+      { key: "LIGHT", label: "Easy listening" },
+      { key: "JAZZ", label: "Jazz" },
+      { key: "GUDIAN", label: "Classical" },
       { key: "RHYTHM_BLUES", label: "R&B" },
-      { key: "BLUE", label: "蓝调" },
-      { key: "PUNK", label: "放克" },
-      { key: "DANCE", label: "舞蹈" },
-      { key: "LATIN", label: "拉丁" },
-      { key: "COUNTRY", label: "乡村乐" },
-      { key: "MANYAO", label: "慢摇DJ" },
-      { key: "JINGDIAN", label: "经典" },
-      { key: "ORIGINAL_MUSICIAL", label: "宝藏原创" },
-      { key: "MUSICAL", label: "音乐剧" },
-      { key: "YINGSHI", label: "影视" },
+      { key: "BLUE", label: "Blues" },
+      { key: "PUNK", label: "Funk" },
+      { key: "DANCE", label: "Dance" },
+      { key: "LATIN", label: "Latin" },
+      { key: "COUNTRY", label: "Country" },
+      { key: "MANYAO", label: "Slow dance DJ" },
+      { key: "JINGDIAN", label: "Classics" },
+      { key: "ORIGINAL_MUSICIAL", label: "Original gems" },
+      { key: "MUSICAL", label: "Musical theatre" },
+      { key: "YINGSHI", label: "Film and TV" },
     ],
   },
 ];
 
-/** 当前选中的模式 */
+/** Selected mode. */
 const activeMode = ref<PersonalFmMode>("DEFAULT");
-/** 当前选中的子场景 */
+/** Selected scene submode. */
 const activeSubMode = ref<PersonalFmSubMode>("EXERCISE");
-/** 是否处于切换中 */
+/** Whether a mode switch is in progress. */
 const switching = ref(false);
 
 /** 打开对话框时同步当前正在生效的配置 */

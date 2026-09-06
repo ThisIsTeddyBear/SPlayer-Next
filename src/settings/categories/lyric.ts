@@ -5,8 +5,7 @@ import LyricFormatOrderConfig from "@/components/settings/custom/LyricFormatOrde
 import ExcludeLyricsConfig from "@/components/settings/custom/ExcludeLyricsConfig.vue";
 import IconLucideMic2 from "~icons/lucide/mic-2";
 
-/** 来源偏好选项：auto + 全部平台（来自平台总表）+ self */
-/** 当前歌词引擎 */
+/** Get the selected lyric engine. */
 const lyricEngine = () => useSettingsStore().lyric.engine;
 
 const lyricCategory: SettingCategory = {

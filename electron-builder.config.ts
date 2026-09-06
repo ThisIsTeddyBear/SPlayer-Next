@@ -2,7 +2,7 @@ import type { Configuration } from "electron-builder";
 import { readFileSync } from "node:fs";
 import { SUPPORTED_AUDIO_EXTENSIONS } from "./shared/utils/audioFile";
 
-/** 音频后缀注册为文件关联 */
+/** Register supported audio extensions as file associations. */
 const fileAssociations = [...SUPPORTED_AUDIO_EXTENSIONS].map((extension) => {
   const ext = extension.slice(1);
   return {
@@ -18,13 +18,13 @@ const inferredUpdateChannel = prereleaseChannel ?? "latest";
 const updateChannel = process.env.UPDATE_CHANNEL ?? inferredUpdateChannel;
 
 if (updateChannel !== "latest" && updateChannel !== "beta" && updateChannel !== "alpha") {
-  throw new Error(`不支持的更新通道: ${updateChannel}`);
+  throw new Error(`Unsupported update channel: ${updateChannel}`);
 }
 if (packageVersion.includes("-") && !prereleaseChannel) {
-  throw new Error(`不支持的预发布版本格式: ${packageVersion}`);
+  throw new Error(`Unsupported prerelease version format: ${packageVersion}`);
 }
 if (updateChannel !== inferredUpdateChannel) {
-  throw new Error(`版本 ${packageVersion} 与更新通道 ${updateChannel} 不匹配`);
+  throw new Error(`Version ${packageVersion} does not match update channel ${updateChannel}`);
 }
 
 const config: Configuration = {
@@ -56,8 +56,7 @@ const config: Configuration = {
     "!**/{CHANGELOG,README,readme}*",
     "!**/node_modules/better-sqlite3/{deps,src}/**",
   ],
-  // 保留的语言
-  electronLanguages: ["zh-CN", "en-US"],
+  electronLanguages: ["en-US"],
   asarUnpack: ["public/**"],
   extraResources: [
     {

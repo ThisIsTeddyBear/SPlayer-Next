@@ -1,21 +1,21 @@
 /**
- * OpenCC 中文简繁转换配置选项
+ * OpenCC Chinese text conversion options.
  *
- * - none: 不转换
- * - s2t: 简体到繁体 (Simplified Chinese to Traditional Chinese)
- * - t2s: 繁体到简体 (Traditional Chinese to Simplified Chinese)
- * - s2tw: 简体到台湾正体 (Simplified Chinese to Traditional Chinese (Taiwan Standard))
- * - tw2s: 台湾正体到简体 (Traditional Chinese (Taiwan Standard) to Simplified Chinese)
- * - s2hk: 简体到香港繁体 (Simplified Chinese to Traditional Chinese (Hong Kong variant))
- * - hk2s: 香港繁体到简体 (Traditional Chinese (Hong Kong variant) to Simplified Chinese)
- * - s2twp: 简体到繁体（台湾正体标准，并转换常用词汇）
- * - tw2sp: 繁体（台湾正体标准）到简体（并转换常用词汇）
- * - t2tw: 繁体（OpenCC标准）到台湾正体
- * - tw2t: 台湾正体到繁体（OpenCC标准）
- * - t2hk: 繁体（OpenCC标准）到香港繁体
- * - hk2t: 香港繁体到繁体（OpenCC标准）
- * - jp2t: 日本新字体到繁体
- * - t2jp: 繁体到日本新字体
+ * - none: No conversion.
+ * - s2t: Simplified Chinese to Traditional Chinese.
+ * - t2s: Traditional Chinese to Simplified Chinese.
+ * - s2tw: Simplified Chinese to Taiwan Traditional Chinese.
+ * - tw2s: Taiwan Traditional Chinese to Simplified Chinese.
+ * - s2hk: Simplified Chinese to Hong Kong Traditional Chinese.
+ * - hk2s: Hong Kong Traditional Chinese to Simplified Chinese.
+ * - s2twp: Simplified Chinese to Taiwan Traditional Chinese, including common terms.
+ * - tw2sp: Taiwan Traditional Chinese to Simplified Chinese, including common terms.
+ * - t2tw: OpenCC Traditional Chinese to Taiwan Traditional Chinese.
+ * - tw2t: Taiwan Traditional Chinese to OpenCC Traditional Chinese.
+ * - t2hk: OpenCC Traditional Chinese to Hong Kong Traditional Chinese.
+ * - hk2t: Hong Kong Traditional Chinese to OpenCC Traditional Chinese.
+ * - jp2t: Japanese Shinjitai to Traditional Chinese.
+ * - t2jp: Traditional Chinese to Japanese Shinjitai.
  */
 export type CjkTransformMode =
   | "none"
@@ -35,8 +35,8 @@ export type CjkTransformMode =
   | "t2jp";
 
 export interface OpenccApi {
-  /** 转换单个文本 */
+  /** Convert one text value. */
   convert: (text: string, config: CjkTransformMode) => Promise<string>;
-  /** 批量转换文本列表 */
+  /** Convert a list of text values. */
   convertBatch: (texts: string[], config: CjkTransformMode) => Promise<string[]>;
 }

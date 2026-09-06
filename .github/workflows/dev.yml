@@ -1,4 +1,4 @@
-# Dev 分支推送构建
+# Build development branch pushes.
 name: Build Dev
 
 on:
@@ -76,8 +76,8 @@ jobs:
         with:
           workspaces: "native/audio-engine -> target\nnative/audio-capture -> target\nnative/media-ctrl -> target"
 
-      # Linux: 安装系统构建/打包依赖
-      - name: 安装系统依赖 (Linux)
+      # Linux build and packaging dependencies.
+      - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -85,7 +85,7 @@ jobs:
             libasound2-dev libdbus-1-dev libpipewire-0.3-dev libpulse-dev pkg-config clang \
             rpm libarchive-tools
 
-      # 清理旧构建产物
+      # Clean old build output.
       - name: Clean workspace on Windows
         if: runner.os == 'Windows'
         run: |
@@ -96,23 +96,23 @@ jobs:
         if: runner.os != 'Windows'
         run: rm -rf dist out
 
-      # CI 不需要国内镜像
-      - name: 移除 .npmrc
+      # CI does not use the local registry mirror.
+      - name: Remove .npmrc
         shell: bash
         run: rm -f .npmrc
 
-      # 安装项目依赖
+      # Install project dependencies.
       - name: Install dependencies
         run: pnpm install
 
-      # 构建
+      # Build.
       - name: Build ${{ matrix.name }} ${{ matrix.arch }}
         run: ${{ matrix.build_cmd }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
-      # 上传构建产物 (Windows)
+      # Upload Windows artifacts.
       - name: Upload Windows Setup
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v7

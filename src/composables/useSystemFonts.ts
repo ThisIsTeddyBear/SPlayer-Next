@@ -1,25 +1,23 @@
-/**
- * 读取系统已安装字体
- */
+/** Read installed system fonts. */
 
-/** 系统字体列表 */
+/** System font families. */
 const families = ref<string[]>([]);
-/** 是否正在加载字体列表 */
+/** Whether the font list is loading. */
 const loading = ref(false);
-/** 进行中的拉取任务 */
+/** Current font-loading task. */
 let pending: Promise<void> | null = null;
 
-/** 拉取系统字体并去重排序 */
+/** Load, deduplicate, and sort system fonts. */
 const fetchFamilies = async (): Promise<string[]> => {
   const list = await window.api.system.listFonts();
   const unique = Array.from(new Set(list.filter((f) => f.trim().length > 0)));
-  unique.sort((a, b) => a.localeCompare(b, "zh-CN"));
+  unique.sort((a, b) => a.localeCompare(b, "en-US"));
   return unique;
 };
 
-/** 使用系统字体 */
+/** Access system fonts. */
 export const useSystemFonts = () => {
-  /** 仅首次拉取，之后复用缓存 */
+  /** Load once, then reuse the cached list. */
   const ensureLoaded = (): Promise<void> => {
     if (families.value.length > 0) return Promise.resolve();
     if (pending) return pending;

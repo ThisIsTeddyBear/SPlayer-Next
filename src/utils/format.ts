@@ -1,4 +1,4 @@
-/** 格式化文件大小（字节 → 可读字符串） */
+/** Format a file size in bytes as a readable string. */
 export const formatFileSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -7,9 +7,9 @@ export const formatFileSize = (bytes: number): string => {
 };
 
 /**
- * 按 locale 紧凑展示一个数字，如 `9.9万` / `9.9M`
- * @param value - 原值，非有限数返回空串
- * @param locale - BCP-47 locale，如 "zh-CN" / "en-US"
+ * Format a number compactly for the requested locale.
+ * @param value - Source number; non-finite values return an empty string.
+ * @param locale - BCP-47 locale, such as "en-US".
  */
 export const formatCompact = (value: number | undefined | null, locale: string): string => {
   if (value == null || !Number.isFinite(value)) return "";
