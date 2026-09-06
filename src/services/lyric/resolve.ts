@@ -308,7 +308,7 @@ export const resolveLyricForPreload = async (
   const pluginTask = isPluginLyricPreferred() ? resolvePluginLyric(track) : null;
 
   if (track.source === "streaming") {
-    const streaming = await resolveStreamingByPreference(track, shouldContinue);
+    const streaming = await resolveStreamingByPreference(track);
     if (!shouldContinue()) return null;
     if (pluginTask) {
       const plugin = await pluginTask;
