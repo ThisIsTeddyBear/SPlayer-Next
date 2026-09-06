@@ -1,14 +1,9 @@
 <script setup lang="ts">
-import type { Track } from "@shared/types/player";
 import type { RecognitionCandidate } from "@shared/types/recognition";
-import { songsByIds as getNeteaseSongsByIds } from "@/apis/song/netease";
 import { toast } from "@/composables/useToast";
 import { useRecognitionSession } from "@/composables/useRecognitionSession";
-import * as player from "@/core/player";
-import { withPicSize } from "@/utils/format/netease";
 import IconLucideArrowLeft from "~icons/lucide/arrow-left";
 import IconLucideAudioWaveform from "~icons/lucide/audio-waveform";
-import IconLucidePlay from "~icons/lucide/play";
 import IconLucideSearch from "~icons/lucide/search";
 
 const { t } = useI18n();
@@ -19,13 +14,6 @@ const session = useRecognitionSession();
 const { phase, level, candidates, error, supported, source } = session;
 
 const isBusy = computed(() => ["capturing", "fingerprinting", "matching"].includes(phase.value));
-const trackCache = shallowRef(new Map<string, Track>());
-const playingId = ref<string | null>(null);
-
-watch(candidates, () => {
-  trackCache.value = new Map();
-  playingId.value = null;
-});
 
 watch(phase, (value) => {
   if (value === "error") {
@@ -57,26 +45,6 @@ const bars = computed(() => {
     return Math.max(0.14, Math.min(1, boosted * (1 - distance * 0.55)));
   });
 });
-
-/** 获取标准歌曲对象并立即播放 */
-const playCandidate = async (candidate: RecognitionCandidate): Promise<void> => {
-  if (playingId.value === candidate.songId) return;
-  let track = trackCache.value.get(candidate.songId);
-  if (!track) {
-    const [fetched] = await getNeteaseSongsByIds([Number(candidate.songId)]);
-    if (!fetched) return;
-    track = fetched;
-    const next = new Map(trackCache.value);
-    next.set(candidate.songId, fetched);
-    trackCache.value = next;
-  }
-  playingId.value = candidate.songId;
-  try {
-    await player.playNow(track);
-  } finally {
-    playingId.value = null;
-  }
-};
 
 /** 关闭弹窗并跳转到歌曲搜索 */
 const searchCandidate = (candidate: RecognitionCandidate): void => {
@@ -174,7 +142,7 @@ const start = (): void => {
           class="flex min-h-16 items-center gap-3 rounded-lg bg-on-surface/4 p-2 pr-3"
         >
           <SImg
-            :src="withPicSize(candidate.cover, 300)"
+            :src="candidate.cover"
             :alt="candidate.title"
             class="size-12 shrink-0 rounded-md outline outline-1 outline-black/10 dark:outline-white/10"
             decoding="async"
@@ -187,15 +155,6 @@ const start = (): void => {
           </div>
           <SButton variant="ghost" circle @click="searchCandidate(candidate)">
             <template #icon><IconLucideSearch /></template>
-          </SButton>
-          <SButton
-            type="primary"
-            variant="tertiary"
-            circle
-            :loading="playingId === candidate.songId"
-            @click="playCandidate(candidate)"
-          >
-            <template #icon><IconLucidePlay class="translate-x-0.25" /></template>
           </SButton>
         </div>
       </div>

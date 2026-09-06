@@ -5,8 +5,6 @@ import { useSettingsStore } from "@/stores/settings";
 import { useUserStore } from "@/stores/user";
 import { toast } from "@/composables/useToast";
 import { loadArtist as loadArtistService } from "@/services/artistLoader";
-import { fetchArtistSongs } from "@/apis/artist/netease";
-import { fetchQQMusicArtistSongs } from "@/apis/artist/qqmusic";
 import { navigateToAlbum } from "@/utils/navigate";
 import SongList from "@/components/list/SongList.vue";
 import { formatTime } from "@/utils/time";
@@ -97,34 +95,7 @@ const loadArtist = async (): Promise<void> => {
 
 /** 触底加载 */
 const onReachBottom = async (): Promise<void> => {
-  if (
-    (source !== "netease" && source !== "qqmusic") ||
-    !hasMoreSongs.value ||
-    loadingMore.value ||
-    !artist.value
-  )
-    return;
-  const current = artist.value;
-  loadingMore.value = true;
-  try {
-    const { tracks, more } =
-      source === "qqmusic"
-        ? await fetchQQMusicArtistSongs(decodeURIComponent(id), current.tracks.length)
-        : await fetchArtistSongs(decodeURIComponent(id), current.tracks.length);
-    if (loadAbort?.signal.aborted || artist.value?.id !== current.id) return;
-    if (tracks.length === 0) {
-      hasMoreSongs.value = false;
-      return;
-    }
-    artist.value = {
-      ...current,
-      tracks: [...current.tracks, ...tracks],
-      trackCount: source === "qqmusic" ? current.trackCount : current.tracks.length + tracks.length,
-    };
-    hasMoreSongs.value = more;
-  } finally {
-    loadingMore.value = false;
-  }
+  return;
 };
 
 loadArtist();

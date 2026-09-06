@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { getContributors, type Contributor } from "@/apis/github";
+type Contributor = { login: string; avatar: string; htmlUrl: string };
 import { useCopyText } from "@/composables/useCopyText";
 import { useUpdateStore } from "@/stores/update";
 import { openExternal } from "@/utils/url";
@@ -112,7 +112,7 @@ const hasMoreDevelopers = computed(() => developers.value.length > 6);
 
 onMounted(async () => {
   try {
-    developers.value = await getContributors();
+    developers.value = [];
   } catch (error) {
     console.error("获取贡献者失败:", error);
   }

@@ -515,7 +515,7 @@ const handleReset = async (): Promise<void> => {
                   class="text-sm flex-1 min-w-0 truncate"
                   :class="isHidden(row.key) ? 'opacity-40' : ''"
                 >
-                  {{ row.title }}
+                  {{ (row as any).title }}
                 </span>
                 <SButton
                   variant="tertiary"
@@ -587,7 +587,7 @@ const handleReset = async (): Promise<void> => {
                   class="text-sm flex-1 min-w-0 truncate"
                   :class="isHidden(row.key) ? 'opacity-40' : ''"
                 >
-                  {{ row.title }}
+                  {{ (row as any).title }}
                 </span>
                 <SButton
                   variant="tertiary"

@@ -9,7 +9,12 @@
  * extra：JSON 字符串，平台额外字段
  */
 
-import { normalize, normalizeTrackArtists } from "@main/apis/common/lyric/utils";
+const normalize = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, " ");
+const normalizeTrackArtists = (track: Track): string =>
+  track.artists
+    .map((artist) => normalize(artist.name))
+    .sort()
+    .join("/");
 import type { LyricMatchExtra } from "@shared/types/lyrics";
 import type { Track } from "@shared/types/player";
 import type { Platform } from "@shared/types/platform";
@@ -32,7 +37,7 @@ export interface MatchedRecord {
 /** 用 title + 全部艺术家 + 时长桶 算 track 指纹 */
 export const buildFingerprint = (track: Track): string => {
   const title = normalize(track.title);
-  const artist = normalizeTrackArtists(track).join("");
+  const artist = normalizeTrackArtists(track);
   const bucket = track.duration ? Math.round(track.duration / DURATION_BUCKET_MS) : 0;
   return `${FINGERPRINT_VERSION}|${title}|${artist}|${bucket}`;
 };

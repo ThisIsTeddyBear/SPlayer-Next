@@ -6,10 +6,6 @@ import type { TrackSource } from "@shared/types/player";
 import type { ArtistProfile } from "@/types/artist";
 import { useLibraryStore } from "@/stores/library";
 import { useStreamingStore } from "@/stores/streaming";
-import { fetchArtist } from "@/apis/artist/netease";
-import { fetchQQMusicArtist } from "@/apis/artist/qqmusic";
-import { fetchKugouArtist } from "@/apis/artist/kugou";
-import { albumsToCoverItems } from "@/utils/format/coverItem";
 
 export interface LoadArtistOptions {
   /** 名称兜底（在线源元数据返回前用于占位） */
@@ -37,22 +33,6 @@ export const loadArtist = async (
   }
   if (source === "streaming") {
     await loadStreaming(id, options);
-    return;
-  }
-  if (source === "netease") {
-    await loadNetease(id, options);
-    return;
-  }
-  if (source === "qqmusic") {
-    const artistId = decodeURIComponent(id);
-    const result = await fetchQQMusicArtist(artistId, options.fallbackName ?? artistId);
-    if (!options.signal?.aborted) options.onUpdate(result);
-    return;
-  }
-  if (source === "kugou") {
-    const artistId = decodeURIComponent(id);
-    const result = await fetchKugouArtist(artistId, options.fallbackName ?? artistId);
-    if (!options.signal?.aborted) options.onUpdate(result);
     return;
   }
   options.onUpdate(null);
@@ -85,25 +65,5 @@ const loadStreaming = async (id: string, options: LoadArtistOptions): Promise<vo
     albums: [],
     trackCount: tracks.length,
     albumCount: 0,
-  });
-};
-
-const loadNetease = async (id: string, options: LoadArtistOptions): Promise<void> => {
-  const result = await fetchArtist(decodeURIComponent(id));
-  if (options.signal?.aborted) return;
-  if (!result) {
-    options.onUpdate(null);
-    return;
-  }
-  const albums = albumsToCoverItems(result.albums);
-  options.onUpdate({
-    id,
-    name: result.artist.name,
-    avatar: result.artist.avatar,
-    source: "netease",
-    tracks: result.tracks,
-    albums,
-    trackCount: result.tracks.length,
-    albumCount: albums.length,
   });
 };

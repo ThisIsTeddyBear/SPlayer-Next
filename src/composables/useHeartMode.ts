@@ -2,7 +2,6 @@ import type { Track } from "@shared/types/player";
 import { useUserStore } from "@/stores/user";
 import { useMediaStore } from "@/stores/media";
 import { useStatusStore } from "@/stores/status";
-import { fetchHeartModeList } from "@/apis/recommend/netease";
 import { toast } from "@/composables/useToast";
 import * as player from "@/core/player";
 
@@ -45,7 +44,7 @@ export const useHeartMode = () => {
     }
     const loading = toast.loading(t("player.heartMode.loading"), { duration: 0 });
     try {
-      const tracks = await fetchHeartModeList(seedId, playlistId);
+      const tracks: never[] = [];
       if (tracks.length === 0) {
         toast.warning(t("player.heartMode.failed"));
         return;

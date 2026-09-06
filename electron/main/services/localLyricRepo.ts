@@ -15,7 +15,7 @@ import { readdir, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
 import { readFileAutoEncoding } from "@main/utils/encoding";
 import { store } from "@main/store";
-import { normalize } from "@main/apis/common/lyric/utils";
+const normalize = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, " ");
 import { buildFingerprint, getMatchedId } from "@main/database/lyricMatchCache";
 import { coreLog } from "@main/utils/logger";
 import type { Track } from "@shared/types/player";

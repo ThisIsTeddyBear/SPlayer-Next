@@ -88,7 +88,9 @@ const localResults = (tab: TabKey): Array<Track | CoverItem> => {
     for (const track of tracks) {
       const name = track.album?.name?.trim();
       if (!name || albums.has(name)) continue;
-      if (!matches([name, track.album?.artist, ...track.artists.map((artist) => artist.name)], query)) {
+      if (
+        !matches([name, track.album?.artist, ...track.artists.map((artist) => artist.name)], query)
+      ) {
         continue;
       }
       albums.set(name, {
@@ -96,6 +98,7 @@ const localResults = (tab: TabKey): Array<Track | CoverItem> => {
         title: name,
         cover: track.album?.cover ?? track.cover,
         subtitle: track.album?.artist ?? track.artists.map((artist) => artist.name).join(" / "),
+        trackCount: 1,
       });
     }
     return [...albums.values()];
@@ -111,6 +114,7 @@ const localResults = (tab: TabKey): Array<Track | CoverItem> => {
           title: name,
           cover: artist.avatar ?? track.cover,
           subtitle: "",
+          trackCount: 1,
         });
       }
     }
@@ -307,9 +311,7 @@ const isEmptyResult = computed(() => {
         :padding-bottom="20"
         :has-more="states.albums.hasMore"
         :loading-more="states.albums.loadingMore"
-        @click="
-          (item) => navigateToAlbum(item.title)
-        "
+        @click="(item) => navigateToAlbum(item.title)"
         @reach-bottom="onReachBottom('albums')"
       />
       <CoverList
@@ -322,10 +324,7 @@ const isEmptyResult = computed(() => {
         :padding-bottom="20"
         :has-more="states.artists.hasMore"
         :loading-more="states.artists.loadingMore"
-        @click="
-          (item) =>
-            navigateToArtist(item.title)
-        "
+        @click="(item) => navigateToArtist(item.title)"
         @reach-bottom="onReachBottom('artists')"
       />
       <SongList
