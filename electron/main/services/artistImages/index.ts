@@ -12,11 +12,14 @@ const MISS_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const PREFETCH_CONCURRENCY = 8;
 const MUSICBRAINZ_INTERVAL_MS = 1_100;
+const REQUEST_ATTEMPTS = 3;
 const USER_AGENT = "SPlayer-Next/1.0 (https://github.com/ThisIsTeddyBear/SPlayer-Next)";
 
 interface CacheEntry {
   checkedAt: number;
   fileName?: string;
+  /** 仅在两个元数据接口均成功响应且确实没有头像时写入 */
+  confirmedMiss?: true;
 }
 
 interface MusicBrainzArtist {
@@ -31,6 +34,7 @@ interface AudioDbArtist {
 }
 
 type CacheIndex = Record<string, CacheEntry>;
+type LookupResult<T> = { state: "found"; value: T } | { state: "miss" } | { state: "retry" };
 
 const inFlight = new Map<string, Promise<string | undefined>>();
 let cacheIndex: CacheIndex | undefined;
@@ -41,6 +45,8 @@ let nextMusicBrainzRequestAt = 0;
 const normalizeName = (name: string): string => name.trim().replace(/\s+/g, " ").toLowerCase();
 
 const fileId = (value: string): string => createHash("sha256").update(value).digest("hex");
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** 遵守 MusicBrainz 每秒一次的公开 API 速率限制 */
 const waitForMusicBrainzTurn = async (): Promise<void> => {
@@ -70,79 +76,121 @@ const writeIndex = async (): Promise<void> => {
   await indexWriteQueue;
 };
 
-const requestJson = async <T>(url: string): Promise<T | undefined> => {
-  try {
-    const response = await fetchWithProxy(url, {
-      headers: { Accept: "application/json", "User-Agent": USER_AGENT },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) return;
-    return (await response.json()) as T;
-  } catch {
-    return;
+/** 请求 JSON；暂时性网络、状态码和解析问题只允许后续重试，不视为未收录 */
+const requestJson = async <T>(
+  url: string,
+  stage: string,
+  artistName: string,
+): Promise<{ ok: true; value: T } | { ok: false }> => {
+  let lastError = "unknown error";
+  for (let attempt = 0; attempt < REQUEST_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetchWithProxy(url, {
+        headers: { Accept: "application/json", "User-Agent": USER_AGENT },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (response.ok) return { ok: true, value: (await response.json()) as T };
+      lastError = `HTTP ${response.status}`;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    if (attempt + 1 < REQUEST_ATTEMPTS) await delay((attempt + 1) * 500);
   }
+  libraryLog.warn(`歌手图片 ${stage} 失败，将在下次重试: ${artistName} (${lastError})`);
+  return { ok: false };
 };
 
-const downloadImage = async (url: string): Promise<Buffer | undefined> => {
-  try {
-    const response = await fetchWithProxy(url, {
-      headers: { Accept: "image/avif,image/webp,image/*,*/*;q=0.8", "User-Agent": USER_AGENT },
-      signal: AbortSignal.timeout(15_000),
-    });
-    const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
-    if (
-      !response.ok ||
-      !response.body ||
-      (!contentType.startsWith("image/") && contentType !== "")
-    ) {
-      return;
+/** 下载头像；下载异常不能污染“未收录”缓存 */
+const downloadImage = async (
+  url: string,
+  artistName: string,
+): Promise<{ ok: true; value: Buffer } | { ok: false }> => {
+  let lastError = "unknown error";
+  for (let attempt = 0; attempt < REQUEST_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetchWithProxy(url, {
+        headers: {
+          Accept: "image/avif,image/webp,image/*,*/*;q=0.8",
+          "User-Agent": USER_AGENT,
+        },
+        signal: AbortSignal.timeout(15_000),
+      });
+      const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+      if (!response.ok) {
+        lastError = `HTTP ${response.status}`;
+      } else if (!response.body || (!contentType.startsWith("image/") && contentType !== "")) {
+        lastError = `invalid content type: ${contentType || "none"}`;
+      } else {
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        const reader = response.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          total += value.length;
+          if (total > MAX_IMAGE_BYTES) {
+            lastError = "image exceeds size limit";
+            break;
+          }
+          chunks.push(value);
+        }
+        if (total > 0 && total <= MAX_IMAGE_BYTES) {
+          return { ok: true, value: Buffer.concat(chunks, total) };
+        }
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
     }
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    const reader = response.body.getReader();
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.length;
-      if (total > MAX_IMAGE_BYTES) return;
-      chunks.push(value);
-    }
-    return total ? Buffer.concat(chunks, total) : undefined;
-  } catch {
-    return;
+    if (attempt + 1 < REQUEST_ATTEMPTS) await delay((attempt + 1) * 500);
   }
+  libraryLog.warn(`歌手图片下载失败，将在下次重试: ${artistName} (${lastError})`);
+  return { ok: false };
 };
 
 const matchesArtistName = (artist: MusicBrainzArtist, normalizedName: string): boolean =>
   normalizeName(artist.name) === normalizedName ||
   Boolean(artist.aliases?.some((alias) => normalizeName(alias.name ?? "") === normalizedName));
 
-const findMusicBrainzArtist = async (name: string): Promise<string | undefined> => {
+const findMusicBrainzArtist = async (name: string): Promise<LookupResult<string>> => {
   await waitForMusicBrainzTurn();
   const query = new URLSearchParams({
     query: `artist:${JSON.stringify(name)}`,
     fmt: "json",
     limit: "10",
   });
-  const result = await requestJson<{ artists?: MusicBrainzArtist[] }>(
+  const response = await requestJson<{ artists?: MusicBrainzArtist[] }>(
     `https://musicbrainz.org/ws/2/artist/?${query.toString()}`,
+    "MusicBrainz 查询",
+    name,
   );
+  if (!response.ok) return { state: "retry" };
   const normalizedName = normalizeName(name);
-  const artists = result?.artists ?? [];
+  const artists = response.value.artists ?? [];
   const exact = artists.filter((artist) => matchesArtistName(artist, normalizedName));
   if (exact.length) {
-    return exact.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]?.id;
+    const id = exact.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]?.id;
+    return id ? { state: "found", value: id } : { state: "miss" };
   }
-  return artists
+  const id = artists
     .filter((artist) => (artist.score ?? 0) >= 95)
     .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]?.id;
+  return id ? { state: "found", value: id } : { state: "miss" };
 };
 
-const findAudioDbImage = async (musicBrainzId: string): Promise<string | undefined> => {
-  const result = await requestJson<{ artists?: AudioDbArtist[] }>(
+const findAudioDbImage = async (
+  musicBrainzId: string,
+  artistName: string,
+): Promise<LookupResult<string>> => {
+  const response = await requestJson<{ artists?: AudioDbArtist[] }>(
     `https://www.theaudiodb.com/api/v1/json/2/artist-mb.php?i=${encodeURIComponent(musicBrainzId)}`,
+    "TheAudioDB 查询",
+    artistName,
   );
-  return result?.artists?.find((artist) => Boolean(artist.strArtistThumb))?.strArtistThumb;
+  if (!response.ok) return { state: "retry" };
+  const imageUrl = response.value.artists?.find((artist) =>
+    Boolean(artist.strArtistThumb),
+  )?.strArtistThumb;
+  return imageUrl ? { state: "found", value: imageUrl } : { state: "miss" };
 };
 
 const existingCachedImage = async (fileName: string | undefined): Promise<string | undefined> => {
@@ -163,23 +211,35 @@ const resolve = async (artistName: string): Promise<string | undefined> => {
   const cached = index[normalizedName];
   const cachedImage = await existingCachedImage(cached?.fileName);
   const age = Date.now() - (cached?.checkedAt ?? 0);
-  if (cached && age < (cached.fileName ? CACHE_TTL_MS : MISS_TTL_MS)) return cachedImage;
+  if (cached?.fileName && cachedImage && age < CACHE_TTL_MS) return cachedImage;
+  if (cached?.confirmedMiss && age < MISS_TTL_MS) return;
 
-  const musicBrainzId = await findMusicBrainzArtist(artistName);
-  const imageUrl = musicBrainzId ? await findAudioDbImage(musicBrainzId) : undefined;
-  const bytes = imageUrl ? await downloadImage(imageUrl) : undefined;
-  if (!bytes) {
-    index[normalizedName] = cachedImage
-      ? { checkedAt: Date.now(), fileName: cached?.fileName }
-      : { checkedAt: Date.now() };
+  // 旧版本会将请求失败写成普通 miss；仅本次升级将其全部重新验证。
+  if (cached && !cached.fileName && !cached.confirmedMiss) delete index[normalizedName];
+
+  const musicBrainz = await findMusicBrainzArtist(artistName);
+  if (musicBrainz.state === "retry") return cachedImage;
+  if (musicBrainz.state === "miss") {
+    index[normalizedName] = { checkedAt: Date.now(), confirmedMiss: true };
     await writeIndex();
-    return cachedImage;
+    return;
   }
+
+  const audioDb = await findAudioDbImage(musicBrainz.value, artistName);
+  if (audioDb.state === "retry") return cachedImage;
+  if (audioDb.state === "miss") {
+    index[normalizedName] = { checkedAt: Date.now(), confirmedMiss: true };
+    await writeIndex();
+    return;
+  }
+
+  const image = await downloadImage(audioDb.value, artistName);
+  if (!image.ok) return cachedImage;
 
   const fileName = `${fileId(`audiodb:${normalizedName}`)}.jpg`;
   const filePath = path.join(getArtistCacheDir(), fileName);
   await fs.mkdir(getArtistCacheDir(), { recursive: true });
-  await fs.writeFile(filePath, bytes);
+  await fs.writeFile(filePath, image.value);
   index[normalizedName] = { checkedAt: Date.now(), fileName };
   await writeIndex();
   return toCacheUrl(filePath);
