@@ -395,7 +395,7 @@ const toggleLyric = (): void => {
                 v-else-if="lyricMounted"
                 class="w-full h-full flex items-center justify-center text-cover/30"
               >
-                暂无歌词
+                {{ $t("player.noLyrics") }}
               </div>
             </div>
             <!-- 歌词侧边工具栏 -->

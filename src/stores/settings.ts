@@ -21,12 +21,6 @@ import { defaultSystemConfig } from "@shared/defaults/settings";
 import { setByPath } from "@shared/utils/path";
 
 /**
- * 对账有序集合：保留存档中仍有效的项（顺序不变），
- * 末尾补上完整集合里缺失的新项，剔除已失效的项
- * 用于平台/格式偏好——新增平台或格式时无需用户手动重置即可生效
- * @param stored - 存档顺序
- * @param all - 当前完整集合
- * @returns 对账后的顺序
  */
 const reconcileOrder = <T>(stored: T[], all: readonly T[]): T[] => {
   const known = stored.filter((item) => all.includes(item));
@@ -35,10 +29,6 @@ const reconcileOrder = <T>(stored: T[], all: readonly T[]): T[] => {
 };
 
 /**
- * 对账侧边栏导航分组：仅保留已知导航项并去重（空组保留），
- * 新增的导航项补到末组，存档无效时回退默认分组
- * @param stored - 存档分组
- * @returns 对账后的分组
  */
 const reconcileNavGroups = (stored: unknown): SidebarNavGroup[] => {
   const all = DEFAULT_SIDEBAR_NAV_GROUPS.flatMap((group) => group.keys);
@@ -67,9 +57,6 @@ const reconcileNavGroups = (stored: unknown): SidebarNavGroup[] => {
 };
 
 /**
- * 对账侧边栏隐藏键：仅保留有效的导航项、歌单分组与歌单路由键，首页不可隐藏
- * @param stored - 存档隐藏键
- * @returns 对账后的隐藏键
  */
 const reconcileHiddenKeys = (stored: string[]): string[] => {
   const valid = new Set([
@@ -81,9 +68,6 @@ const reconcileHiddenKeys = (stored: string[]): string[] => {
 };
 
 /**
- * 对账侧边栏歌单顺序：剔除非法存档，保证各字段均为字符串数组
- * @param stored - 存档顺序
- * @returns 对账后的顺序
  */
 const reconcilePlaylistOrder = (stored: unknown): SidebarPlaylistOrder => {
   const record = (stored ?? {}) as Partial<Record<keyof SidebarPlaylistOrder, unknown>>;
@@ -99,10 +83,8 @@ const reconcilePlaylistOrder = (stored: unknown): SidebarPlaylistOrder => {
 export const useSettingsStore = defineStore(
   "settings",
   () => {
-    /** 界面语言 */
     const locale = ref<LocaleCode>("en-US");
 
-    /** 外观 */
     const appearance = reactive<AppearanceSettings>({
       layoutMode: "default",
       routeTransition: "fade",
@@ -124,7 +106,6 @@ export const useSettingsStore = defineStore(
       showPerformanceMonitor: false,
     });
 
-    /** 播放器 */
     const player = reactive<PlayerSettings>({
       playerBgType: "blur",
       playerBgFps: 30,
@@ -154,7 +135,6 @@ export const useSettingsStore = defineStore(
       preloadNextTrack: false,
     });
 
-    /** 强迫症设置 */
     const preset = reactive<PresetSettings>({
       fuckDjMode: false,
       uncensorProfanity: false,
@@ -163,7 +143,6 @@ export const useSettingsStore = defineStore(
       showSubtitle: true,
     });
 
-    /** 歌词 */
     const lyric = reactive<LyricSettings>({
       lyricSourcePreference: "auto",
       lyricSourceOrder: [...DEFAULT_LYRIC_SOURCE_ORDER],
@@ -218,21 +197,15 @@ export const useSettingsStore = defineStore(
       amllResetLineTimestamps: true,
     });
 
-    /** 系统配置 - 传递主进程 */
     const system = reactive<SystemConfig>(structuredClone(defaultSystemConfig));
 
-    /** 桌面歌词窗口是否打开；由主进程广播 */
     const isDesktopLyricOpen = ref(false);
 
-    /** 灵动岛窗口是否打开；由主进程广播 */
     const isDynamicIslandOpen = ref(false);
 
-    /** 任务栏歌词窗口是否打开；由主进程广播 */
     const isTaskbarLyricOpen = ref(false);
 
     /**
-     * 深合并：嵌套对象原地 mutate，叶子值不变就不写
-     * 避免浅 Object.assign 替换嵌套引用，导致依赖路径的 watcher 误触
      */
     const deepAssign = (target: Record<string, unknown>, source: Record<string, unknown>): void => {
       for (const key of Object.keys(source)) {
@@ -253,7 +226,6 @@ export const useSettingsStore = defineStore(
       }
     };
 
-    /** 从主进程拉取后端配置 */
     const syncSystem = async (): Promise<void> => {
       try {
         deepAssign(
@@ -263,25 +235,19 @@ export const useSettingsStore = defineStore(
       } catch {}
     };
 
-    /** IPC 订阅取消回调集合 */
     const unsubscribers: Array<() => void> = [
-      // 订阅桌面歌词配置变化：歌词窗口点锁定按钮等场景需要回流到主窗口设置页
       window.api.desktopLyric.onConfigChange((next) => {
         Object.assign(system.desktopLyric, next as object);
       }),
-      // 订阅桌面歌词窗口开关状态
       window.api.window.onDesktopLyricVisibilityChange((open) => {
         isDesktopLyricOpen.value = open;
       }),
-      // 订阅灵动岛配置变化
       window.api.dynamicIsland.onConfigChange((next) => {
         Object.assign(system.dynamicIsland, next as object);
       }),
-      // 订阅灵动岛窗口开关状态
       window.api.window.onDynamicIslandVisibilityChange((open) => {
         isDynamicIslandOpen.value = open;
       }),
-      // 订阅任务栏歌词窗口开关状态
       window.api.window.onTaskbarLyricVisibilityChange((open) => {
         isTaskbarLyricOpen.value = open;
       }),
@@ -292,7 +258,6 @@ export const useSettingsStore = defineStore(
       unsubscribers.length = 0;
     });
 
-    // 拉取窗口初始开关状态
     window.api.window
       .isDesktopLyricOpen()
       .then((open) => {
@@ -313,8 +278,6 @@ export const useSettingsStore = defineStore(
       .catch(() => {});
 
     /**
-     * 写入后端配置并同步本地
-     * 先就地 mutate 叶子保证 UI 即时反馈，IPC 落盘异步执行
      */
     const setSystem = async (keyPath: string, value: unknown): Promise<void> => {
       setByPath(system, keyPath, value);
@@ -330,7 +293,6 @@ export const useSettingsStore = defineStore(
       }
     };
 
-    /** 本地配置写入后处理 */
     const afterLocalChange = (path: string, value: unknown): void => {
       if (path === "lyric.springPreset" && value !== "custom") {
         const params = SPRING_PRESETS[value as Exclude<SpringPreset, "custom">];

@@ -44,15 +44,12 @@ const messages: Record<LocaleCode, MainMessages> = {
 
 let currentLocale: LocaleCode = "en-US";
 
-/** 获取翻译文本 */
 export const t = (key: keyof MainMessages): string => messages[currentLocale][key];
 
-/** 切换语言，返回是否发生变化 */
 export const setLocale = (locale: LocaleCode): boolean => {
   if (currentLocale === locale) return false;
   currentLocale = locale;
   return true;
 };
 
-/** 获取当前语言 */
 export const getLocale = (): LocaleCode => currentLocale;

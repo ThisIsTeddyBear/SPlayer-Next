@@ -1,15 +1,7 @@
 /**
- * 插件 host 子进程入口（utilityProcess fork 的唯一目标）
  *
- * 一个 host 进程托管所有已启用插件：每个插件一个 node:vm 上下文（按 pluginId 索引），
- * 共享一条 parentPort 与主进程通信。
  *
- * - 收到 loadPlugin：建 vm 上下文、注入 splayer、跑脚本、回 ready
- * - 收到 unloadPlugin：dispose 该上下文（清定时器/在途调用），不影响其它插件
- * - call/event/settingsUpdate/hostResult/cancel 按 pluginId 路由到对应上下文
- * - 单插件出错只 dispose 自己并回 fatal，不退进程
  *
- * 注意：本文件在 utilityProcess 里跑，没有 DOM / Electron，只有 Node。
  */
 
 import vm from "node:vm";
@@ -39,11 +31,6 @@ if (!parentPort) {
 }
 
 /**
- * 深度剥离不可克隆字段
- * 保留 string/number/bool/null/Uint8Array/纯字典/数组；丢函数/symbol；
- * Buffer 转 Uint8Array、普通对象用 Object.create(null) 重建以脱掉 vm.Context 原型链
- * @param value - 任意值
- * @param depth - 递归深度上限
  */
 const sanitizeForIpc = (value: unknown, depth = 0): unknown => {
   if (depth > 6) return null;
@@ -66,7 +53,6 @@ const sanitizeForIpc = (value: unknown, depth = 0): unknown => {
         if (cleaned !== undefined) out[key] = cleaned;
       }
     } catch {
-      // Proxy 的 ownKeys 可能抛，直接返回空字典
     }
     return out;
   }
@@ -74,9 +60,6 @@ const sanitizeForIpc = (value: unknown, depth = 0): unknown => {
 };
 
 /**
- * 跨 host→main 边界发消息
- * 直发；失败 → sanitize 后重发；仍失败 → 抛带 kind 上下文的错误
- * @param msg - 待发消息
  */
 const send = (msg: SandboxOut): void => {
   try {
@@ -92,24 +75,15 @@ const send = (msg: SandboxOut): void => {
   }
 };
 
-/** 单个插件在 host 内的运行记录 */
 interface PluginContextRecord {
   pluginId: string;
-  /** action → handler */
   handlers: Map<PluginAction, (req: unknown) => Promise<unknown>>;
-  /** 高层播放事件回调表，key = PlaybackEventKind */
   playerEventHandlers: Map<string, ((data: unknown) => void)[]>;
-  /** 设置变化回调表，key = setting key */
   settingChangeHandlers: Map<string, ((value: unknown) => void)[]>;
-  /** 已注册 sources */
   registeredSources: Record<string, SourceCapability>;
-  /** 在途 action 的 AbortController，key = requestId */
   inflight: Map<string, AbortController>;
-  /** hostCall 回调登记，key = callId */
   hostCallWaiters: Map<string, { resolve: (v: unknown) => void; reject: (err: Error) => void }>;
-  /** 用户设置缓存（getSetting 同步读） */
   userSettingsCache: Record<string, unknown>;
-  /** 注入沙箱的定时器句柄，卸载时统一清除，避免泄露/继续运行 */
   timers: Set<NodeJS.Timeout>;
   immediates: Set<NodeJS.Immediate>;
   callSeq: number;
@@ -118,7 +92,6 @@ interface PluginContextRecord {
 
 const plugins = new Map<string, PluginContextRecord>();
 
-/** 调用主进程，返回 hostResult 的 data */
 const hostCall = (
   record: PluginContextRecord,
   method: HostCallMethod,
@@ -144,7 +117,6 @@ const hostCall = (
   });
 };
 
-/** 为某记录生成会登记句柄的定时器 API（卸载时统一清） */
 const makeTimers = (record: PluginContextRecord): Record<string, unknown> => ({
   setTimeout: (cb: (...a: unknown[]) => void, ms?: number, ...args: unknown[]): NodeJS.Timeout => {
     const handle = setTimeout(() => {
@@ -183,7 +155,6 @@ const makeTimers = (record: PluginContextRecord): Record<string, unknown> => ({
 
 type LoadSpec = Extract<SandboxIn, { kind: "loadPlugin" }>;
 
-/** 构造注入某插件沙箱的 splayer 对象 */
 const buildSplayer = (record: PluginContextRecord, spec: LoadSpec): HostApi => ({
   pluginId: spec.pluginId,
   apiLevel: spec.apiLevel,
@@ -290,7 +261,6 @@ const buildSplayer = (record: PluginContextRecord, spec: LoadSpec): HostApi => (
   },
 });
 
-/** 把 utils 暴露给沙箱（原生 Node 模块包装，无状态可共享） */
 const buildUtils = (): object => ({
   crypto: {
     md5: (data: string | Uint8Array) =>
@@ -357,7 +327,6 @@ const buildUtils = (): object => ({
   },
 });
 
-/** dispose 一个插件记录：中止在途、拒绝等待、清定时器与回调 */
 const disposeRecord = (record: PluginContextRecord): void => {
   if (record.disposed) return;
   record.disposed = true;
@@ -365,7 +334,6 @@ const disposeRecord = (record: PluginContextRecord): void => {
     try {
       ctrl.abort();
     } catch {
-      /* ignore */
     }
   }
   record.inflight.clear();
@@ -382,7 +350,6 @@ const disposeRecord = (record: PluginContextRecord): void => {
   record.settingChangeHandlers.clear();
 };
 
-/** 卸载插件：dispose 记录并从表中移除（vm 上下文随引用释放被 GC 回收） */
 const unloadPlugin = (pluginId: string): void => {
   const record = plugins.get(pluginId);
   if (!record) return;
@@ -390,7 +357,6 @@ const unloadPlugin = (pluginId: string): void => {
   plugins.delete(pluginId);
 };
 
-/** 加载一个插件进新的 vm 上下文 */
 const loadPluginIntoContext = (spec: LoadSpec): void => {
   if (plugins.has(spec.pluginId)) return;
 
@@ -494,7 +460,6 @@ const loadPluginIntoContext = (spec: LoadSpec): void => {
     }
   }
 
-  // 脚本同步部分执行完，再 microtask 后上报 ready（兼容 lx 异步 inited）
   queueMicrotask(() => {
     if (record.disposed) return;
     send({ kind: "ready", pluginId: spec.pluginId, sources: record.registeredSources });
@@ -532,7 +497,6 @@ parentPort.on("message", async (event) => {
             try {
               handler(msg.data);
             } catch {
-              // 隔离插件回调异常
             }
           }
         }
@@ -549,7 +513,6 @@ parentPort.on("message", async (event) => {
               try {
                 handler(value);
               } catch {
-                // 隔离插件回调异常
               }
             }
           }
@@ -635,7 +598,6 @@ parentPort.on("message", async (event) => {
       }
     }
   } catch (err) {
-    // 派发自身出错：能归因就 dispose 该插件并回 fatal，否则 host 级日志
     const pluginId = (msg as { pluginId?: string }).pluginId;
     const record = pluginId ? plugins.get(pluginId) : undefined;
     if (pluginId && record) {
@@ -655,7 +617,6 @@ parentPort.on("message", async (event) => {
   }
 });
 
-// 插件未捕获的异步异常：记 host 级日志但不退进程，保护其它插件存活
 process.on("unhandledRejection", (reason) => {
   send({
     kind: "log",
@@ -667,5 +628,4 @@ process.on("uncaughtException", (err) => {
   send({ kind: "log", level: "error", args: ["uncaughtException:", err.message] });
 });
 
-// host 进程就绪
 send({ kind: "hostReady" });

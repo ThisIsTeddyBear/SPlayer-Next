@@ -42,10 +42,8 @@ interface CueRange {
   durationMs: number;
 }
 
-/** 当前加载的 CUE 分轨范围 */
 let activeCueRange: CueRange | null = null;
 
-/** 从 Track 元数据提取 CUE 分轨范围 */
 const cueRangeFromTrack = (track: LoadOptions["meta"] | null | undefined): CueRange | null => {
   const start = track?.cueStartMs;
   const end = track?.cueEndMs;
@@ -53,27 +51,22 @@ const cueRangeFromTrack = (track: LoadOptions["meta"] | null | undefined): CueRa
   return { startMs: start, durationMs: end - start };
 };
 
-/** 引擎绝对时间转换为当前曲目展示时间 */
 const toDisplayPositionMs = (positionMs: number): number => {
   if (!activeCueRange) return positionMs;
   return Math.max(0, Math.min(activeCueRange.durationMs, positionMs - activeCueRange.startMs));
 };
 
-/** 当前曲目展示时长 */
 const toDisplayDurationMs = (durationMs: number): number =>
   activeCueRange?.durationMs ?? durationMs;
 
-/** 展示时间转换为引擎绝对时间 */
 const toEnginePositionMs = (positionMs: number): number =>
   activeCueRange ? activeCueRange.startMs + positionMs : positionMs;
 
-/** 返回失败响应，附带日志 */
 const fail = (code: ErrorCode, error?: unknown) => {
   if (error) playerLog.error(`${code}:`, error);
   return { success: false as const, error: code };
 };
 
-/** 判断原生错误是否为设备错误 */
 const isNativeDeviceError = (error: unknown): boolean => String(error).includes("[Device]");
 const isNativeSourceNotFoundError = (error: unknown): boolean =>
   String(error).includes("[SourceNotFound]");
@@ -81,7 +74,6 @@ const isNativeNetworkError = (error: unknown): boolean =>
   String(error).includes("[NetworkUnreachable]");
 const isNativeCancelledError = (error: unknown): boolean => String(error).includes("[Cancelled]");
 
-/** 根据原生错误特征和音源类型，将异常分类为标准 ErrorCode */
 const classifyLoadError = (error: unknown, source: string): ErrorCode => {
   const msg = error instanceof Error ? error.message : String(error);
   if (isNativeCancelledError(error)) {
@@ -100,15 +92,12 @@ const classifyLoadError = (error: unknown, source: string): ErrorCode => {
 };
 
 /**
- * 播放器原生事件回调
- * @param inst 播放器实例
  */
 const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"]>): void => {
   inst.onEvent((event: JsPlayerEvent) => {
     switch (event.type) {
       case "stateChanged": {
         const state = (event.state ?? "idle") as PlayerState;
-        // 更新缩略图工具栏和托盘菜单
         getThumbar()?.updateThumbar(state === "playing");
         setTrayPlayState(state === "playing" ? "playing" : "paused");
         if (state === "playing") {
@@ -148,7 +137,6 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
         break;
       }
       case "sourceError": {
-        // 音源失效（网络中断 / URL 过期）
         sendToMain("player:event", { type: "sourceError" });
         mediaService.setPlayState({ status: "Paused" });
         setTaskbarProgress(-1);
@@ -161,7 +149,6 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
           type: "position",
           data: { position: posMs, duration: durMs },
         };
-        // 主窗口隐藏时跳过高频推送
         if (getMainWindow()?.isVisible()) sendToMain("player:event", positionEvent);
         wsBroadcast(positionEvent);
         mediaService.setTimeline({ currentMs: posMs, totalMs: durMs });
@@ -176,13 +163,11 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
         break;
       }
       case "outputFailed": {
-        // 运行期流错误（CPAL/Rodio），重建输出流恢复播放
         playerLog.warn("检测到音频输出流错误，触发恢复");
         requestReinit(inst);
         break;
       }
       case "outputStalled": {
-        // 看门狗：无流错误但长期未消费样本
         playerLog.warn("检测到音频输出停滞，触发恢复");
         requestReinit(inst);
         break;
@@ -191,22 +176,17 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
   });
 };
 
-/** 每次 player:load 自增 */
 let loadSeq = 0;
 
-/** 播放器相关 IPC */
 export const registerPlayerIpc = (): void => {
-  // 注册实例创建/重建时的回调
   onPlayerCreated(registerNativeEvents);
   onPlayerCreated(startDeviceMonitoring);
-  // 加载音频文件
   ipcMain.handle("player:load", async (_event, source: string, options: LoadOptions = {}) => {
     cancelPendingReinit();
     const autoPlay = options.autoPlay ?? true;
     const authoritative = options.meta ?? null;
     const cueRange = cueRangeFromTrack(authoritative);
     activeCueRange = cueRange;
-    // 非本地音源
     const isRemote = authoritative != null && authoritative.source !== "local";
     const seq = ++loadSeq;
     try {
@@ -224,7 +204,6 @@ export const registerPlayerIpc = (): void => {
       };
       sendToMain("player:event", loadingEvent);
       wsBroadcast(loadingEvent);
-      // 在线封面原图 URL
       const remoteCover =
         authoritative && authoritative.source !== "local"
           ? (authoritative.coverOriginal ?? authoritative.cover)
@@ -235,7 +214,6 @@ export const registerPlayerIpc = (): void => {
           : undefined;
       const coverUrl =
         coverFetchUrl && /^https?:\/\//i.test(coverFetchUrl) ? coverFetchUrl : undefined;
-      // 写一次 SMTC/托盘/标题
       const applyDisplay = (
         title: string,
         artist: string,
@@ -250,7 +228,6 @@ export const registerPlayerIpc = (): void => {
         setTraySongName(header);
         setTrayPlayState(autoPlay ? "playing" : "paused");
       };
-      // 流媒体乐观更新
       if (authoritative) {
         applyDisplay(
           authoritative.title || source.split(/[/\\]/).pop() || source,
@@ -275,12 +252,10 @@ export const registerPlayerIpc = (): void => {
         ? formatArtists(authoritative.artists ?? [])
         : formatArtists(parseArtists(meta.artist ?? ""));
       const displayAlbum = authoritative?.album?.name ?? parseAlbum(meta.album ?? "")?.name ?? "";
-      // 本地封面
       const localCover = isRemote ? null : (inst.getCoverRaw() ?? null);
       applyDisplay(displayTitle, displayArtist, displayAlbum, localCover ?? undefined, durationMs);
       if (!isRemote) setTaskbarThumbnailCover(meta.cover);
       // Last.fm
-      // 远端高清封面
       if (coverFetchUrl) {
         void fetchBytes(coverFetchUrl).then((buf) => {
           if (!buf) return;
@@ -325,7 +300,6 @@ export const registerPlayerIpc = (): void => {
     } catch (error) {
       if (seq === loadSeq) activeCueRange = null;
       const code = classifyLoadError(error, source);
-      // 解码失败的源指向歌曲缓存目录 → 文件已损坏，把这条缓存项作废
       if (code === ErrorCode.FILE_DECODE_ERROR && source.startsWith(getSongCacheDir())) {
         void songCache.invalidate(source);
       }
@@ -333,7 +307,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 恢复播放
   ipcMain.handle("player:play", async () => {
     try {
       await getPlayer().play();
@@ -343,7 +316,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 暂停播放
   ipcMain.handle("player:pause", () => {
     try {
       getPlayer().pause();
@@ -353,7 +325,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 停止播放并释放资源
   ipcMain.handle("player:stop", () => {
     try {
       cancelPendingReinit();
@@ -365,7 +336,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 跳转到指定播放位置
   ipcMain.handle("player:seek", async (_event, positionMs: number) => {
     try {
       const enginePositionMs = toEnginePositionMs(positionMs);
@@ -382,7 +352,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 设置音量（0.0 ~ 1.0）
   ipcMain.handle("player:setVolume", (_event, volume: number) => {
     try {
       getPlayer().setVolume(volume);
@@ -398,12 +367,10 @@ export const registerPlayerIpc = (): void => {
     return { success: true };
   });
 
-  // 获取当前音量
   ipcMain.handle("player:getVolume", () => {
     return { success: true, data: getPlayer().getVolume() };
   });
 
-  // 设置暂停/恢复时的渐变时长（毫秒），0 表示禁用
   ipcMain.handle("player:setFadeDuration", (_event, durationMs: number) => {
     try {
       getPlayer().setFadeDuration(durationMs);
@@ -413,12 +380,10 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 获取当前渐变时长（毫秒）
   ipcMain.handle("player:getFadeDuration", () => {
     return { success: true, data: getPlayer().getFadeDuration() };
   });
 
-  // 获取当前播放状态快照（转毫秒）
   ipcMain.handle("player:getStatus", () => {
     const raw = getPlayer().getStatus();
     return {
@@ -434,7 +399,6 @@ export const registerPlayerIpc = (): void => {
     };
   });
 
-  // 重建音频输出设备
   ipcMain.handle("player:reinit", async () => {
     try {
       await getPlayer().reinitOutput();
@@ -447,7 +411,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 启用/禁用音量均衡
   ipcMain.handle("player:setNormalizationEnabled", (_event, enabled: boolean) => {
     try {
       getPlayer().setNormalizationEnabled(enabled);
@@ -457,7 +420,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 启用/禁用均衡器
   ipcMain.handle("player:setEqualizerEnabled", (_event, enabled: boolean) => {
     try {
       getPlayer().setEqualizerEnabled(enabled);
@@ -467,7 +429,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 更新均衡器频段增益（dB 数组，长度 10）
   ipcMain.handle("player:setEqualizerBands", (_event, gainsDb: number[]) => {
     try {
       getPlayer().setEqualizerBands(gainsDb);
@@ -477,7 +438,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 设置前级增益（dB）
   ipcMain.handle("player:setPreampGain", (_event, preampDb: number) => {
     try {
       getPlayer().setPreampGain(preampDb);
@@ -487,7 +447,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 设置播放速度（0.5 ~ 2.0），引擎侧自动 clamp
   ipcMain.handle("player:setSpeed", (_event, speed: number) => {
     try {
       getPlayer().setSpeed(speed);
@@ -499,7 +458,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 设置音调偏移（半音 -12 ~ 12），引擎侧自动 clamp
   ipcMain.handle("player:setPitch", (_event, semitones: number) => {
     try {
       getPlayer().setPitch(semitones);
@@ -509,7 +467,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 设置"音调同步"开关（true = 变速保音调）
   ipcMain.handle("player:setPitchSync", (_event, sync: boolean) => {
     try {
       getPlayer().setPitchSync(sync);
@@ -519,7 +476,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 启用/禁用 FFT 频谱推送（前端组件挂载时启用，卸载时禁用）
   ipcMain.handle("player:setFftEnabled", (_event, enabled: boolean) => {
     try {
       getPlayer().setFftEnabled(enabled);
@@ -529,14 +485,10 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 获取 FFT 频谱数据（128 个频段，值域 0.0 ~ 1.0）
   ipcMain.handle("player:getFftData", () => {
     return { success: true, data: getPlayer().getFftData() };
   });
 
-  // 按需读取外部歌词文件内容
-  // 后缀白名单：该通道只服务歌词文件，防止被当成任意文件读取接口
-  // 必须与引擎扫描列表一致（native/audio-engine/src/metadata.rs 的 LYRIC_EXTENSIONS）
   const LYRIC_FILE_EXTS = new Set([
     ".ttml",
     ".json",
@@ -561,14 +513,11 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 获取当前歌曲的原始高清封面（base64 data URL）
-  // 用于全屏播放器等需要高清封面的场景，按需调用，不缓存
   ipcMain.handle("player:getCoverRaw", () => {
     try {
       const inst = getPlayer();
       const raw = inst.getCoverRaw();
       if (!raw) return { success: true, data: null };
-      // 转为 base64 data URL，用完即丢，不持有引用
       const base64 = Buffer.from(raw).toString("base64");
       const mime = raw
         .subarray(0, 8)
@@ -581,7 +530,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 获取所有音频输出设备
   ipcMain.handle("player:getOutputDevices", () => {
     try {
       return { success: true, data: getPlayer().getOutputDevices() };
@@ -590,7 +538,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 获取系统默认输出设备名称
   ipcMain.handle("player:getDefaultDeviceName", () => {
     try {
       return { success: true, data: getPlayer().getDefaultDeviceName() ?? null };
@@ -599,7 +546,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 切换输出设备（传设备 ID，null 使用系统默认）
   ipcMain.handle(
     "player:setOutputDevice",
     async (_event, deviceId: string | null, pauseBeforeSwitch = false) => {
@@ -617,7 +563,6 @@ export const registerPlayerIpc = (): void => {
     },
   );
 
-  // 启用/关闭 Windows WASAPI 独占音频输出
   ipcMain.handle("player:setExclusiveAudio", async (_event, enabled: boolean) => {
     try {
       cancelPendingReinit();
@@ -628,7 +573,6 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 获取当前选择的输出设备名称
   ipcMain.handle("player:getSelectedDeviceName", () => {
     try {
       return { success: true, data: getPlayer().getSelectedDeviceName() ?? null };
@@ -637,23 +581,19 @@ export const registerPlayerIpc = (): void => {
     }
   });
 
-  // 渲染进程同步播放模式到托盘
   ipcMain.on("player:syncPlayMode", (_event, repeat: RepeatMode, shuffle: ShuffleMode) => {
     setTrayPlayMode(repeat, shuffle);
   });
 
-  // 渲染进程同步当前歌曲喜欢状态到托盘与缩略图工具栏
   ipcMain.on("player:syncLikeState", (_event, liked: boolean) => {
     setTrayLikeState(liked);
     getThumbar()?.updateLike(liked);
   });
 
-  // 转发渲染端发起的播放控制
   ipcMain.on("player:dispatch", (_event, type: string) => {
     sendToMain("player:event", { type });
   });
 
-  // 系统媒体事件处理
   mediaService.onEvent((event: MediaEvent) => {
     try {
       const inst = getPlayer();
@@ -733,10 +673,8 @@ export const registerPlayerIpc = (): void => {
     } catch {}
   });
 
-  // 系统休眠唤醒后重建音频输出设备
   const resumeHandler = async (): Promise<void> => {
     const inst = getPlayer();
-    // 延迟重试：系统唤醒后音频子系统可能需要时间恢复
     const MAX_RETRIES = 3;
     const RETRY_DELAYS = [500, 1500, 3000];
     for (let i = 0; i < MAX_RETRIES; i++) {
@@ -749,7 +687,6 @@ export const registerPlayerIpc = (): void => {
         playerLog.warn(`重建音频输出第 ${i + 1} 次失败:`, error);
       }
     }
-    // 全部重试失败，销毁损坏的实例
     playerLog.error("重建音频输出全部失败，销毁播放器实例");
     resetPlayer();
     stopDeviceMonitoring();
@@ -761,6 +698,5 @@ export const registerPlayerIpc = (): void => {
     wsBroadcast(stoppedEvent);
   };
   powerMonitor.on("resume", resumeHandler);
-  // 退出前停止设备监听
   app.on("before-quit", stopDeviceMonitoring);
 };

@@ -487,6 +487,7 @@
       "hint": "Positive values advance lyrics, in milliseconds"
     },
     "lyricCredit": "Lyrics by",
+    "noLyrics": "No lyrics available",
     "copyLyric": {
       "title": "Copy Lyrics",
       "contentLabel": "Content to copy",

@@ -3,7 +3,6 @@ import type { StreamingPingResult } from "@shared/types/streaming";
 import type { StreamingRuntimeConfig } from "@shared/types/streaming";
 import type { StreamingAdapter } from "./types";
 
-/** Jellyfin/Emby 主进程登录会话 */
 export interface StreamingAuthSession {
   accessToken: string;
   userId: string;
@@ -41,18 +40,10 @@ interface JellyItem {
 }
 
 /**
- * 生成稳定设备 ID
- * @param config - 主进程服务器配置
- * @returns Jellyfin/Emby 设备 ID
  */
 const deviceId = (config: StreamingRuntimeConfig): string => `splayer-next-${config.id}`;
 
 /**
- * 请求 Jellyfin/Emby API
- * @param config - 主进程服务器配置
- * @param apiPath - API 路径
- * @param init - 请求选项
- * @returns API 响应内容
  */
 const callApi = async <T>(
   config: StreamingRuntimeConfig,
@@ -85,9 +76,6 @@ const callApi = async <T>(
 };
 
 /**
- * 获取已登录用户 ID
- * @param config - 主进程服务器配置
- * @returns 用户 ID
  */
 const requireUserId = (config: StreamingRuntimeConfig): string => {
   if (!config.accessToken || !config.userId) throw new Error("缺少 accessToken / userId");
@@ -95,10 +83,6 @@ const requireUserId = (config: StreamingRuntimeConfig): string => {
 };
 
 /**
- * 读取当前用户的媒体条目
- * @param config - 主进程服务器配置
- * @param query - 查询参数
- * @returns 服务端媒体条目
  */
 const fetchUserItems = async (
   config: StreamingRuntimeConfig,
@@ -115,12 +99,6 @@ const fetchUserItems = async (
 };
 
 /**
- * 生成主进程代理封面地址
- * @param config - 主进程服务器配置
- * @param itemId - 媒体 ID
- * @param tag - 封面版本标识
- * @param maxHeight - 封面尺寸
- * @returns renderer 使用的封面地址
  */
 const imageUrl = (
   config: StreamingRuntimeConfig,
@@ -138,10 +116,6 @@ const imageUrl = (
 };
 
 /**
- * 转换 Jellyfin/Emby 歌曲
- * @param config - 主进程服务器配置
- * @param item - 服务端媒体条目
- * @returns 统一歌曲
  */
 const toTrack = (config: StreamingRuntimeConfig, item: JellyItem): Track => {
   const mediaSource = item.MediaSources?.[0];
@@ -173,10 +147,6 @@ const toTrack = (config: StreamingRuntimeConfig, item: JellyItem): Track => {
 };
 
 /**
- * 转换 Jellyfin/Emby 专辑
- * @param config - 主进程服务器配置
- * @param item - 服务端媒体条目
- * @returns 统一专辑
  */
 const toAlbum = (config: StreamingRuntimeConfig, item: JellyItem): Album => ({
   id: item.Id,
@@ -188,10 +158,6 @@ const toAlbum = (config: StreamingRuntimeConfig, item: JellyItem): Album => ({
 });
 
 /**
- * 转换 Jellyfin/Emby 歌手
- * @param config - 主进程服务器配置
- * @param item - 服务端媒体条目
- * @returns 统一歌手
  */
 const toArtist = (config: StreamingRuntimeConfig, item: JellyItem): Artist => ({
   id: item.Id,
@@ -201,10 +167,6 @@ const toArtist = (config: StreamingRuntimeConfig, item: JellyItem): Artist => ({
 });
 
 /**
- * 转换 Jellyfin/Emby 歌单
- * @param config - 主进程服务器配置
- * @param item - 服务端媒体条目
- * @returns 统一歌单
  */
 const toPlaylist = (config: StreamingRuntimeConfig, item: JellyItem): Playlist => ({
   id: item.Id,
@@ -214,9 +176,6 @@ const toPlaylist = (config: StreamingRuntimeConfig, item: JellyItem): Playlist =
 });
 
 /**
- * 使用账号密码创建主进程会话
- * @param config - 主进程服务器配置
- * @returns 登录会话
  */
 export const authenticate = async (
   config: StreamingRuntimeConfig,
@@ -237,9 +196,6 @@ export const authenticate = async (
 
 export const jellyfinAdapter: StreamingAdapter = {
   /**
-   * 检查 Jellyfin/Emby 连通性
-   * @param config - 已鉴权的主进程服务器配置
-   * @returns 连通性结果
    */
   async ping(config): Promise<StreamingPingResult> {
     try {
@@ -250,10 +206,6 @@ export const jellyfinAdapter: StreamingAdapter = {
     }
   },
   /**
-   * 分页读取 Jellyfin/Emby 歌曲
-   * @param config - 已鉴权的主进程服务器配置
-   * @param params - 分页参数
-   * @returns 歌曲列表
    */
   async listSongs(config, params) {
     const items = await fetchUserItems(config, {
@@ -269,10 +221,6 @@ export const jellyfinAdapter: StreamingAdapter = {
   },
 
   /**
-   * 分页读取 Jellyfin/Emby 专辑
-   * @param config - 已鉴权的主进程服务器配置
-   * @param params - 分页参数
-   * @returns 专辑列表
    */
   async listAlbums(config, params) {
     const items = await fetchUserItems(config, {
@@ -287,9 +235,6 @@ export const jellyfinAdapter: StreamingAdapter = {
   },
 
   /**
-   * 读取 Jellyfin/Emby 歌手
-   * @param config - 已鉴权的主进程服务器配置
-   * @returns 歌手列表
    */
   async listArtists(config) {
     const userId = requireUserId(config);
@@ -301,9 +246,6 @@ export const jellyfinAdapter: StreamingAdapter = {
   },
 
   /**
-   * 读取 Jellyfin/Emby 歌单
-   * @param config - 已鉴权的主进程服务器配置
-   * @returns 歌单列表
    */
   async listPlaylists(config) {
     const items = await fetchUserItems(config, {
@@ -315,10 +257,6 @@ export const jellyfinAdapter: StreamingAdapter = {
   },
 
   /**
-   * 读取 Jellyfin/Emby 专辑歌曲
-   * @param config - 已鉴权的主进程服务器配置
-   * @param albumId - 服务端专辑 ID
-   * @returns 专辑歌曲
    */
   async getAlbumSongs(config, albumId) {
     const items = await fetchUserItems(config, {
@@ -331,10 +269,6 @@ export const jellyfinAdapter: StreamingAdapter = {
   },
 
   /**
-   * 读取 Jellyfin/Emby 歌单歌曲
-   * @param config - 已鉴权的主进程服务器配置
-   * @param playlistId - 服务端歌单 ID
-   * @returns 歌单歌曲
    */
   async getPlaylistSongs(config, playlistId) {
     const userId = requireUserId(config);
@@ -347,10 +281,6 @@ export const jellyfinAdapter: StreamingAdapter = {
   },
 
   /**
-   * 读取 Jellyfin/Emby 歌手专辑
-   * @param config - 已鉴权的主进程服务器配置
-   * @param artistId - 服务端歌手 ID
-   * @returns 歌手专辑
    */
   async getArtistAlbums(config, artistId) {
     const items = await fetchUserItems(config, {
@@ -364,10 +294,6 @@ export const jellyfinAdapter: StreamingAdapter = {
   },
 
   /**
-   * 读取 Jellyfin/Emby 歌手歌曲
-   * @param config - 已鉴权的主进程服务器配置
-   * @param artistId - 服务端歌手 ID
-   * @returns 歌手歌曲
    */
   async getArtistSongs(config, artistId) {
     const items = await fetchUserItems(config, {
@@ -381,11 +307,6 @@ export const jellyfinAdapter: StreamingAdapter = {
   },
 
   /**
-   * 生成 Jellyfin/Emby 播放地址
-   * @param config - 已鉴权的主进程服务器配置
-   * @param trackId - 服务端歌曲 ID
-   * @param playSessionId - 播放会话 ID
-   * @returns 播放地址
    */
   async getStreamUrl(config, trackId, playSessionId) {
     const userId = requireUserId(config);
@@ -406,10 +327,6 @@ export const jellyfinAdapter: StreamingAdapter = {
   },
 
   /**
-   * 读取 Jellyfin/Emby 歌词
-   * @param config - 已鉴权的主进程服务器配置
-   * @param trackId - 服务端歌曲 ID
-   * @returns 原始歌词文本
    */
   async getLyrics(config, trackId) {
     try {
@@ -442,11 +359,6 @@ export const jellyfinAdapter: StreamingAdapter = {
   },
 
   /**
-   * 生成 Jellyfin/Emby 真实封面地址
-   * @param config - 已鉴权的主进程服务器配置
-   * @param coverId - 服务端媒体 ID
-   * @param size - 目标尺寸
-   * @returns 真实封面地址
    */
   async getCoverUrl(config, coverId, size) {
     const params = new URLSearchParams({ api_key: config.accessToken!, maxHeight: String(size) });

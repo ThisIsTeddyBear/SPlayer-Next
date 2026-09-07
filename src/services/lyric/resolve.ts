@@ -8,25 +8,20 @@ import { usePluginsStore } from "@/stores/plugins";
 import { DEFAULT_LYRIC_FORMAT_ORDER, DEFAULT_LYRIC_SOURCE_ORDER } from "@/types/settings";
 import { requestPlatformLyric, requestStreamingLyric, requestTTMLOverlay } from "./request";
 
-/** 支持 AMLL TTML DB 的平台列表 */
 const TTML_PLATFORMS = ["netease", "qqmusic"] as const;
 
-/** 单个平台返回的在线歌词 */
 export interface OnlineResult {
   source: { source: "online"; format: LyricFormat; platform: Platform };
   input: LyricInput;
 }
 
-/** 已解析的歌词候选 */
 export interface ResolvedLyric {
   source: NonNullable<LyricData>;
   input: LyricInput;
 }
 
-/** 本地歌词读取结果 */
 export type LocalLyric = { source: NonNullable<LyricData>; content: string };
 
-/** 匹配结果转为在线歌词结果 */
 const toOnlineResult = (data: LyricMatchResult): OnlineResult => ({
   source: { source: "online", format: data.format, platform: data.platform },
   input: {
@@ -38,7 +33,6 @@ const toOnlineResult = (data: LyricMatchResult): OnlineResult => ({
   },
 });
 
-/** 请求并转换指定平台歌词 */
 const resolvePlatformLyric = async (
   platform: Platform,
   track: Track,
@@ -48,9 +42,6 @@ const resolvePlatformLyric = async (
 };
 
 /**
- * 请求并解析流媒体服务端歌词
- * @param track - 歌曲信息
- * @returns 服务端歌词，不存在则返回 null
  */
 export const resolveStreamingLyric = async (track: Track): Promise<ResolvedLyric | null> => {
   const text = await requestStreamingLyric(track);
@@ -58,7 +49,6 @@ export const resolveStreamingLyric = async (track: Track): Promise<ResolvedLyric
   return { source: { source: "external", format: detectFormat(text) }, input: { content: text } };
 };
 
-/** 提取内嵌歌词兜底 */
 export const embeddedLyricFromDetail = (detail: TrackDetail | null): LocalLyric | null => {
   if (!detail?.embeddedLyric) return null;
   return {
@@ -67,7 +57,6 @@ export const embeddedLyricFromDetail = (detail: TrackDetail | null): LocalLyric 
   };
 };
 
-/** 平台主格式可达列表 */
 const PLATFORM_MAIN_FORMATS: Record<Platform, LyricFormat[]> = {
   netease: ["yrc", "lrc"],
   qqmusic: ["qrc", "lrc"],
@@ -75,10 +64,6 @@ const PLATFORM_MAIN_FORMATS: Record<Platform, LyricFormat[]> = {
 };
 
 /**
- * 判断在指定平台是否能拿到比本地更优的主格式
- * @param platform - 平台
- * @param localFormat - 本地格式
- * @param formatOrder - 格式优先级
  */
 const platformCanUpgrade = (
   platform: Platform,
@@ -95,9 +80,6 @@ const platformCanUpgrade = (
 };
 
 /**
- * 判断 candidateFormat 是否比 currentFormat 更优（优先级更高）
- * @param candidateFormat - 候选格式
- * @param currentFormat - 当前格式（为 null 时直接判定为更优）
  */
 export const isBetterFormat = (
   candidateFormat: LyricFormat,
@@ -112,7 +94,6 @@ export const isBetterFormat = (
   return candRank < currRank;
 };
 
-/** 判断在线结果是否优于本地歌词 */
 const isOnlineResultUpgrade = (result: OnlineResult, localFormat: LyricFormat): boolean =>
   isBetterFormat(result.source.format, localFormat);
 
@@ -124,9 +105,6 @@ interface OnlinePreferenceOptions {
 }
 
 /**
- * 按当前歌词来源偏好获取在线歌词
- * @param track - 歌曲信息
- * @param options - 本地歌词与竞态选项
  */
 export const resolveOnlineByPreference = async (
   track: Track,
@@ -188,7 +166,6 @@ export const resolveOnlineByPreference = async (
   return null;
 };
 
-/** 判断是否应该尝试 TTML 升级 */
 const shouldTryTTMLByFormat = (mainFormat: LyricFormat): boolean => {
   const settings = useSettingsStore();
   if (!settings.system.lyric.enableOnlineTTMLLyric) return false;
@@ -201,9 +178,6 @@ const shouldTryTTMLByFormat = (mainFormat: LyricFormat): boolean => {
 };
 
 /**
- * 拉取在线歌词对应的 TTML 覆盖版本
- * @param track - 歌曲信息
- * @param online - 在线歌词结果
  */
 export const resolveTTMLOverlay = async (
   track: Track,
@@ -228,19 +202,12 @@ export const resolveTTMLOverlay = async (
 };
 
 /**
- * 按歌词来源偏好解析流媒体歌词
- * @param track - 流媒体歌曲
- * @param shouldContinue - 竞态检查
- * @returns 最终歌词候选，不存在则返回 null
  */
 export const resolveStreamingByPreference = async (
   track: Track,
 ): Promise<ResolvedLyric | null> => resolveStreamingLyric(track);
 
 /**
- * 从本地 TTML 仓库解析歌词
- * @param track - 歌曲信息
- * @returns 本地仓库歌词，不存在则返回 null
  */
 export const resolveLocalRepoLyric = async (track: Track): Promise<ResolvedLyric | null> => {
   const settings = useSettingsStore();
@@ -256,9 +223,6 @@ export const resolveLocalRepoLyric = async (track: Track): Promise<ResolvedLyric
 };
 
 /**
- * 从插件解析歌词
- * @param track - 歌曲信息
- * @returns 首个有效插件歌词，不存在则返回 null
  */
 export const resolvePluginLyric = async (track: Track): Promise<ResolvedLyric | null> => {
   const plugins = usePluginsStore();
@@ -283,16 +247,10 @@ export const resolvePluginLyric = async (track: Track): Promise<ResolvedLyric | 
   return null;
 };
 
-/** 插件歌词是否优先于内置来源 */
 export const isPluginLyricPreferred = (): boolean =>
   useSettingsStore().lyric.preferPluginLyric === true;
 
 /**
- * 为下一首歌曲解析最终歌词结果
- * 本地歌曲依赖实际加载后的 TrackDetail，不在此处提前解析
- * @param track - 候选歌曲
- * @param shouldContinue - 竞态检查
- * @returns 最终歌词，不存在或不支持预载则返回 null
  */
 export const resolveLyricForPreload = async (
   track: Track,
@@ -304,7 +262,6 @@ export const resolveLyricForPreload = async (
   if (!shouldContinue()) return null;
   if (localRepo) return localRepo;
 
-  // 插件优选：请求先行发出，与下方正常解析并发
   const pluginTask = isPluginLyricPreferred() ? resolvePluginLyric(track) : null;
 
   if (track.source === "streaming") {

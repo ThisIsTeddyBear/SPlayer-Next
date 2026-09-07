@@ -14,45 +14,31 @@ import { applyLyricCjkTransform } from "@/utils/lyric/cjkTransform";
 export const useMediaStore = defineStore("media", () => {
   watchLyricPreference();
 
-  /** 当前歌曲轻量信息 */
   const track = shallowRef<Track | null>(null);
 
-  /** 当前播放的来源上下文 */
   const playbackContext = shallowRef<PlaybackContext>();
 
-  /** 当前歌曲详细信息 */
   const detail = shallowRef<TrackDetail | null>(null);
 
-  /** 当前选中的歌词数据 */
   const activeLyric = ref<LyricData>(null);
 
-  /** 当前歌词原始内容 */
   const lyricContent = ref<LyricInput | null>(null);
 
-  /** 歌词是否正在加载 */
   const lyricLoading = ref(false);
 
-  /** 当前歌词行索引，-1 表示无匹配 */
   const lyricIndex = ref(-1);
 
-  /** 当前歌词格式 */
   const lyricFormat = computed((): LyricFormat | null => activeLyric.value?.format ?? null);
 
-  /** 当前歌词解析结果 */
   const parsedLyric = shallowRef<LyricLine[]>([]);
 
-  /** 当前曲目的罗马音显示状态 */
   const romanizationVisible = ref(true);
-  /** 是否正在按需生成罗马音 */
   const romanizationLoading = ref(false);
 
-  /** 是否正在等待用户选择校准时间的歌词行 */
   const lyricSyncPicking = ref(false);
 
-  /** 当前歌词文件制作者列表 */
   const lyricAuthors = ref<string[]>([]);
 
-  /** 同步当前歌词源到主进程 */
   const syncToMain = (): void => {
     try {
       const payload = {
@@ -67,9 +53,6 @@ export const useMediaStore = defineStore("media", () => {
   };
 
   /**
-   * 更新 track
-   * @param newTrack - 新的歌曲信息
-   * @param newDetail - 新的歌曲详细信息；省略则保留现有 detail
    */
   const setTrack = (newTrack: Track, newDetail?: TrackDetail): void => {
     track.value = newTrack;
@@ -77,23 +60,16 @@ export const useMediaStore = defineStore("media", () => {
   };
 
   /**
-   * 更新当前播放的来源上下文
-   * @param context - 播放来源上下文
    */
   const setPlaybackContext = (context?: PlaybackContext): void => {
     playbackContext.value = context;
   };
 
   /**
-   * 把 audio-engine 解析出的元数据合并到当前 Track 上
-   * 保留身份字段（id/source/serverId/originalId/platform/path）
-   * 对未设置/空值的展示字段做兜底填充（duration/quality）
-   * streaming 源的 cover/title/artist/album 已经是服务器返回的权威值，绝不被引擎覆盖
    */
   const enrichTrack = (info: MediaInfo, newDetail?: TrackDetail): void => {
     if (!track.value) return;
     const isStreaming = track.value.source === "streaming";
-    // 标题为文件名去后缀派生（如拖拽播放）时，让位给引擎提取的内嵌标签标题
     const fileName = track.value.path?.split(/[\\/]/).pop() ?? "";
     const stem = fileName.replace(/\.[^.]+$/, "");
     const hasExplicitTitle = !!track.value.title && track.value.title !== stem;
@@ -115,9 +91,6 @@ export const useMediaStore = defineStore("media", () => {
   };
 
   /**
-   * 兜底封面：当前 track 无封面时把插件命中的远端 URL 填进去
-   * 同时写 cover 与 coverOriginal，使全屏大图与背景/取色一并补上；已有封面不覆盖
-   * @param url - 封面图片 URL
    */
   const patchCover = (url: string): void => {
     if (!track.value) return;
@@ -129,7 +102,6 @@ export const useMediaStore = defineStore("media", () => {
     };
   };
 
-  /** 重置歌词状态 */
   const resetLyricState = (): void => {
     activeLyric.value = null;
     lyricContent.value = null;
@@ -142,10 +114,8 @@ export const useMediaStore = defineStore("media", () => {
     syncToMain();
   };
 
-  /** 简繁转换竞态 token */
   let transformToken = 0;
 
-  // 监听简繁转换及强迫症设置变化并重新解析当前歌词
   watch(
     () => [useSettingsStore().lyric.cjkTransform, useSettingsStore().preset.uncensorProfanity],
     () => {
@@ -156,9 +126,6 @@ export const useMediaStore = defineStore("media", () => {
   );
 
   /**
-   * 原子写入歌词
-   * @param source - 歌词源
-   * @param input - 主歌词 + 可选翻译 / 音译；传 null 即清空
    */
   const setLyric = (source: LyricData, input: LyricInput | null): void => {
     let nextLines: LyricLine[] = [];
@@ -180,7 +147,6 @@ export const useMediaStore = defineStore("media", () => {
         nextLines = [];
       }
     }
-    // 解析后无有效行视作无歌词
     const hasContent = nextLines.length > 0;
     activeLyric.value = hasContent ? source : null;
     lyricContent.value = hasContent ? input : null;
@@ -193,7 +159,6 @@ export const useMediaStore = defineStore("media", () => {
     lyricLoading.value = false;
     syncToMain();
 
-    // 应用 OpenCC 简繁转换
     const cjkMode = settings.lyric.cjkTransform;
     if (hasContent && cjkMode && cjkMode !== "none") {
       const token = ++transformToken;
@@ -205,7 +170,6 @@ export const useMediaStore = defineStore("media", () => {
     }
   };
 
-  /** 当前歌词是否可显示或生成罗马音 */
   const canRomanize = computed(() =>
     parsedLyric.value.some(
       (line) =>
@@ -214,7 +178,6 @@ export const useMediaStore = defineStore("media", () => {
     ),
   );
 
-  /** 切换当前曲目的罗马音显示，并在需要时按需生成 */
   const toggleRomanization = async (): Promise<void> => {
     if (!canRomanize.value) return;
     romanizationVisible.value = !romanizationVisible.value;
@@ -246,14 +209,11 @@ export const useMediaStore = defineStore("media", () => {
   };
 
   /**
-   * 根据播放时间更新歌词行索引
-   * @param time - 播放时间
    */
   const updateLyricIndex = (time: number): void => {
     lyricIndex.value = findLyricIndex(parsedLyric.value, time, lyricIndex.value);
   };
 
-  /** 清空所有状态 */
   const clear = (): void => {
     track.value = null;
     playbackContext.value = undefined;

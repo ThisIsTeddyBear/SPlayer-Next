@@ -7,38 +7,25 @@ import { buildFolderTree, countFolders } from "@/utils/folderTree";
 
 const trackDb = localforage.createInstance({ name: "splayer", storeName: "library" });
 
-/** 本地喜欢 id 在 trackDb 内的持久化 key */
 const LIKED_IDS_KEY = "liked-ids";
 
 export const useLibraryStore = defineStore("library", () => {
-  /** 曲目列表 */
   const tracks = shallowRef<Track[]>([]);
-  /** 扫描目录列表 */
   const scanDirs = ref<string[]>([]);
-  /** 是否正在扫描 */
   const scanning = ref(false);
-  /** 扫描进度 */
   const scanProgress = ref<ScanProgress | null>(null);
-  /** 是否已初始化 */
   const initialized = ref(false);
-  /** 歌手头像缓存 */
   const artistAvatars = shallowRef<Record<string, string>>({});
-  /** 本地红心 id */
   const likedOrderedIds = shallowRef<string[]>([]);
-  /** 本地红心 id 集合 */
   const likedIdSet = shallowRef<Set<string>>(new Set());
 
-  /** 持久化喜欢列表 */
   const persistLiked = (): void => {
     trackDb.setItem(LIKED_IDS_KEY, [...likedOrderedIds.value]).catch(() => {});
   };
 
-  /** 是否已收藏 */
   const isLiked = (trackId: string): boolean => likedIdSet.value.has(trackId);
 
   /**
-   * 切换收藏
-   * @param trackId 歌曲 id
    */
   const toggleLike = (trackId: string): boolean => {
     if (!trackId) return false;
@@ -55,12 +42,9 @@ export const useLibraryStore = defineStore("library", () => {
     return next.has(trackId);
   };
 
-  /** 标准化歌手名 */
   const normalizeArtistName = (name: string): string => name.trim().toLowerCase();
 
   /**
-   * 获取歌手头像
-   * @param artistName 歌手名
    */
   const getArtistAvatar = (artistName: string): string | undefined => {
     const key = normalizeArtistName(artistName);
@@ -69,9 +53,6 @@ export const useLibraryStore = defineStore("library", () => {
   };
 
   /**
-   * 设置歌手头像
-   * @param artistName 歌手名
-   * @param avatar 歌手头像
    */
   const setArtistAvatar = (artistName: string, avatar: string): void => {
     const key = normalizeArtistName(artistName);
@@ -80,7 +61,6 @@ export const useLibraryStore = defineStore("library", () => {
     artistAvatars.value = { ...artistAvatars.value, [key]: avatar };
   };
 
-  /** 预取本地媒体库中歌手头像 */
   const loadArtistAvatars = async (artistNames?: readonly string[]): Promise<void> => {
     const names = artistNames
       ? [...new Set(artistNames)]
@@ -102,14 +82,11 @@ export const useLibraryStore = defineStore("library", () => {
     return getArtistAvatar(artistName);
   };
 
-  /** 将曲目写入 IndexedDB 缓存 */
   const cacheTracks = (items: Track[]): void => {
     trackDb.setItem("tracks", toRaw(items)).catch(() => {});
   };
 
-  /** 加载曲目和目录列表 */
   const load = async (): Promise<void> => {
-    // 先从 IndexedDB 读缓存，立即渲染
     const [cached, likedCached] = await Promise.all([
       trackDb.getItem<Track[]>("tracks").catch(() => null),
       trackDb.getItem<string[]>(LIKED_IDS_KEY).catch(() => null),
@@ -119,7 +96,6 @@ export const useLibraryStore = defineStore("library", () => {
       likedOrderedIds.value = likedCached;
       likedIdSet.value = new Set(likedCached);
     }
-    // 拿最新数据并回写缓存
     const [tracksRes, dirsRes] = await Promise.all([
       window.api.library.getTracks(),
       window.api.library.getScanDirs(),
@@ -130,11 +106,9 @@ export const useLibraryStore = defineStore("library", () => {
     }
     if (dirsRes.success && dirsRes.data) scanDirs.value = dirsRes.data;
     initialized.value = true;
-    // 预取歌手头像
     loadArtistAvatars();
   };
 
-  /** 开始扫描 */
   const startScan = async (incremental = true): Promise<void> => {
     if (scanning.value) return;
     scanning.value = true;
@@ -151,14 +125,12 @@ export const useLibraryStore = defineStore("library", () => {
     }
   };
 
-  /** 取消扫描 */
   const cancelScan = async (): Promise<void> => {
     await window.api.library.cancelScan();
     scanning.value = false;
     scanProgress.value = null;
   };
 
-  /** 添加扫描目录 */
   const addScanDir = async (): Promise<{ success: boolean; error?: string }> => {
     const res = await window.api.library.addScanDir();
     if (res.success) {
@@ -179,11 +151,9 @@ export const useLibraryStore = defineStore("library", () => {
     return res;
   };
 
-  /** 移除扫描目录 */
   const removeScanDir = async (dir: string): Promise<void> => {
     await window.api.library.removeScanDir(dir);
     scanDirs.value = scanDirs.value.filter((d) => d !== dir);
-    // 移除目录取消正在进行的扫描
     if (scanning.value) {
       scanning.value = false;
       scanProgress.value = null;
@@ -198,7 +168,6 @@ export const useLibraryStore = defineStore("library", () => {
 
   let unsubscribe: (() => void) | null = null;
 
-  /** 监听扫描进度 */
   const subscribeScanProgress = (): void => {
     unsubscribe?.();
     unsubscribe = window.api.library.onScanProgress((data) => {
@@ -223,20 +192,16 @@ export const useLibraryStore = defineStore("library", () => {
     unsubscribe = null;
   };
 
-  /** 删除曲目文件并刷新列表 */
   const deleteTracks = async (paths: string[]): Promise<{ deleted: number; failed: number }> => {
     const res = await window.api.library.deleteTracks(paths);
     if (res.success) {
-      // 找出被删歌曲的 id，用于裁喜欢
       const pathSet = new Set(paths);
       const deletedIds = new Set(
         tracks.value.filter((t) => t.path && pathSet.has(t.path)).map((t) => t.id),
       );
-      // 从本地列表中移除已删除的曲目
       const remaining = tracks.value.filter((t) => !t.path || !pathSet.has(t.path));
       tracks.value = remaining;
       cacheTracks(remaining);
-      // 同步剪掉失效的喜欢 id
       if (deletedIds.size > 0 && likedOrderedIds.value.some((id) => deletedIds.has(id))) {
         const filtered = likedOrderedIds.value.filter((id) => !deletedIds.has(id));
         likedOrderedIds.value = filtered;
@@ -249,8 +214,6 @@ export const useLibraryStore = defineStore("library", () => {
   };
 
   /**
-   * 按 id 替换曲目数据并回写缓存（标签编辑后调用）
-   * @param updates 更新后的 Track 列表
    */
   const applyTrackUpdates = (updates: Track[]): void => {
     if (updates.length === 0) return;
@@ -260,25 +223,20 @@ export const useLibraryStore = defineStore("library", () => {
     cacheTracks(tracks.value);
   };
 
-  /** 文件夹树：按磁盘路径聚合，详见 utils/folderTree */
   const folderTree = computed(() => buildFolderTree(tracks.value, scanDirs.value));
 
-  /** 文件夹总数（递归） */
   const folderCount = computed(() => countFolders(folderTree.value));
 
-  /** 专辑聚合列表 */
   const getAlbumList = async (): Promise<AlbumSummary[]> => {
     const res = await window.api.library.getAlbums();
     return res.success && res.data ? res.data : [];
   };
 
-  /** 歌手聚合列表 */
   const getArtistList = async (): Promise<ArtistSummary[]> => {
     const res = await window.api.library.getArtists();
     return res.success && res.data ? res.data : [];
   };
 
-  /** 专辑详情 */
   const getAlbumCollection = async (albumName: string): Promise<Collection | null> => {
     const res = await window.api.library.getAlbumTracks(albumName);
     if (!res.success || !res.data?.length) return null;
@@ -302,7 +260,6 @@ export const useLibraryStore = defineStore("library", () => {
     };
   };
 
-  /** 歌手详情 */
   const getArtistProfile = async (artistName: string): Promise<ArtistProfile | null> => {
     const name = artistName.trim();
     if (!name) return null;

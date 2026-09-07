@@ -52,41 +52,25 @@ interface ActiveWindowRegion {
 let activeWindowRegion: ActiveWindowRegion | null = null;
 let contentWidth: number | null = null;
 
-/** 从设置读取当前歌词宽度（Win10 据此从 tasklist 划空间，Win11 忽略） */
 const resolveLyricWidth = (): number => {
   const width = store.get("taskbarLyric.maxWidth");
   return typeof width === "number" && width > 0 ? width : 400;
 };
 
 /**
- * 初始窗口尺寸——故意设大，覆盖任何可能的任务栏宽度/高度
- * 关键原因：Electron BrowserWindow 在 `transparent:true`+SetParent 到任务栏后，
- * Chromium 视口（layered window 的 compositor surface）不会随 setBounds 扩大，
- * 只会收缩初始尺寸小于后续 setBounds 目标时，超出初始尺寸的区域像素 alpha=0，
- * 按像素 alpha 命中测试会吞掉鼠标事件——即表现为"只有前面一点点可以操作"
- * 解决方法：初始尺寸开到足够大，后续 setBounds 只做缩小，视口永远覆盖整个 HWND
  */
 const INITIAL_WIDTH = 3000;
 const INITIAL_HEIGHT = 200;
 
 /**
- * 可显示的最小宽度（DIP）任务栏挤满 / 居中且两侧仅余几十像素时，强行塞会变成挤压的几个字符
- * 视觉很糟，直接隐藏窗口；空间回升后再 show
  */
 const MIN_LYRIC_WIDTH_DIP = 120;
 
-/** 获取任务栏歌词窗口实例（未创建或已销毁时返回 null） */
 export const getTaskbarLyricWindow = (): BrowserWindow | null =>
   taskbarLyricWindow && !taskbarLyricWindow.isDestroyed() ? taskbarLyricWindow : null;
 
 /**
- * 根据内容宽度裁切窗口有效区域
  *
- * 窗口本体始终保持 region 全宽，只在 applyLayout 布局真变时 setBounds——维持
- * "初始宽于一切后续尺寸、setBounds 只做缩小"的嵌入约束（见 INITIAL_WIDTH 注释）
- * 内容收缩改用 setShape 区域裁切：区域外不渲染也不参与命中测试，空白区点击直接
- * 落到任务栏，命中效果等同当初的 HWND 物理收缩；但没有 move/resize，右锚定不再
- * 随每行歌词移动窗口——那正是切行跳变与 hover 扩张后旧帧错位的根源
  */
 const applyContentShape = (): void => {
   const win = getTaskbarLyricWindow();
@@ -111,8 +95,6 @@ const applyContentShape = (): void => {
 };
 
 /**
- * 接收渲染端测得的内容目标宽度
- * @param width - 内容宽度（DIP）
  */
 export const updateTaskbarLyricContentWidth = (width: number): void => {
   if (!Number.isFinite(width) || width <= 0) return;
@@ -120,7 +102,6 @@ export const updateTaskbarLyricContentWidth = (width: number): void => {
   applyContentShape();
 };
 
-/** 根据设置和任务栏对齐方式选择使用哪侧空间以及锚定方向 */
 const pickSpace = (layout: JsTaskbarLayout): PickedSpace | null => {
   const position: TaskbarLyricPosition = store.get("taskbarLyric.position") ?? "auto";
   const { left, right } = layout.space;
@@ -142,15 +123,12 @@ const pickSpace = (layout: JsTaskbarLayout): PickedSpace | null => {
   return null;
 };
 
-/** 首次 applyLayout 成功后才 show 窗口——避免初始 3000x200 大窗口闪现 */
 let firstLayoutDone = false;
 
-/** 空间不足时安静隐藏窗口，避免残留旧位置的歌词残影 */
 const hideIfVisible = (win: BrowserWindow): void => {
   if (win.isVisible()) win.hide();
 };
 
-/** Rust 布局回调：把物理像素空间转为 DIP，<阈值则隐藏，≥阈值则 setBounds 并 show */
 const applyLayout = (layout: JsTaskbarLayout): void => {
   const win = getTaskbarLyricWindow();
   if (!win) return;
@@ -166,10 +144,7 @@ const applyLayout = (layout: JsTaskbarLayout): void => {
     return;
   }
 
-  // Rust 返回物理像素，setBounds 用 DIP，需按 scaleFactor 转换
-  // 副屏暂未支持：Rust 端只找主屏 Shell_TrayWnd，歌词窗口永远在主屏，主屏 scaleFactor 即所需
   const dpi = screen.getPrimaryDisplay().scaleFactor;
-  // 用户自定义左右边距（DIP）：从可用空间两侧扣除
   const leftMargin = store.get("taskbarLyric.leftMargin") ?? 0;
   const rightMargin = store.get("taskbarLyric.rightMargin") ?? 0;
   const availX = Math.round(rect.x / dpi) + leftMargin;
@@ -213,12 +188,10 @@ const applyLayout = (layout: JsTaskbarLayout): void => {
   });
 };
 
-/** Watcher 回调——任何任务栏相关变化都回到这里重算布局 */
 const onLayoutChange = (): void => {
   service?.update(resolveLyricWidth());
 };
 
-/** 安全创建原生 watcher，失败只 warn 不中断启动 */
 const tryStart = <T>(name: string, factory: () => T): T | null => {
   try {
     return factory();
@@ -228,7 +201,6 @@ const tryStart = <T>(name: string, factory: () => T): T | null => {
   }
 };
 
-/** 启动布局相关的四个 watcher（UIA / Tray / 两个注册表） */
 const startWatchers = (mod: TaskbarLyricNative): void => {
   advancedRegWatcher = tryStart(
     "RegistryWatcher(Advanced)",
@@ -242,7 +214,6 @@ const startWatchers = (mod: TaskbarLyricNative): void => {
   trayWatcher = tryStart("TrayWatcher", () => new mod.TrayWatcher(onLayoutChange));
 };
 
-/** 停止布局相关的四个 watcher（不包含 TaskbarCreatedWatcher） */
 const stopLayoutWatchers = (): void => {
   advancedRegWatcher?.stop();
   advancedRegWatcher = null;
@@ -255,10 +226,6 @@ const stopLayoutWatchers = (): void => {
 };
 
 /**
- * explorer.exe 重启后调用：
- * 1. UIA / Tray watcher 绑定在旧 explorer 进程，必须整体重建
- * 2. 注册表 watcher 不绑定进程，但一并重建以简化状态
- * 3. service.reinit() 让 Rust 端重建策略并用记忆的 hwnd/width 恢复嵌入
  */
 const onExplorerRestart = (): void => {
   taskbarLog.info("探测到 explorer 重启，重建 watcher 与嵌入");
@@ -267,7 +234,6 @@ const onExplorerRestart = (): void => {
   if (nativeModule) startWatchers(nativeModule);
 };
 
-/** 创建任务栏歌词窗口：加载原生模块、嵌入任务栏 HWND 并启动 watcher */
 export const createTaskbarLyricWindow = (): BrowserWindow | null => {
   if (process.platform !== "win32") {
     taskbarLog.warn("任务栏歌词仅支持 Windows");
@@ -292,7 +258,6 @@ export const createTaskbarLyricWindow = (): BrowserWindow | null => {
   taskbarLyricWindow = createWindow({
     width: INITIAL_WIDTH,
     height: INITIAL_HEIGHT,
-    // 覆盖默认 minWidth/minHeight（800/600），允许 setBounds 缩小到很小
     minWidth: 0,
     minHeight: 0,
     type: "toolbar",
@@ -328,7 +293,6 @@ export const createTaskbarLyricWindow = (): BrowserWindow | null => {
     const mod = nativeModule;
     if (!win || !svc || !mod) return;
 
-    // Windows 上 HWND 可能是 64 位值，先保留为 BigInt，避免直接转成 number 产生静默精度丢失
     const hwndPtrBigInt = win.getNativeWindowHandle().readBigUInt64LE(0);
     if (hwndPtrBigInt > BigInt(Number.MAX_SAFE_INTEGER)) {
       taskbarLog.error(
@@ -366,7 +330,6 @@ export const createTaskbarLyricWindow = (): BrowserWindow | null => {
   return taskbarLyricWindow;
 };
 
-/** 停止并清空所有 watcher 与 service */
 const cleanupWatchers = (): void => {
   stopLayoutWatchers();
   taskbarCreatedWatcher?.stop();
@@ -375,14 +338,12 @@ const cleanupWatchers = (): void => {
   service = null;
 };
 
-/** 请求关闭任务栏歌词窗口，实际清理由 "closed" 事件统一处理 */
 export const closeTaskbarLyricWindow = (): void => {
   if (taskbarLyricWindow && !taskbarLyricWindow.isDestroyed()) {
     taskbarLyricWindow.close();
   }
 };
 
-/** 切换任务栏歌词窗口显隐，返回切换后是否打开（非 Windows 平台或创建失败返回 false） */
 export const toggleTaskbarLyricWindow = (): boolean => {
   if (taskbarLyricWindow && !taskbarLyricWindow.isDestroyed()) {
     closeTaskbarLyricWindow();
@@ -391,7 +352,6 @@ export const toggleTaskbarLyricWindow = (): boolean => {
   return createTaskbarLyricWindow() !== null;
 };
 
-/** 触发一次布局重算（配置变更后调用） */
 export const applyTaskbarLyricLayout = (): void => {
   service?.update(resolveLyricWidth());
 };

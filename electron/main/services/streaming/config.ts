@@ -30,8 +30,6 @@ interface PersistedState {
 let state: PersistedState | undefined;
 
 /**
- * 读取流媒体配置
- * @returns 内存中的完整配置
  */
 const getState = (): PersistedState => {
   if (state) return state;
@@ -46,7 +44,6 @@ const getState = (): PersistedState => {
   return state;
 };
 
-/** 保存当前流媒体配置 */
 const save = (): void => {
   const dir = path.dirname(STORAGE_FILE);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -54,9 +51,6 @@ const save = (): void => {
 };
 
 /**
- * 加密服务器密码
- * @param password - 明文密码
- * @returns 加密内容
  */
 const encryptPassword = (password: string): string => {
   if (!password) return "";
@@ -68,9 +62,6 @@ const encryptPassword = (password: string): string => {
 };
 
 /**
- * 解密服务器密码
- * @param encrypted - 加密内容
- * @returns 明文密码
  */
 const decryptPassword = (encrypted: string): string => {
   if (!encrypted) return "";
@@ -81,9 +72,6 @@ const decryptPassword = (encrypted: string): string => {
 };
 
 /**
- * 转换为 renderer 可见配置
- * @param server - 持久化配置
- * @returns 不含凭据的配置
  */
 const toServerConfig = (server: PersistedServer): StreamingServerConfig => ({
   id: server.id,
@@ -96,9 +84,6 @@ const toServerConfig = (server: PersistedServer): StreamingServerConfig => ({
 });
 
 /**
- * 转换为主进程运行时配置
- * @param server - 持久化配置
- * @returns 包含凭据的配置
  */
 const toRuntimeConfig = (server: PersistedServer): StreamingRuntimeConfig => ({
   ...toServerConfig(server),
@@ -106,8 +91,6 @@ const toRuntimeConfig = (server: PersistedServer): StreamingRuntimeConfig => ({
 });
 
 /**
- * 获取服务器列表和当前服务器
- * @returns renderer 可见配置状态
  */
 export const getStreamingConfig = (): {
   servers: StreamingServerConfig[];
@@ -118,9 +101,6 @@ export const getStreamingConfig = (): {
 });
 
 /**
- * 获取指定服务器的运行时配置
- * @param serverId - 服务器 ID
- * @returns 包含凭据的配置
  */
 export const getStreamingServer = (serverId: string): StreamingRuntimeConfig => {
   const server = getState().servers.find((item) => item.id === serverId);
@@ -129,9 +109,6 @@ export const getStreamingServer = (serverId: string): StreamingRuntimeConfig => 
 };
 
 /**
- * 新增服务器
- * @param input - 服务器表单
- * @returns 新服务器配置
  */
 export const addStreamingServer = (input: StreamingServerInput): StreamingServerConfig => {
   const server: PersistedServer = {
@@ -148,10 +125,6 @@ export const addStreamingServer = (input: StreamingServerInput): StreamingServer
 };
 
 /**
- * 更新服务器
- * @param serverId - 服务器 ID
- * @param input - 服务器表单
- * @returns 更新后的服务器配置
  */
 export const updateStreamingServer = (
   serverId: string,
@@ -170,8 +143,6 @@ export const updateStreamingServer = (
 };
 
 /**
- * 删除服务器
- * @param serverId - 服务器 ID
  */
 export const removeStreamingServer = (serverId: string): void => {
   const current = getState();
@@ -181,8 +152,6 @@ export const removeStreamingServer = (serverId: string): void => {
 };
 
 /**
- * 设置当前服务器
- * @param serverId - 服务器 ID
  */
 export const setActiveStreamingServer = (serverId: string | null): void => {
   const current = getState();
@@ -194,9 +163,6 @@ export const setActiveStreamingServer = (serverId: string | null): void => {
 };
 
 /**
- * 记录服务器连接成功
- * @param serverId - 服务器 ID
- * @returns 更新后的服务器配置
  */
 export const markStreamingServerConnected = (serverId: string): StreamingServerConfig => {
   const server = getState().servers.find((item) => item.id === serverId);
@@ -207,10 +173,6 @@ export const markStreamingServerConnected = (serverId: string): StreamingServerC
 };
 
 /**
- * 创建连接测试使用的临时配置
- * @param input - 服务器表单
- * @param serverId - 编辑中的服务器 ID
- * @returns 临时运行时配置
  */
 export const createTestStreamingServer = (
   input: StreamingServerInput,

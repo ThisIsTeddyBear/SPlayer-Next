@@ -33,33 +33,19 @@ import IconFavoriteOutline from "~icons/material-symbols/favorite-outline-rounde
 
 const props = withDefaults(
   defineProps<{
-    /** 歌曲列表数据 */
     items: Track[];
-    /** 搜索关键词 */
     searchQuery?: string;
-    /** 显示序号 */
     showIndex?: boolean;
-    /** 显示专辑 */
     showAlbum?: boolean;
-    /** 显示时长 */
     showDuration?: boolean;
-    /** 显示文件大小 */
     showSize?: boolean;
-    /** 是否启用排序交互 */
     enableSort?: boolean;
-    /** 列表来源 */
     source?: TrackSource;
-    /** 集合类型 */
     collectionType?: CollectionType;
-    /** 集合 ID */
     collectionId?: string;
-    /** 播放来源上下文 */
     playbackContext?: PlaybackContext;
-    /** 是否有权从集合移除曲目 */
     canRemove?: boolean;
-    /** 是否还能继续触底加载 */
     hasMore?: boolean;
-    /** 触底加载中 */
     loadingMore?: boolean;
   }>(),
   {
@@ -87,44 +73,36 @@ const fav = useFavorite();
 
 const { isFloatingBar: isFloatingPlayerBar, PLAYER_BAR_GAP } = useFloatingPlayerBar();
 
-/** 排序器 默认使用 base 敏感度，忽略大小写 */
 const textCollator = new Intl.Collator(undefined, {
   usage: "sort",
   sensitivity: "base",
   numeric: true,
 });
 
-/** 当前播放歌曲 ID */
 const playingId = computed(() => media.track?.id);
 
-/** 专辑是否可跳转：本地不要求 id，其他源需要 album.id */
 const isAlbumLinkable = (item: Track): boolean => {
   if (!item.album?.name) return false;
   return item.source === "local" || !!item.album.id;
 };
 
-/** 歌手是否可跳转：本地不要求 id，其他源需要 artist.id */
 const isArtistLinkable = (item: Track, artist: Artist): boolean => {
   if (!artist.name) return false;
   return item.source === "local" || !!artist.id;
 };
 
-/** 跳转到歌手页 */
 const goArtist = (item: Track, artist: Artist): void => {
   if (!isArtistLinkable(item, artist)) return;
   navigateToArtist(artist.name, { source: item.source, artistId: artist.id });
 };
 
-/** 跳转到专辑页 */
 const goAlbum = (item: Track): void => {
   if (!isAlbumLinkable(item)) return;
   navigateToAlbum(item.album?.name, { source: item.source, albumId: item.album?.id });
 };
 
-/** 排序字段 */
 const { sortField, sortOrder } = storeToRefs(status);
 
-/** 字段文案 key 映射 */
 const sortFieldLabelKeyMap: Record<SortField, string> = {
   none: "songList.sort.default",
   title: "songList.sort.byTitle",
@@ -138,7 +116,6 @@ const sortFieldLabelKeyMap: Record<SortField, string> = {
   track: "songList.sort.byTrack",
 };
 
-/** 表头显示的当前排序文案 */
 const sortTitleText = computed(() => {
   if (!props.enableSort) return t("songList.title");
   if (sortField.value === "none") return t("songList.title");
@@ -146,7 +123,6 @@ const sortTitleText = computed(() => {
   return `${t("songList.title")}（ ${t(sortFieldLabelKeyMap[sortField.value])} ${arrow} ）`;
 });
 
-/** 根据搜索关键词过滤后的列表 */
 const filteredItems = computed(() => {
   const query = props.searchQuery.trim().toLowerCase();
   if (!query) return props.items;
@@ -160,7 +136,6 @@ const filteredItems = computed(() => {
   });
 });
 
-/** 排序后列表 */
 const sortedItems = computed(() => {
   if (!props.enableSort || sortField.value === "none") return filteredItems.value;
   const result = [...filteredItems.value];
@@ -192,24 +167,19 @@ const sortedItems = computed(() => {
   return result;
 });
 
-/** 当前播放歌曲在过滤后列表中的索引 */
 const playingIndex = computed(() => {
   if (!playingId.value) return -1;
   return sortedItems.value.findIndex((track) => track.id === playingId.value);
 });
 
-/** 虚拟列表引用 */
 const virtualListRef = shallowRef<SVirtualListExposed | null>(null);
 
-/** 定位到当前播放歌曲 */
 const scrollToPlaying = (): void => {
   if (playingIndex.value >= 0) virtualListRef.value?.scrollToIndex(playingIndex.value);
 };
 
-/** 当前滚动位置 */
 const scrollTop = ref(0);
 
-/** 回顶按钮显示阈值 */
 const canScrollTop = computed(() => scrollTop.value > 100);
 
 const onScroll = (event: Event): void => {
@@ -217,7 +187,6 @@ const onScroll = (event: Event): void => {
   emit("scroll", event);
 };
 
-/** 批量操作 */
 const batch = useMultiSelect(sortedItems, {
   source: computed(() => props.source),
   collectionType: computed(() => props.collectionType),
@@ -228,7 +197,6 @@ const batch = useMultiSelect(sortedItems, {
 });
 const { deleteConfirmOpen, deleteDialogTitle, deleteDialogContent } = batch;
 
-/** 添加到歌单相关 */
 const {
   open: pickerOpen,
   tracks: pickerTracks,
@@ -236,14 +204,11 @@ const {
   openPicker,
 } = usePlaylistPicker();
 
-/** 标签编辑弹窗 */
 const tagEditorOpen = ref(false);
 const tagEditorTrack = shallowRef<Track | null>(null);
 
-/** 下载 */
 const { enqueue: enqueueDownload } = useDownload();
 
-/** 右键菜单 */
 const contextTrack = shallowRef<Track | undefined>();
 const { items: contextMenuItems, handleSelect: onContextMenu } = useTrackMenu(contextTrack, {
   collectionType: props.collectionType,
@@ -260,7 +225,6 @@ const { items: contextMenuItems, handleSelect: onContextMenu } = useTrackMenu(co
   onDownload: (track, quality) => void enqueueDownload(track, { quality }),
 });
 
-/** 仅当右键命中歌曲行时放行上下文菜单 */
 const onListContextMenu = (event: MouseEvent): void => {
   const target = event.target as HTMLElement | null;
   if (!target?.closest("[data-song-item]")) {
@@ -278,7 +242,6 @@ const emit = defineEmits<{
 onActivated(batch.exit);
 
 defineExpose({
-  /** 进入批量管理模式 */
   enterBatch: batch.enter,
 });
 </script>
@@ -312,7 +275,6 @@ defineExpose({
         @scroll="onScroll"
         @reach-bottom="emit('reachBottom')"
       >
-        <!-- 搜索无结果 -->
         <template #empty>
           <div
             v-if="searchQuery"
@@ -322,13 +284,9 @@ defineExpose({
             <span class="text-sm">{{ t("songList.noResults") }}</span>
           </div>
         </template>
-        <!-- 固定表头 -->
         <template #header>
-          <!-- 可选信息行 -->
           <slot name="topInfo" />
-          <!-- 补偿滚动条占据的边缘 -->
           <div class="pr-1.5">
-            <!-- 批量模式 -->
             <div
               v-if="batch.active.value"
               class="flex items-center gap-2 pl-3 pr-3 mx-3 h-10 text-sm"
@@ -424,7 +382,6 @@ defineExpose({
                 <span>{{ t("songList.batch.exit") }}</span>
               </SButton>
             </div>
-            <!-- 普通模式 -->
             <div
               v-else
               class="flex items-center gap-3 pl-3 pr-6 mx-3 h-10 text-sm text-on-surface-variant/60"
@@ -495,7 +452,6 @@ defineExpose({
             </div>
           </div>
         </template>
-        <!-- 列表项 -->
         <template #default="{ item, index }: { item: Track; index: number }">
           <div class="px-3 pb-3">
             <div
@@ -518,7 +474,6 @@ defineExpose({
               "
               @contextmenu="contextTrack = item"
             >
-              <!-- 序号 / 多选 -->
               <div
                 v-if="showIndex"
                 class="w-8 shrink-0 flex items-center justify-center relative"
@@ -537,7 +492,6 @@ defineExpose({
                       : player.playNow(item, props.playbackContext)
                 "
               >
-                <!-- 多选模式 -->
                 <SCheckbox
                   v-if="batch.active.value"
                   :checked="batch.selectedIds.value.has(item.id)"
@@ -545,7 +499,6 @@ defineExpose({
                   @update:checked="batch.toggle(item.id)"
                   @click.stop
                 />
-                <!-- 普通模式 -->
                 <template v-else>
                   <span
                     v-if="playingId !== item.id"
@@ -568,7 +521,6 @@ defineExpose({
                   </div>
                 </template>
               </div>
-              <!-- 信息 -->
               <div class="flex-1 min-w-0 flex items-center gap-3">
                 <SImg :src="item.cover" class="size-12 rounded-lg shrink-0" />
                 <div class="flex-1 min-w-0">
@@ -645,7 +597,6 @@ defineExpose({
                   </div>
                 </div>
               </div>
-              <!-- 专辑 -->
               <div
                 v-if="showAlbum"
                 class="flex-1 min-w-0 truncate text-sm"
@@ -659,7 +610,6 @@ defineExpose({
                   {{ item.album?.name || t("collection.unknownAlbum") }}
                 </span>
               </div>
-              <!-- 红心：批量模式下隐藏，其余始终显示 -->
               <div
                 v-if="!batch.active.value"
                 class="w-7 shrink-0 flex items-center justify-center"
@@ -682,7 +632,6 @@ defineExpose({
                 </SButton>
               </div>
               <div v-else class="w-7 shrink-0" />
-              <!-- 时长 -->
               <div
                 v-if="showDuration"
                 class="w-16 shrink-0 text-center text-sm tabular-nums"
@@ -690,7 +639,6 @@ defineExpose({
               >
                 {{ formatTime(item.duration) }}
               </div>
-              <!-- 文件大小 -->
               <div
                 v-if="showSize"
                 class="w-16 shrink-0 text-center text-sm tabular-nums"
@@ -720,12 +668,10 @@ defineExpose({
         </template>
       </SVirtualList>
     </SContextMenu>
-    <!-- 浮动按钮 -->
     <div
       class="absolute right-6 z-20 flex flex-col gap-3 transition-[bottom] duration-300"
       :class="isFloatingPlayerBar ? 'bottom-26' : 'bottom-5'"
     >
-      <!-- 回到顶部 -->
       <Transition name="fade">
         <div
           v-if="canScrollTop && !batch.active.value"
@@ -744,7 +690,6 @@ defineExpose({
           </SButton>
         </div>
       </Transition>
-      <!-- 定位歌曲 -->
       <Transition name="fade">
         <div
           v-if="playingIndex >= 0 && !batch.active.value"
@@ -758,7 +703,6 @@ defineExpose({
         </div>
       </Transition>
     </div>
-    <!-- 删除确认弹窗 -->
     <SDialog v-model:open="deleteConfirmOpen" :title="deleteDialogTitle">
       <p class="text-sm text-on-surface-variant">{{ deleteDialogContent }}</p>
       <template #footer>
@@ -766,9 +710,7 @@ defineExpose({
         <SButton type="error" @click="batch.confirmDelete">{{ t("common.confirm") }}</SButton>
       </template>
     </SDialog>
-    <!-- 添加到歌单 -->
     <PlaylistPickerDialog v-model:open="pickerOpen" :mode="pickerMode" :tracks="pickerTracks" />
-    <!-- 编辑元数据 -->
     <TagEditorDialog v-model:open="tagEditorOpen" :track="tagEditorTrack" />
   </div>
 </template>

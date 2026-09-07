@@ -11,56 +11,33 @@ import { DYNAMIC_ISLAND_BASE_HEIGHT } from "@shared/defaults/settings";
 
 let dynamicIslandWindow: BrowserWindow | null = null;
 
-/** 用户实测刘海物理宽度，按显示器 scaleFactor 换算成 Electron DIP */
 const NOTCH_PHYSICAL_WIDTH = 358;
-/** 用户实测刘海物理高度，按显示器 scaleFactor 换算成 Electron DIP */
 const NOTCH_PHYSICAL_HEIGHT = 58;
-/** 2x 屏下真实刘海主体逻辑宽度，包含右侧轻微覆盖余量 */
 const RETINA_NOTCH_BODY_WIDTH = 181;
-/** 两侧仅用于顶部横线圆弧对接的轻微外扩宽度 */
 const NOTCH_SIDE_OVERHANG = 5;
-/** 2x 屏下灵动岛窗口最小逻辑宽度 */
 const RETINA_NOTCH_WIDTH = RETINA_NOTCH_BODY_WIDTH + NOTCH_SIDE_OVERHANG * 2;
-/** 2x 屏下 PixPin 给出的真实刘海逻辑高度 */
 const RETINA_NOTCH_HEIGHT = 29;
-/** 软件黑色区域贴住屏幕顶边，避免和物理刘海之间出现缝隙 */
 const NOTCH_TOP_OFFSET = 0;
-/** 顶部额外填充：窗口上移到顶边后保持底部视觉位置不抖动 */
 const NOTCH_TOP_FILL = 3;
-/** 高度安全边界：渲染端上报值受这里 clamp，避免极端值导致窗口异常 */
 const MIN_HEIGHT = 14;
-/** 高度上限：覆盖 200% 缩放主行（80px）+ 后续双行副行余量，留足安全空间 */
 const MAX_HEIGHT = 200;
-/** 宽度上限：允许从真实刘海向两侧扩展，但避免长歌词撑成横条 */
 const MAX_WIDTH = 620;
-/** 宽度相对屏幕上限 */
 const MAX_WIDTH_RATIO = 0.55;
-/** 吸附判定阈值：拖拽释放时距顶部小于此值则重新吸附 */
 const SNAP_THRESHOLD = 8;
-/** 初始宽度（渲染端上报实际宽度前的占位） */
 const INITIAL_WIDTH = 200;
-/** 光标位置轮询间隔（ms） */
 const CURSOR_POLL_MS = 150;
 
 /**
- * 权威尺寸缓存
- * 所有 setBounds 写宽高都用它，绝不从 getBounds 读尺寸回写
- * 避免 Windows 高 DPI 下 DIP↔物理像素有损回环造成尺寸漂移
  */
 const cachedSize = { width: INITIAL_WIDTH, height: 40 };
 let activeShapeWidth: number | null = null;
 
-/** 当前是否启用刘海融合，仅 macOS 生效 */
 const isNotchFusionEnabled = (): boolean => isMac && store.get("dynamicIsland").notchFusion;
 
-/** 将任意数字 clamp 到合法高度区间 */
 const clampHeight = (h: number): number =>
   Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, Math.round(h)));
 
 /**
- * 计算当前显示器上的刘海逻辑尺寸
- * @param display - 当前窗口所在显示器
- * @returns 刘海宽高与顶部偏移
  */
 const getNotchMetrics = (
   display: Electron.Display,
@@ -81,9 +58,6 @@ const getNotchMetrics = (
 };
 
 /**
- * 计算宽度安全边界，按当前屏宽限制最大展开尺寸
- * @param display - 当前窗口所在显示器
- * @returns 合法宽度区间
  */
 const getWidthLimits = (display: Electron.Display): { min: number; max: number } => {
   if (!isNotchFusionEnabled()) {
@@ -97,16 +71,12 @@ const getWidthLimits = (display: Electron.Display): { min: number; max: number }
   return { min: notch.width, max };
 };
 
-/** 将任意数字 clamp 到合法宽度区间 */
 const clampWidth = (width: number, display: Electron.Display): number => {
   const limits = getWidthLimits(display);
   return Math.min(limits.max, Math.max(limits.min, Math.round(width)));
 };
 
 /**
- * 计算当前窗口所在屏幕
- * 当前屏：优先取窗口实例所在屏；未创建时退回 saved 锚点所在屏；都没有则主显示器
- * @returns 当前显示器
  */
 const getCurrentDisplay = (): Electron.Display => {
   const saved = store.get("windowStates.dynamicIsland");
@@ -127,9 +97,6 @@ const getCurrentDisplay = (): Electron.Display => {
 };
 
 /**
- * 计算吸附位置：默认贴工作区顶部；刘海融合时贴屏幕顶边并强制居中
- * @param display - 当前窗口所在显示器
- * @returns 吸附后的左上角坐标
  */
 const computeSnappedPos = (
   display: Electron.Display = getCurrentDisplay(),
@@ -163,8 +130,6 @@ const computeSnappedPos = (
 };
 
 /**
- * 应用窗口置顶
- * @param alwaysOnTop 是否置顶
  */
 export const applyDynamicIslandAlwaysOnTop = (alwaysOnTop: boolean): void => {
   const win = getDynamicIslandWindow();
@@ -173,8 +138,6 @@ export const applyDynamicIslandAlwaysOnTop = (alwaysOnTop: boolean): void => {
 };
 
 /**
- * 光标位置轮询：用 OS 级 screen.getCursorScreenPoint() 判断鼠标是否在窗口内
- * 不依赖 DOM 鼠标事件，避免 setIgnoreMouseEvents 穿透时事件漏发、opacity=0 不触发 leave 等坑
  */
 let cursorPollTimer: NodeJS.Timeout | null = null;
 let lastCursorInside = false;
@@ -216,7 +179,6 @@ const stopCursorPolling = (): void => {
     clearInterval(cursorPollTimer);
     cursorPollTimer = null;
   }
-  // 离开时推一次 false，避免渲染端卡在 inside=true 状态
   if (lastCursorInside) {
     lastCursorInside = false;
     dynamicIslandWindow?.webContents.send("dynamicIsland:cursorInside", false);
@@ -224,8 +186,6 @@ const stopCursorPolling = (): void => {
 };
 
 /**
- * 应用非遮挡模式：开启后鼠标点击穿透窗口，并启动光标位置轮询
- * 渲染端据此在悬停时把内容渐隐为透明
  */
 export const applyDynamicIslandNonOcclusive = (enabled: boolean): void => {
   const win = getDynamicIslandWindow();
@@ -239,9 +199,6 @@ export const applyDynamicIslandNonOcclusive = (enabled: boolean): void => {
 };
 
 /**
- * 切换"吸附是否居中"配置后，立即重新对齐窗口
- * - 切到居中：清掉 saved.x，重新居中到当前屏
- * - 切到非居中：把当前位置写入 saved，方便下次启动恢复
  */
 export const applyDynamicIslandSnapCentered = (snapCentered: boolean): void => {
   const win = getDynamicIslandWindow();
@@ -274,7 +231,6 @@ export const applyDynamicIslandSnapCentered = (snapCentered: boolean): void => {
       x: bounds.x + Math.round(bounds.width / 2),
       y: bounds.y + Math.round(bounds.height / 2),
     });
-    // 存中心点 x，与拖拽吸附保持同一语义
     store.set("windowStates.dynamicIsland", {
       ...saved,
       mode: "snapped",
@@ -287,8 +243,6 @@ export const applyDynamicIslandSnapCentered = (snapCentered: boolean): void => {
 };
 
 /**
- * 切换刘海融合后立即重算吸附位置
- * @param enabled - 是否启用刘海融合
  */
 export const applyDynamicIslandNotchFusion = (enabled: boolean): void => {
   const win = getDynamicIslandWindow();
@@ -309,9 +263,6 @@ export const applyDynamicIslandNotchFusion = (enabled: boolean): void => {
 };
 
 /**
- * 应用窗口高度：渲染端上报"基准高度 × 缩放（× 行数）"算出的最终高度
- * 主进程仅做安全 clamp，不再硬编码具体值
- * 吸附态走 computeSnappedPos 贴合真实刘海；浮动态保持当前 x/y
  */
 export const applyDynamicIslandHeight = (height: number): void => {
   const win = getDynamicIslandWindow();
@@ -330,9 +281,6 @@ export const applyDynamicIslandHeight = (height: number): void => {
 };
 
 /**
- * 应用窗口宽度：渲染端上报目标宽度后立即 resize
- * snapped 模式重算 x 居中；floating 模式保持中心点不变
- * 上限按当前屏 bounds 裁剪，避免长歌词撑出屏幕
  */
 export const applyDynamicIslandWidth = (width: number): void => {
   const win = getDynamicIslandWindow();
@@ -350,7 +298,6 @@ export const applyDynamicIslandWidth = (width: number): void => {
     const pos = computeSnappedPos(display);
     win.setBounds({ x: pos.x, y: pos.y, width: newWidth, height: cachedSize.height });
   } else {
-    // 保持中心点不变
     const centerX = bounds.x + Math.round(oldWidth / 2);
     const newX = centerX - Math.round(newWidth / 2);
     win.setBounds({ x: newX, y: bounds.y, width: newWidth, height: cachedSize.height });
@@ -377,8 +324,6 @@ const updateDynamicIslandShape = (): void => {
 };
 
 /**
- * 裁切透明宿主的有效区域，避免保留宽度的透明两侧阻挡鼠标
- * @param width - 居中的有效宽度，null 表示恢复完整窗口
  */
 export const applyDynamicIslandShape = (width: number | null): void => {
   activeShapeWidth = width;
@@ -386,17 +331,12 @@ export const applyDynamicIslandShape = (width: number | null): void => {
 };
 
 /**
- * 移动窗口到指定位置
- * 尺寸始终用权威 cachedSize 写回；拖拽过程保持自由移动
- * 仅约束 y 不上下越界，x 允许超出屏幕（迁移到副屏或半隐都可）
- * 过程中根据距顶部距离实时广播视觉 mode，让圆角随拖拽平滑切换
  */
 export const moveDynamicIslandWindow = (x: number, y: number): void => {
   const win = getDynamicIslandWindow();
   if (!win) return;
   const tx = Math.round(x);
   let ty = Math.round(y);
-  // 用窗口中心点找最近显示器，避免越界后 getDisplayMatching 选错屏
   const display = screen.getDisplayNearestPoint({
     x: tx + Math.round(cachedSize.width / 2),
     y: ty + Math.round(cachedSize.height / 2),
@@ -408,10 +348,8 @@ export const moveDynamicIslandWindow = (x: number, y: number): void => {
   broadcastMode(ty <= snapY ? "snapped" : "floating");
 };
 
-/** 当前广播过的吸附模式，用于跨阈值时去抖 */
 let lastBroadcastMode: "snapped" | "floating" | null = null;
 
-/** 广播当前吸附模式；重复状态不重发 */
 const broadcastMode = (mode: "snapped" | "floating"): void => {
   if (mode === lastBroadcastMode) return;
   lastBroadcastMode = mode;
@@ -420,15 +358,11 @@ const broadcastMode = (mode: "snapped" | "floating"): void => {
 };
 
 /**
- * 拖拽结束时判定吸附
- * 落点 y 距离顶部 < SNAP_THRESHOLD 则吸附
- * 否则记录 floating + 当前坐标
  */
 export const saveDynamicIslandState = (): void => {
   const win = getDynamicIslandWindow();
   if (!win) return;
   const b = win.getBounds();
-  // 用窗口中心点找最近显示器，避免 x 超出屏幕时 getDisplayMatching 选错屏
   const display = screen.getDisplayNearestPoint({
     x: b.x + Math.round(b.width / 2),
     y: b.y + Math.round(b.height / 2),
@@ -447,7 +381,6 @@ export const saveDynamicIslandState = (): void => {
         y: null,
       });
     } else {
-      // 保留拖到的水平位置；存中心点而非左上角，让后续宽度变化围绕中心点对称伸缩
       const clampedLeftX = Math.max(wa.x, Math.min(wa.x + wa.width - cachedSize.width, b.x));
       const centerX = clampedLeftX + Math.round(cachedSize.width / 2);
       win.setBounds({
@@ -475,7 +408,6 @@ export const saveDynamicIslandState = (): void => {
   }
 };
 
-/** 创建灵动岛窗口，如果窗口已存在则显示并聚焦 */
 export const createDynamicIslandWindow = (): BrowserWindow => {
   if (dynamicIslandWindow && !dynamicIslandWindow.isDestroyed()) {
     dynamicIslandWindow.show();
@@ -500,7 +432,6 @@ export const createDynamicIslandWindow = (): BrowserWindow => {
 
   let initialPos: { x: number; y: number };
   if (floatingPos) {
-    // 保存的 floating 位置可能已不在任何屏幕内（拔副屏、改分辨率等），按所在屏 workArea 纠正
     const display = screen.getDisplayNearestPoint({
       x: floatingPos.x + Math.round(cachedSize.width / 2),
       y: floatingPos.y + Math.round(cachedSize.height / 2),
@@ -566,7 +497,6 @@ export const createDynamicIslandWindow = (): BrowserWindow => {
   dynamicIslandWindow.webContents.on("did-finish-load", () => {
     if (!dynamicIslandWindow) return;
     dynamicIslandWindow.webContents.setZoomFactor(1.0);
-    // 重播 mode，修复 HMR 刷新后 mode 丢失
     const currentSaved = store.get("windowStates.dynamicIsland");
     lastBroadcastMode = null;
     broadcastMode(currentSaved.mode === "floating" ? "floating" : "snapped");
@@ -601,14 +531,12 @@ export const createDynamicIslandWindow = (): BrowserWindow => {
   return dynamicIslandWindow;
 };
 
-/** 关闭灵动岛窗口 */
 export const closeDynamicIslandWindow = (): void => {
   if (dynamicIslandWindow && !dynamicIslandWindow.isDestroyed()) {
     dynamicIslandWindow.close();
   }
 };
 
-/** 切换灵动岛窗口 */
 export const toggleDynamicIslandWindow = (): boolean => {
   if (dynamicIslandWindow && !dynamicIslandWindow.isDestroyed()) {
     closeDynamicIslandWindow();
@@ -618,7 +546,6 @@ export const toggleDynamicIslandWindow = (): boolean => {
   return true;
 };
 
-/** 获取灵动岛窗口实例 */
 export const getDynamicIslandWindow = (): BrowserWindow | null => {
   if (dynamicIslandWindow && !dynamicIslandWindow.isDestroyed()) return dynamicIslandWindow;
   return null;

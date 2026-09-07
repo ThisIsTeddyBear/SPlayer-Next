@@ -1,34 +1,19 @@
 <script setup lang="ts">
 export interface SSliderProps {
-  /** 当前值 */
   modelValue?: number;
-  /** 最小值 */
   min?: number;
-  /** 最大值 */
   max?: number;
-  /** 步进值 */
   step?: number;
-  /** 是否禁用 */
   disabled?: boolean;
-  /** 始终显示拖拽点 */
   alwaysShowThumb?: boolean;
-  /** 是否在拖拽点 hover/拖拽时显示 pop 弹窗 */
   showPopover?: boolean;
-  /** pop 弹窗位置 */
   popoverSide?: "top" | "bottom" | "left" | "right";
-  /** pop 弹窗偏移（px） */
   popoverOffset?: number;
-  /** 轨道粗细（px） */
   trackHeight?: number;
-  /** 拖拽点大小（px） */
   thumbSize?: number;
-  /** 刻度标记：{ 值: 标签 } */
   marks?: Record<number, string>;
-  /** 垂直方向 */
   vertical?: boolean;
-  /** 中心填充 */
   centerFill?: boolean;
-  /** 封面主题模式 */
   cover?: boolean;
 }
 
@@ -52,16 +37,12 @@ const props = withDefaults(defineProps<SSliderProps>(), {
 
 const emit = defineEmits<{
   "update:modelValue": [value: number];
-  /** 值改变（拖拽中也会触发） */
   change: [value: number];
-  /** 拖拽开始 */
   dragStart: [value: number];
-  /** 拖拽结束 */
   dragEnd: [value: number];
 }>();
 
 const slots = defineSlots<{
-  /** 自定义 popover 内容，参数为当前值 */
   popover?(props: { value: number }): unknown;
 }>();
 
@@ -72,7 +53,6 @@ interface PopoverShiftOptions {
   padding: number;
 }
 
-/** 计算水平 popover 为留在视口内需要偏移的距离 */
 const computePopoverShift = ({
   anchorX,
   contentWidth,
@@ -89,25 +69,16 @@ const computePopoverShift = ({
   return 0;
 };
 
-/** 轨道 DOM 引用 */
 const trackRef = ref<HTMLElement>();
-/** 滑块根节点 DOM 引用 */
 const sliderRef = ref<HTMLElement>();
-/** popover 内容 DOM 引用 */
 const popoverContentRef = ref<HTMLElement>();
-/** 是否正在拖拽 */
 const isDragging = ref(false);
-/** 鼠标是否悬停在整个滑块上 */
 const isHovering = ref(false);
-/** 鼠标是否悬停在拖拽点上 */
 const isThumbHovering = ref(false);
-/** 拖拽过程中的临时值（松手前不同步给父组件） */
 const dragValue = ref(props.modelValue);
-/** popover 为避免贴边溢出的水平修正量 */
 const popoverShift = ref(0);
 let popoverFrame = 0;
 
-/** 外部 modelValue 变化时同步到内部（拖拽中忽略，避免冲突） */
 watch(
   () => props.modelValue,
   (val) => {
@@ -115,27 +86,22 @@ watch(
   },
 );
 
-/** 当前显示值 */
 const displayValue = computed(() => (isDragging.value ? dragValue.value : props.modelValue));
 
-/** 进度比例（0~1，便于派生多种几何） */
 const progressRatio = computed(() => {
   const range = props.max - props.min;
   if (range <= 0) return 0;
   return Math.max(0, Math.min(1, (displayValue.value - props.min) / range));
 });
 
-/** 进度百分比字符串 */
 const progressPercent = computed(() => `${Math.round(progressRatio.value * 10000) / 100}%`);
 
-/** 水平 popover 锚点在滑块内的位置 */
 const popoverAnchorOffset = (width: number): number => {
   const min = 24;
   const max = Math.max(min, width - min);
   return Math.max(min, Math.min(progressRatio.value * width, max));
 };
 
-/** 中心填充模式下的填充几何（百分比） */
 const centerFillStyle = computed(() => {
   const center = 0.5;
   const ratio = progressRatio.value;
@@ -147,13 +113,10 @@ const centerFillStyle = computed(() => {
   return { start: `${50 - len}%`, length: `${len}%` };
 });
 
-/** 拖拽点是否可见（始终显示 / hover / 拖拽中） */
 const thumbVisible = computed(() => props.alwaysShowThumb || isHovering.value || isDragging.value);
 
-/** 将值转换为轨道上的百分比位置 */
 const toPercent = (value: number): number => ((value - props.min) / (props.max - props.min)) * 100;
 
-/** 点击刻度标记，将值设置到对应位置 */
 const onMarkClick = (value: number): void => {
   if (props.disabled) return;
   dragValue.value = value;
@@ -161,12 +124,10 @@ const onMarkClick = (value: number): void => {
   emit("update:modelValue", value);
 };
 
-/** popover 是否可见（拖拽点 hover 或拖拽中） */
 const popoverVisible = computed(
   () => props.showPopover && (isThumbHovering.value || isDragging.value),
 );
 
-/** 更新 popover 边缘避让偏移 */
 const updatePopoverShift = (): void => {
   if (props.vertical || !popoverVisible.value) {
     popoverShift.value = 0;
@@ -196,14 +157,12 @@ onBeforeUnmount(() => {
   if (popoverFrame) cancelAnimationFrame(popoverFrame);
 });
 
-/** step 的小数位数 */
 const stepDecimals = computed(() => {
   const str = String(props.step);
   const dot = str.indexOf(".");
   return dot < 0 ? 0 : str.length - dot - 1;
 });
 
-/** 根据鼠标/触摸位置计算对应的 step 对齐值 */
 const calcValueFromEvent = (e: MouseEvent | TouchEvent): number => {
   const rect = trackRef.value?.getBoundingClientRect();
   if (!rect) return props.min;
@@ -217,7 +176,6 @@ const calcValueFromEvent = (e: MouseEvent | TouchEvent): number => {
   return Math.max(props.min, Math.min(props.max, parseFloat(stepped.toFixed(stepDecimals.value))));
 };
 
-/** 按下：开始拖拽，捕获指针 */
 const onPointerDown = (e: PointerEvent): void => {
   if (props.disabled) return;
   e.preventDefault();
@@ -229,7 +187,6 @@ const onPointerDown = (e: PointerEvent): void => {
   emit("dragStart", value);
 };
 
-/** 移动：更新拖拽值 */
 const onPointerMove = (e: PointerEvent): void => {
   if (!isDragging.value) return;
   const value = calcValueFromEvent(e);
@@ -237,7 +194,6 @@ const onPointerMove = (e: PointerEvent): void => {
   emit("change", value);
 };
 
-/** 松手：结束拖拽，同步最终值给父组件 */
 const onPointerUp = (): void => {
   if (!isDragging.value) return;
   isDragging.value = false;
@@ -261,7 +217,6 @@ const onPointerUp = (): void => {
     @mouseenter="isHovering = true"
     @mouseleave="isHovering = false"
   >
-    <!-- 触摸/拖拽区域：水平 -->
     <div
       v-if="!vertical"
       ref="trackRef"
@@ -277,13 +232,11 @@ const onPointerUp = (): void => {
         :class="cover ? 'bg-cover/25' : 'bg-on-surface/12'"
         :style="{ height: `${trackHeight}px` }"
       />
-      <!-- 中心刻度线（仅 centerFill 模式） -->
       <div
         v-if="centerFill"
         class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 rounded-full bg-on-surface/20"
         :style="{ height: `${trackHeight + 6}px` }"
       />
-      <!-- 填充：从左侧 / 中点 -->
       <div
         class="s-slider-fill absolute rounded-full"
         :class="cover ? 'bg-cover/100' : 'bg-primary'"
@@ -318,7 +271,6 @@ const onPointerUp = (): void => {
       />
     </div>
 
-    <!-- 触摸/拖拽区域：垂直 -->
     <div
       v-else
       ref="trackRef"
@@ -334,13 +286,11 @@ const onPointerUp = (): void => {
         :class="cover ? 'bg-cover/25' : 'bg-on-surface/12'"
         :style="{ width: `${trackHeight}px` }"
       />
-      <!-- 中心刻度线（仅 centerFill 模式） -->
       <div
         v-if="centerFill"
         class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-0.5 rounded-full bg-on-surface/20"
         :style="{ width: `${trackHeight + 6}px` }"
       />
-      <!-- 填充：从底部 / 中点向上 -->
       <div
         class="s-slider-fill absolute rounded-full"
         :class="cover ? 'bg-cover/100' : 'bg-primary'"
@@ -376,7 +326,6 @@ const onPointerUp = (): void => {
       />
     </div>
 
-    <!-- 刻度标记（仅水平） -->
     <div v-if="marks && !vertical" class="relative w-full mt-1.5" :style="{ height: '18px' }">
       <span
         v-for="(label, key) in marks"
@@ -424,7 +373,6 @@ const onPointerUp = (): void => {
       </div>
     </div>
 
-    <!-- Popover：垂直模式 -->
     <div
       v-if="showPopover && slots.popover && vertical"
       class="s-slider-popover absolute pointer-events-none transition-opacity duration-200 ease-out z-20"

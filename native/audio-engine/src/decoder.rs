@@ -19,19 +19,14 @@ use crate::priority;
 use crate::shared::{AudioChunk, Shared};
 use crate::tempo::StretchProcessor;
 
-/// 无输出设备信息时初始化 DSP 使用的默认声道数
 pub const DEFAULT_OUTPUT_CHANNELS: u16 = 2;
 
-/// 播放输出默认采样率
 pub const DEFAULT_TARGET_SAMPLE_RATE: u32 = 48_000;
 
-/// FFT 计算所需的目标采样率
 pub const FFT_TARGET_SAMPLE_RATE: u32 = 48_000;
 
-/// FFT 始终分析双声道视图，与真实播放输出声道链路相互独立
 const FFT_CHANNELS: u16 = 2;
 
-/// 自定义 File IO 读取失败时，ffmpeg_audio 的 read 回调可能映射为此错误码
 const AVERROR_EIO: i32 = sys::averror(libc::EIO);
 
 const OUTPUT_CEILING: f32 = 0.98;
@@ -64,27 +59,19 @@ impl OutputLimiter {
                 self.gain += (1.0 - self.gain) * LIMITER_RELEASE;
             }
             for sample in frame {
-                *sample *= self.gain;
-                *sample = sample.clamp(-OUTPUT_CEILING, OUTPUT_CEILING);
             }
         }
     }
 }
 
-/// 解码会话所需的资源（跨 seek 复用，避免重建 ffmpeg_audio 上下文）
 ///
-/// 此处必须进行 1-to-N 分发，因为需要两个可能存在采样率差异的音源
-///  - 播放重采样器输出设备采样率、设备声道数的交错 f32
-///  - FFT 重采样器输出 48kHz 的 stereo f32
 pub struct DecoderData {
     reader: AudioReader,
     player_resampler: Resampler,
     fft_resampler: Resampler,
-    /// 网络中断句柄仅由远端源持有，stop() 取消后可在 seek 前重置
     cancel_handle: Option<HttpCancelHandle>,
 }
 
-/// 已打开且完成元数据读取的音源，等待按实际输出流采样率创建重采样器
 pub struct PreparedDecoder {
     reader: AudioReader,
     metadata: AudioMetadata,
@@ -93,23 +80,19 @@ pub struct PreparedDecoder {
 }
 
 impl PreparedDecoder {
-    /// 音源原始采样率，用于输出流采样率协商（设备支持时按精确采样率打开）
     pub fn original_sample_rate(&self) -> u32 {
         self.metadata.original_sample_rate
     }
 
-    /// 音源原始声道数，用于独占输出格式协商。
     pub fn original_channels(&self) -> u16 {
         self.metadata.channels
     }
 
-    /// 音源原始位深，用于独占输出格式协商。
     pub fn bits_per_sample(&self) -> u32 {
         self.metadata.bits_per_sample
     }
 }
 
-/// 统一结束解码线程；panic 属于源错误，但仍需结束 source 迭代
 fn finish_decode_thread(shared: &Shared, panicked: bool) {
     if panicked {
         shared.mark_decode_failed();
@@ -123,9 +106,7 @@ fn run_decode_safely(shared: &Shared, decode: impl FnOnce()) {
 }
 
 impl DecoderData {
-    /// 在已有 reader 上 seek，失败时调用方应回退到完整 load
     ///
-    /// seek 后两个重采样器要 flush 掉残留样本，否则播放/FFT会带上上一段尾巴
     pub fn seek(&mut self, position_secs: f64) -> bool {
         if let Some(handle) = &self.cancel_handle {
             handle.reset();
@@ -141,22 +122,17 @@ impl DecoderData {
         true
     }
 
-    /// 获取网络中断句柄，恢复解码时绑定到新的共享状态
     pub fn cancel_handle(&self) -> Option<HttpCancelHandle> {
         self.cancel_handle.clone()
     }
 
-    /// 输出设备格式变化后重建播放重采样器；FFT 分支仍保持固定双声道分析格式
     pub fn reconfigure_player_output(&mut self, sample_rate: u32, channels: u16) -> Result<()> {
         self.player_resampler = build_player_resampler(&self.reader, sample_rate, channels)?;
         Ok(())
     }
 }
 
-/// 启动解码线程，返回音频元数据和线程句柄
 ///
-/// 线程结束时返回 `DecoderData`，调用方可通过 `handle.join()` 回收并复用于后续 seek，
-/// 避免重建 ffmpeg_audio 上下文。
 pub fn prepare_decode(
     source: &str,
     cover_cache_dir: Option<&str>,
@@ -206,7 +182,6 @@ pub fn prepare_decode(
     })
 }
 
-/// 按已经打开的输出流采样率启动解码，避免为探测音源信息重复打开网络源
 pub fn start_prepared_decode(
     prepared: PreparedDecoder,
     shared: Arc<Shared>,
@@ -271,7 +246,6 @@ pub fn start_prepared_decode(
     Ok((metadata, handle, cancel_handle))
 }
 
-/// 用已有的 DecoderData 继续解码（seek 后复用）
 pub fn resume_decode(
     data: DecoderData,
     shared: Arc<Shared>,
@@ -369,7 +343,6 @@ fn run_dsp_safely(
     shared.mark_output_eof();
 }
 
-/// 根据 source 协议打开音频：http(s) 走延迟 Range 源，其他走本地 File
 ///
 fn open_source(
     source: &str,
@@ -422,25 +395,20 @@ fn build_resamplers(
     Ok((player_resampler, fft_resampler))
 }
 
-/// 核心解码循环：每帧解码一次，使用复用缓冲分发到播放与 FFT 重采样器
 fn run_decoding_loop(data: &mut DecoderData, shared: &Shared) {
-    // 响度归一化：有 ReplayGain 标签时用固定增益，否则用实时分析
     let has_replay_gain = (shared.normalization_gain() - 1.0).abs() > f32::EPSILON;
     let mut loudness = LoudnessAnalyzer::new(shared.sample_rate(), shared.channels());
     loudness.set_has_replay_gain(has_replay_gain);
 
-    // 用于日志诊断：记录是否曾成功解码过帧
     let mut had_success = false;
 
     loop {
-        // 背压：缓冲区满时阻塞等待消费
         if !shared.wait_for_space() {
             return;
         }
 
         match data.reader.receive_frame() {
             Ok(Some(frame)) => {
-                // 1-to-N: 同一帧顺序喂两个重采样器
                 if data.player_resampler.process::<f32>(Some(&frame)).is_err() {
                     debug!("player resampler 处理失败，结束解码");
                     shared.mark_decode_failed();
@@ -458,7 +426,6 @@ fn run_decoding_loop(data: &mut DecoderData, shared: &Shared) {
                 let mut fft_samples = shared.take_fft_buffer();
                 fft_samples.extend_from_slice(data.fft_resampler.output_as::<f32>());
 
-                // 重采样可能还在攒样本，本轮没出数据就跳过
                 if player_samples.is_empty() && fft_samples.is_empty() {
                     shared.recycle_player_buffer(player_samples);
                     shared.recycle_fft_buffer(fft_samples);
@@ -474,7 +441,6 @@ fn run_decoding_loop(data: &mut DecoderData, shared: &Shared) {
                     };
                     if (gain - 1.0).abs() > f32::EPSILON {
                         for s in &mut player_samples {
-                            *s *= gain;
                         }
                     }
                 }
@@ -486,7 +452,6 @@ fn run_decoding_loop(data: &mut DecoderData, shared: &Shared) {
                 });
             }
             Ok(None) | Err(AudioError::Eof) => {
-                // EOF flush：把两个重采样器内部残留挤出来，否则最后几十毫秒丢
                 let _ = data.player_resampler.process::<f32>(None);
                 let _ = data.fft_resampler.process::<f32>(None);
                 let mut player_samples = shared.take_player_buffer();
@@ -506,23 +471,15 @@ fn run_decoding_loop(data: &mut DecoderData, shared: &Shared) {
                 return;
             }
             Err(e) => {
-                // stop/切歌触发的 HTTP 取消不是源故障
                 if shared.is_stopping() {
                     debug!(error = %e, "解码线程因停止信号退出");
                     return;
                 }
-                // 本地 File 的 io::Error 可能经 ffmpeg_audio read 回调映射为 AVERROR(EIO)
                 let io_failure = match &e {
                     AudioError::Io(_) => true,
                     AudioError::FFmpeg(code, _) => *code == AVERROR_EIO,
                     _ => false,
                 };
-                // 统一标记 decode_failed：包括 IO 错误和 FFmpeg 数据错误
-                // 长时间暂停后 HTTP 流断开重连、URL 过期等场景下 FFmpeg 会报
-                // INVALIDDATA（非 EIO），但本质仍是数据源故障，需要标记以触发
-                // SourceError 让 JS 重新解析播放地址
-                // 尾部坏帧（FLAC ID3v1 / VBR 末帧）容忍由 position timer 的 3s
-                // 阈值保障：mark_decode_failed 后若 position 接近末尾仍发 Ended
                 shared.mark_decode_failed();
                 debug!(error = %e, had_success, io_failure, "解码线程异常结束");
                 return;
