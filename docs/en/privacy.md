@@ -4,8 +4,6 @@
 **Effective: August 5, 2026**  
 **Last updated: August 12, 2026**
 
-This English translation is provided for convenience. If it differs from the [Chinese policy](/privacy), the Chinese text prevails.
-
 This policy explains how SPlayer Next processes, stores, and protects information when you install and use the application. By using the software, you acknowledge this policy.
 
 ## 1. Principles

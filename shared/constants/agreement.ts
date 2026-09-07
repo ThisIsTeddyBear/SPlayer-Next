@@ -1,4 +1,2 @@
-/**
- * 当前用户协议版本号
- */
+/** Current user-agreement version. */
 export const CURRENT_AGREEMENT_VERSION = 3;

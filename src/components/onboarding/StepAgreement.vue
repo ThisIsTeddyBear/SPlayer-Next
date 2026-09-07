@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { marked } from "marked";
-import agreementRaw from "@root/docs/agreement.md?raw";
+import agreementRaw from "@root/docs/en/agreement.md?raw";
 import IconFileText from "~icons/lucide/file-text";
 import IconChevronLeft from "~icons/lucide/chevron-left";
 import IconArrowRight from "~icons/lucide/arrow-right";

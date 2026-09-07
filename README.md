@@ -20,6 +20,7 @@
 ## Features
 
 - 🎵 **Broad format support** — MP3, FLAC, WAV, AAC, OGG, APE, and more, decoded via FFmpeg
+- 🎧 **Exclusive Audio (Windows)** — WASAPI exclusive playback preserves the source sample rate and bit depth for compatible lossless, hi-res, and WAV audio
 - 📝 **Rich lyrics** — LRC / QRC / YRC / TTML, word-by-word highlighting and translations, with desktop, dynamic-island, and taskbar lyric windows
 - 🌐 **Streaming servers** — Subsonic / Navidrome / Jellyfin / Emby (multi-server, auto-connect)
 - 🖥️ **Cross-platform** — Windows / macOS / Linux

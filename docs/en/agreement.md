@@ -6,8 +6,6 @@
 **Effective: May 29, 2026**  
 **Last updated: August 12, 2026**
 
-This English translation is provided for convenience. If it differs from the [Chinese agreement](/agreement), the Chinese text prevails.
-
 SPlayer Next is a free and open-source cross-platform desktop music player. Read this agreement, especially limitations of liability, governing law, and dispute provisions, before downloading or using it. If you do not agree, stop using and delete the software. Minors should review it with a guardian.
 
 ## 1. Definitions
