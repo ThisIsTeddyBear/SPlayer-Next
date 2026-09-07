@@ -57,32 +57,34 @@ const romanizeLine = async (text: string): Promise<string | undefined> => {
   return undefined;
 };
 
+/** 将多行原文转换为罗马音 */
+export const romanizeLines = async (input: string[]): Promise<Record<string, string>> => {
+  const lines = [
+    ...new Set(
+      input.filter(
+        (line): line is string => typeof line === "string" && line.length <= MAX_LINE_LENGTH,
+      ),
+    ),
+  ];
+  const results: Record<string, string> = {};
+  let cursor = 0;
+  const worker = async (): Promise<void> => {
+    while (cursor < lines.length) {
+      const line = lines[cursor++];
+      const reading = await romanizeLine(line);
+      if (reading) results[line] = reading;
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, lines.length) }, worker));
+  return results;
+};
+
 /** 注册按需 Google 罗马音转换 IPC */
 export const registerRomanizationIpc = (): void => {
   ipcMain.handle(
     "lyrics:romanize",
     async (_event, input: unknown): Promise<Record<string, string>> => {
-      const lines = Array.isArray(input)
-        ? [
-            ...new Set(
-              input.filter(
-                (line): line is string =>
-                  typeof line === "string" && line.length <= MAX_LINE_LENGTH,
-              ),
-            ),
-          ]
-        : [];
-      const results: Record<string, string> = {};
-      let cursor = 0;
-      const worker = async (): Promise<void> => {
-        while (cursor < lines.length) {
-          const line = lines[cursor++];
-          const reading = await romanizeLine(line);
-          if (reading) results[line] = reading;
-        }
-      };
-      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, lines.length) }, worker));
-      return results;
+      return romanizeLines(Array.isArray(input) ? input : []);
     },
   );
 };
