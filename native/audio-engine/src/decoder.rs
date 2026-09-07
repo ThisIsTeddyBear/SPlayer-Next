@@ -165,7 +165,7 @@ pub fn prepare_decode(
     let tags = metadata::extract_tags(&raw_metadata);
     let cover =
         cover_cache_dir.and_then(|dir| metadata::extract_cover_thumbnail(&reader, source, dir));
-    let cover_raw = metadata::read_attached_pic(&reader);
+    let cover_raw = metadata::read_cover_raw(&reader, source);
     let embedded_lyric = metadata::extract_embedded_lyric(&raw_metadata);
     let external_lyrics = metadata::find_all_external_lyrics(source);
     let replay_gain_db = metadata::extract_replay_gain(&raw_metadata);

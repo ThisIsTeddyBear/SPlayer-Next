@@ -46,9 +46,14 @@ pub fn extract_cover_thumbnail(
     Some(thumb_file.to_string_lossy().into_owned())
 }
 
-/// 拿原始封面字节（供 SMTC / 全屏播放器使用，不缓存）
-pub fn read_attached_pic(reader: &AudioReader) -> Option<Vec<u8>> {
-    reader.cover().map(|cover| cover.data)
+/// 读取原始封面字节，优先内嵌封面，无内嵌封面时回退同目录封面文件。
+///
+/// 供全屏播放器和系统媒体控件使用；常规列表仍使用 300px 缩略图缓存。
+pub fn read_cover_raw(reader: &AudioReader, source: &str) -> Option<Vec<u8>> {
+    reader
+        .cover()
+        .map(|cover| cover.data)
+        .or_else(|| find_folder_cover(source).and_then(|path| std::fs::read(path).ok()))
 }
 
 /// 将任意图片字节缩放为 JPEG 缩略图字节（内存内，不落盘）。

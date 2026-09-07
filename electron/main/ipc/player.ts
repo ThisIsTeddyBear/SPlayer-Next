@@ -570,7 +570,12 @@ export const registerPlayerIpc = (): void => {
       if (!raw) return { success: true, data: null };
       // 转为 base64 data URL，用完即丢，不持有引用
       const base64 = Buffer.from(raw).toString("base64");
-      return { success: true, data: `data:image/jpeg;base64,${base64}` };
+      const mime = raw
+        .subarray(0, 8)
+        .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+        ? "image/png"
+        : "image/jpeg";
+      return { success: true, data: `data:${mime};base64,${base64}` };
     } catch (error) {
       return fail(ErrorCode.UNKNOWN, error);
     }
