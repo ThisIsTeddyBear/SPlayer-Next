@@ -48,7 +48,9 @@ export const bestExternalIndex = (
  */
 export const detectFormat = (text: string): LyricFormat => {
   const trimmed = text.trimStart();
-  if (trimmed.startsWith("{") && /^\{\s*"type"\s*:\s*"Word"\b/.test(trimmed)) return "json";
+  if (trimmed.startsWith("{") && /^\{\s*"type"\s*:\s*"Word"\s*(?:,|})/.test(trimmed)) {
+    return "json";
+  }
   // ASS
   if (trimmed.startsWith("[Script Info]") || /^\[V4\+? Styles\]/m.test(text)) return "ass";
   // SRT：序号 + 时间行
