@@ -46,8 +46,45 @@ describe("lyric parse", () => {
     expect(detectFormat("[00:01.00]歌词")).toBe("lrc");
     expect(detectFormat("1\n00:00:01,000 --> 00:00:02,000\n歌词")).toBe("srt");
     expect(detectFormat('<tt xmlns="http://www.w3.org/ns/ttml"></tt>')).toBe("ttml");
+    expect(detectFormat('{"type":"Word","lyrics":[]}')).toBe("json");
     expect(detectFormat("[1000,500](1000,500,0)歌词")).toBe("yrc");
     expect(detectFormat("[1000,500]歌词(1000,500)")).toBe("qrc");
+  });
+
+  it("解析 JSON 逐词时间、合成标记和演唱者", () => {
+    const [line] = parseLyric(
+      {
+        content: JSON.stringify({
+          type: "Word",
+          metadata: { agents: { v1: { type: "person", name: "Lead" } } },
+          lyrics: [
+            {
+              time: 1000,
+              duration: 500,
+              syllabus: [
+                { text: "Hel", time: 1000, duration: 200, synthetic: true },
+                { text: "lo", time: 1200, duration: 300 },
+              ],
+              element: { key: "L1", singer: "v1", songPartIndex: 2 },
+            },
+          ],
+        }),
+      },
+      "json",
+    );
+
+    expect(line).toMatchObject({
+      startTime: 1000,
+      endTime: 1500,
+      singerName: "Lead",
+      singerRole: "lead",
+      sourceKey: "L1",
+      songPartIndex: 2,
+    });
+    expect(line.words).toEqual([
+      { word: "Hel", startTime: 1000, endTime: 1200, synthetic: true },
+      { word: "lo", startTime: 1200, endTime: 1500, synthetic: undefined },
+    ]);
   });
 
   it("按照指定优先级选择外部歌词", () => {

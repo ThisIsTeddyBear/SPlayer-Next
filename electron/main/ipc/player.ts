@@ -539,6 +539,7 @@ export const registerPlayerIpc = (): void => {
   // 必须与引擎扫描列表一致（native/audio-engine/src/metadata.rs 的 LYRIC_EXTENSIONS）
   const LYRIC_FILE_EXTS = new Set([
     ".ttml",
+    ".json",
     ".lys",
     ".qrc",
     ".krc",

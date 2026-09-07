@@ -8,6 +8,7 @@ import { parseTTML } from "./parseTTML";
 import { parseLyS } from "./parseLyS";
 import { parseSRT } from "./parseSRT";
 import { parseASS } from "./parseASS";
+import { parseJsonLyrics } from "./parseJSON";
 import { normalizeKangxi } from "./kangxi";
 
 export interface ParseLyricOptions {
@@ -47,6 +48,7 @@ export const bestExternalIndex = (
  */
 export const detectFormat = (text: string): LyricFormat => {
   const trimmed = text.trimStart();
+  if (trimmed.startsWith("{") && /^\{\s*"type"\s*:\s*"Word"\b/.test(trimmed)) return "json";
   // ASS
   if (trimmed.startsWith("[Script Info]") || /^\[V4\+? Styles\]/m.test(text)) return "ass";
   // SRT：序号 + 时间行
@@ -83,6 +85,8 @@ const parseContent = (
   switch (format) {
     case "ttml":
       return parseTTML(text, preferredLang);
+    case "json":
+      return parseJsonLyrics(text);
     case "qrc":
       return parseQRC(text, detectBackground);
     case "krc":

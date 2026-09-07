@@ -4,7 +4,7 @@ use std::path::Path;
 use super::tag_fields;
 
 /// 支持的歌词文件扩展名
-const LYRIC_EXTENSIONS: &[&str] = &["ttml", "lys", "qrc", "krc", "yrc", "lrc", "ass", "srt"];
+const LYRIC_EXTENSIONS: &[&str] = &["ttml", "json", "lys", "qrc", "krc", "yrc", "lrc", "ass", "srt"];
 
 /// 一条外部歌词（仅格式和路径，内容按需加载）
 #[derive(Clone)]
