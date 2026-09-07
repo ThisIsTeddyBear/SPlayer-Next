@@ -36,7 +36,8 @@ const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: GUID =
 #[derive(Clone, Copy)]
 enum ExclusiveSampleFormat {
     Pcm16,
-    Pcm24,
+    Pcm24In32,
+    Pcm24Packed,
     Pcm32,
     Float32,
 }
@@ -45,14 +46,15 @@ impl ExclusiveSampleFormat {
     fn bits_per_sample(self) -> u16 {
         match self {
             Self::Pcm16 => 16,
-            Self::Pcm24 | Self::Pcm32 | Self::Float32 => 32,
+            Self::Pcm24Packed => 24,
+            Self::Pcm24In32 | Self::Pcm32 | Self::Float32 => 32,
         }
     }
 
     fn valid_bits_per_sample(self) -> u16 {
         match self {
             Self::Pcm16 => 16,
-            Self::Pcm24 => 24,
+            Self::Pcm24In32 | Self::Pcm24Packed => 24,
             Self::Pcm32 | Self::Float32 => 32,
         }
     }
@@ -60,14 +62,17 @@ impl ExclusiveSampleFormat {
     fn sub_format(self) -> GUID {
         match self {
             Self::Float32 => KSDATAFORMAT_SUBTYPE_IEEE_FLOAT,
-            Self::Pcm16 | Self::Pcm24 | Self::Pcm32 => KSDATAFORMAT_SUBTYPE_PCM,
+            Self::Pcm16 | Self::Pcm24In32 | Self::Pcm24Packed | Self::Pcm32 => {
+                KSDATAFORMAT_SUBTYPE_PCM
+            }
         }
     }
 
     fn name(self) -> &'static str {
         match self {
             Self::Pcm16 => "pcm16",
-            Self::Pcm24 => "pcm24",
+            Self::Pcm24In32 => "pcm24-in-32",
+            Self::Pcm24Packed => "pcm24-packed",
             Self::Pcm32 => "pcm32",
             Self::Float32 => "f32",
         }
@@ -211,16 +216,32 @@ fn find_supported_config(
 }
 
 fn candidate_sample_rates(source_rate: u32) -> Vec<u32> {
-    const COMMON_RATES: [u32; 9] = [
-        32_000, 44_100, 48_000, 88_200, 96_000, 176_400, 192_000, 352_800, 384_000,
-    ];
+    const FAMILY_44: [u32; 4] = [352_800, 176_400, 88_200, 44_100];
+    const FAMILY_48: [u32; 4] = [384_000, 192_000, 96_000, 48_000];
 
-    let mut rates = COMMON_RATES
-        .into_iter()
-        .filter(|rate| *rate != source_rate)
-        .collect::<Vec<_>>();
-    rates.sort_by_key(|rate| rate.abs_diff(source_rate));
-    rates.insert(0, source_rate);
+    let (preferred_family, other_family) = if source_rate.is_multiple_of(11_025) {
+        (FAMILY_44, FAMILY_48)
+    } else {
+        (FAMILY_48, FAMILY_44)
+    };
+    let mut rates = vec![source_rate];
+    rates.extend(
+        preferred_family
+            .into_iter()
+            .filter(|rate| *rate < source_rate),
+    );
+    rates.extend(
+        other_family
+            .into_iter()
+            .filter(|rate| *rate < source_rate),
+    );
+    let remaining =
+        preferred_family
+            .into_iter()
+            .chain(other_family)
+            .filter(|rate| !rates.contains(rate))
+            .collect::<Vec<_>>();
+    rates.extend(remaining);
     rates
 }
 
@@ -251,7 +272,10 @@ fn candidate_formats(
     if bit_perfect {
         return match source_bits_per_sample {
             16 => &[ExclusiveSampleFormat::Pcm16],
-            24 => &[ExclusiveSampleFormat::Pcm24],
+            24 => &[
+                ExclusiveSampleFormat::Pcm24In32,
+                ExclusiveSampleFormat::Pcm24Packed,
+            ],
             _ => unreachable!("bit-perfect source format was validated before negotiation"),
         };
     }
@@ -260,11 +284,13 @@ fn candidate_formats(
         0..=16 => &[
             ExclusiveSampleFormat::Pcm16,
             ExclusiveSampleFormat::Float32,
-            ExclusiveSampleFormat::Pcm24,
+            ExclusiveSampleFormat::Pcm24In32,
+            ExclusiveSampleFormat::Pcm24Packed,
             ExclusiveSampleFormat::Pcm32,
         ],
         17..=24 => &[
-            ExclusiveSampleFormat::Pcm24,
+            ExclusiveSampleFormat::Pcm24In32,
+            ExclusiveSampleFormat::Pcm24Packed,
             ExclusiveSampleFormat::Float32,
             ExclusiveSampleFormat::Pcm32,
             ExclusiveSampleFormat::Pcm16,
@@ -272,7 +298,8 @@ fn candidate_formats(
         _ => &[
             ExclusiveSampleFormat::Pcm32,
             ExclusiveSampleFormat::Float32,
-            ExclusiveSampleFormat::Pcm24,
+            ExclusiveSampleFormat::Pcm24In32,
+            ExclusiveSampleFormat::Pcm24Packed,
             ExclusiveSampleFormat::Pcm16,
         ],
     }
@@ -582,7 +609,7 @@ fn write_buffer(
             }
             output.len()
         }
-        ExclusiveSampleFormat::Pcm24 => {
+        ExclusiveSampleFormat::Pcm24In32 => {
             let output = unsafe {
                 std::slice::from_raw_parts_mut(
                     buffer.cast::<i32>(),
@@ -593,6 +620,19 @@ fn write_buffer(
                 *value = to_i24_in_i32(source.next().unwrap_or(0.0) * gain);
             }
             output.len()
+        }
+        ExclusiveSampleFormat::Pcm24Packed => {
+            let output = unsafe {
+                std::slice::from_raw_parts_mut(
+                    buffer.cast::<u8>(),
+                    frames as usize * channels as usize * 3,
+                )
+            };
+            for value in output.chunks_exact_mut(3) {
+                let bytes = to_i24(source.next().unwrap_or(0.0) * gain).to_le_bytes();
+                value.copy_from_slice(&bytes[..3]);
+            }
+            frames as usize * channels as usize
         }
         ExclusiveSampleFormat::Pcm32 => {
             let output = unsafe {
@@ -629,8 +669,12 @@ fn to_i16(value: f32) -> i16 {
 }
 
 fn to_i24_in_i32(value: f32) -> i32 {
+    to_i24(value) << 8
+}
+
+fn to_i24(value: f32) -> i32 {
     let scaled = (value.clamp(-1.0, 1.0) * 8_388_608.0).round();
-    (scaled.clamp(-8_388_608.0, 8_388_607.0) as i32) << 8
+    scaled.clamp(-8_388_608.0, 8_388_607.0) as i32
 }
 
 fn to_i32(value: f32) -> i32 {
@@ -651,16 +695,15 @@ mod tests {
     }
 
     #[test]
-    fn prefers_96khz_for_192khz_when_higher_rates_are_unavailable() {
+    fn keeps_the_48khz_family_for_192khz_sources() {
         let rates = candidate_sample_rates(192_000);
         let rate_96k = rates.iter().position(|rate| *rate == 96_000).unwrap();
-        let rate_48k = rates.iter().position(|rate| *rate == 48_000).unwrap();
-        assert!(rate_96k < rate_48k);
+        let rate_88k = rates.iter().position(|rate| *rate == 88_200).unwrap();
+        assert!(rate_96k < rate_88k);
     }
 
     #[test]
-    fn picks_the_closest_common_rate_for_nonstandard_sources() {
-        let rates = candidate_sample_rates(44_100);
-        assert_eq!(rates[1], 48_000);
+    fn keeps_the_44khz_family_for_176khz_sources() {
+        assert_eq!(candidate_sample_rates(176_400)[1], 88_200);
     }
 }
