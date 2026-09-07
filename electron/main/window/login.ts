@@ -123,7 +123,7 @@ const NETEASE_COOKIE_KEYS = ["MUSIC_U", "__csrf", "NMTID", "MUSIC_A"];
 
 /** 网易云音乐登录配置 */
 const NETEASE_CONFIG: LoginPlatformConfig = {
-  title: "登录网易云音乐",
+  title: "Sign in to NetEase Cloud Music",
   url: "https://music.163.com/#/login",
   partition: "persist:netease-login",
   logTag: "[login]",

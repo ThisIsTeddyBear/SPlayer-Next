@@ -106,7 +106,7 @@ const bindEvents = (): void => {
   );
   autoUpdater.on("update-downloaded", (info) => emit({ type: "downloaded", meta: toMeta(info) }));
   autoUpdater.on("error", (error) => {
-    updaterLog.error("更新出错", error);
+    updaterLog.error("Update error", error);
     emit({ type: "error", message: error?.message ?? String(error), manual: manualCheck });
   });
 };
@@ -150,7 +150,7 @@ export const checkForUpdates = (manual: boolean): void => {
 export const downloadUpdate = (): void => {
   if (!canSelfInstall) return;
   autoUpdater.downloadUpdate().catch((error) => {
-    updaterLog.error("下载更新失败", error);
+    updaterLog.error("Failed to download update", error);
     emit({ type: "error", message: error?.message ?? String(error), manual: true });
   });
 };
@@ -162,7 +162,7 @@ export const downloadUpdate = (): void => {
  */
 export const applyChannelChange = (previous: UpdateChannel, channel: UpdateChannel): void => {
   if (previous === channel) return;
-  updaterLog.info(`切换更新通道: ${previous} -> ${channel}`);
+  updaterLog.info(`Switched update channel: ${previous} -> ${channel}`);
   const channelPriority: Record<UpdateChannel, number> = { stable: 0, beta: 1, alpha: 2 };
   runCheck(true, channelPriority[channel] < channelPriority[previous]);
 };
@@ -190,7 +190,7 @@ export const initUpdater = (): void => {
   bindEvents();
   if (isDev) {
     autoUpdater.forceDevUpdateConfig = true;
-    updaterLog.info("开发模式，仅支持手动检查更新");
+    updaterLog.info("Development mode supports manual update checks only");
     return;
   }
   // 定时检查

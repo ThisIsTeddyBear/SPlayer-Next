@@ -151,7 +151,7 @@ impl UiaWatcher {
 
         let thread_id = tid_rx
             .recv()
-            .map_err(|error| anyhow!("获取线程 ID 失败: {error}"))?;
+            .map_err(|error| anyhow!("Failed to get the thread ID: {error}"))?;
 
         Ok(Self {
             thread_id: Some(thread_id),

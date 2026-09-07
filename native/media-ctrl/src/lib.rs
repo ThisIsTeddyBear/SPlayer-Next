@@ -23,18 +23,18 @@ use model::{
 #[napi]
 pub fn init_logger(log_dir: String, is_dev: bool) {
     logger::init_logger(&log_dir, is_dev);
-    info!(log_dir, is_dev, "media-ctrl 日志系统已初始化");
+    info!(log_dir, is_dev, "media-ctrl logging initialized");
 }
 
 /// 初始化系统媒体控件和 Discord RPC 后台线程
 #[napi]
 pub fn initialize() -> Result<()> {
-    info!("初始化系统媒体控件");
+    info!("Initializing system media controls");
     discord::init();
     sys_media::get_platform_controls()
         .initialize()
         .map_err(|e| {
-            error!(error = %e, "系统媒体控件初始化失败");
+            error!(error = %e, "Failed to initialize system media controls");
             napi::Error::from_reason(e.to_string())
         })?;
     Ok(())
@@ -43,7 +43,7 @@ pub fn initialize() -> Result<()> {
 /// 关闭并清理资源
 #[napi]
 pub fn shutdown() {
-    info!("关闭媒体控件和 Discord RPC");
+    info!("Shutting down media controls and Discord RPC");
     discord::shutdown();
     let _ = sys_media::get_platform_controls().shutdown();
 }
@@ -128,14 +128,14 @@ pub fn set_play_mode(param: PlayModeParam) {
 /// 启用 Discord RPC
 #[napi]
 pub fn enable_discord() {
-    info!("启用 Discord RPC");
+    info!("Enabling Discord RPC");
     discord::enable();
 }
 
 /// 禁用 Discord RPC
 #[napi]
 pub fn disable_discord() {
-    info!("禁用 Discord RPC");
+    info!("Disabling Discord RPC");
     discord::disable();
 }
 

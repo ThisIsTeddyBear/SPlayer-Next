@@ -91,12 +91,12 @@ impl ExclusiveConfig {
         source_bits_per_sample: u32,
     ) -> Result<Self> {
         if sample_rate == 0 || source_channels == 0 {
-            bail!("独占音频需要有效的采样率和声道数");
+            bail!("Exclusive audio requires a valid sample rate and channel count");
         }
 
         let device = open_device(device_id)?;
         let client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None) }
-            .context("激活独占音频设备失败")?;
+            .context("Failed to activate the exclusive audio device")?;
         let channels = candidate_channels(source_channels);
         let formats = candidate_formats(source_bits_per_sample);
 
@@ -124,7 +124,7 @@ impl ExclusiveConfig {
         }
 
         bail!(
-            "所选输出设备不支持 {} Hz 的独占播放格式；请关闭其他占用音频的应用，或选择支持该采样率的设备",
+            "The selected output device does not support exclusive playback at {} Hz. Close other applications using audio or select a device that supports this sample rate.",
             sample_rate
         )
     }
@@ -205,18 +205,18 @@ fn candidate_formats(source_bits_per_sample: u32) -> &'static [ExclusiveSampleFo
 fn open_device(device_id: Option<&str>) -> Result<IMMDevice> {
     let enumerator: IMMDeviceEnumerator =
         unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) }
-            .context("创建音频设备枚举器失败")?;
+            .context("Failed to create the audio device enumerator")?;
     match device_id {
         Some(device_id) => {
             let endpoint_id = device_id
                 .strip_prefix("wasapi:")
-                .context("独占音频仅支持 WASAPI 输出设备")?;
+                .context("Exclusive audio is supported only on WASAPI output devices")?;
             let wide_id: Vec<u16> = endpoint_id.encode_utf16().chain(Some(0)).collect();
             unsafe { enumerator.GetDevice(PCWSTR(wide_id.as_ptr())) }
-                .with_context(|| format!("输出设备 '{device_id}' 不存在"))
+                .with_context(|| format!("Output device '{device_id}' was not found"))
         }
         None => unsafe { enumerator.GetDefaultAudioEndpoint(eRender, eConsole) }
-            .context("没有可用的默认输出设备"),
+            .context("No default output device is available"),
     }
 }
 
@@ -226,7 +226,7 @@ impl ComApartmentGuard {
     fn init() -> Result<Self> {
         unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
             .ok()
-            .context("初始化独占音频 COM 线程失败")?;
+            .context("Failed to initialize the exclusive audio COM thread")?;
         Ok(Self)
     }
 }
@@ -272,7 +272,7 @@ impl ExclusiveStream {
         on_failure: OutputFailureCallback,
     ) -> Result<Self> {
         let control_event = unsafe { CreateEventW(None, false, false, PCWSTR::null()) }
-            .context("创建独占音频控制事件失败")?;
+            .context("Failed to create the exclusive audio control event")?;
         let control = Arc::new(StreamControl {
             playing: AtomicBool::new(false),
             stopped: AtomicBool::new(false),
@@ -297,7 +297,7 @@ impl ExclusiveStream {
                     }
                 }
             })
-            .context("启动独占音频输出线程失败")?;
+            .context("Failed to start the exclusive audio output thread")?;
 
         match ready_rx.recv() {
             Ok(Ok(())) => Ok(Self {
@@ -308,25 +308,25 @@ impl ExclusiveStream {
                 control.stopped.store(true, Ordering::Release);
                 let _ = unsafe { SetEvent(control.control_event) };
                 let _ = worker.join();
-                bail!("初始化独占音频输出失败: {error}")
+                bail!("Failed to initialize exclusive audio output: {error}")
             }
             Err(_) => {
                 control.stopped.store(true, Ordering::Release);
                 let _ = unsafe { SetEvent(control.control_event) };
                 let _ = worker.join();
-                bail!("独占音频输出线程在初始化前退出")
+                bail!("The exclusive audio output thread exited before initialization")
             }
         }
     }
 
     pub fn play(&self) -> Result<()> {
         self.control.playing.store(true, Ordering::Release);
-        unsafe { SetEvent(self.control.control_event) }.context("恢复独占音频输出失败")
+        unsafe { SetEvent(self.control.control_event) }.context("Failed to resume exclusive audio output")
     }
 
     pub fn pause(&self) -> Result<()> {
         self.control.playing.store(false, Ordering::Release);
-        unsafe { SetEvent(self.control.control_event) }.context("暂停独占音频输出失败")
+        unsafe { SetEvent(self.control.control_event) }.context("Failed to pause exclusive audio output")
     }
 
     pub fn stop(&self) {
@@ -356,13 +356,13 @@ fn run_stream(
     priority::boost_current_audio_thread("wasapi-exclusive-output");
     let device = open_device(config.device_id.as_deref())?;
     let client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None) }
-        .context("激活独占音频设备失败")?;
+        .context("Failed to activate the exclusive audio device")?;
     let wave_format = config.wave_format();
     let mut period_hns = 0;
     unsafe { client.GetDevicePeriod(Some(&mut period_hns), None) }
-        .context("读取独占音频设备周期失败")?;
+        .context("Failed to read the exclusive audio device period")?;
     if period_hns <= 0 {
-        bail!("独占音频设备返回了无效周期");
+        bail!("The exclusive audio device returned an invalid period");
     }
     unsafe {
         client.Initialize(
@@ -374,23 +374,23 @@ fn run_stream(
             None,
         )
     }
-    .context("设备拒绝独占音频输出")?;
+    .context("The device rejected exclusive audio output")?;
 
-    let buffer_frames = unsafe { client.GetBufferSize() }.context("读取独占音频缓冲区失败")?;
+    let buffer_frames = unsafe { client.GetBufferSize() }.context("Failed to read the exclusive audio buffer")?;
     let render_client: IAudioRenderClient =
-        unsafe { client.GetService() }.context("获取独占音频渲染接口失败")?;
+        unsafe { client.GetService() }.context("Failed to get the exclusive audio render interface")?;
     let audio_event = unsafe { CreateEventW(None, false, false, PCWSTR::null()) }
-        .context("创建独占音频事件失败")?;
+        .context("Failed to create the exclusive audio event")?;
     if let Err(error) = unsafe { client.SetEventHandle(audio_event) } {
         unsafe {
             let _ = CloseHandle(audio_event);
         }
-        return Err(error).context("设置独占音频事件失败");
+        return Err(error).context("Failed to set the exclusive audio event");
     }
 
     ready_tx
         .send(Ok(()))
-        .map_err(|_| anyhow::anyhow!("独占音频初始化结果接收端已关闭"))?;
+        .map_err(|_| anyhow::anyhow!("The exclusive audio initialization result receiver was closed"))?;
     run_loop(
         &client,
         &render_client,
@@ -450,7 +450,7 @@ fn run_loop(
                     source,
                     volume,
                 )?;
-                unsafe { client.Start() }.context("启动独占音频输出失败")?;
+                unsafe { client.Start() }.context("Failed to start exclusive audio output")?;
                 running = true;
             } else if !control.playing.load(Ordering::Acquire) && running {
                 stop_client(client)?;
@@ -474,13 +474,13 @@ fn run_loop(
         if wait == WAIT_TIMEOUT {
             continue;
         }
-        bail!("等待独占音频事件失败");
+        bail!("Failed while waiting for the exclusive audio event");
     }
 }
 
 fn stop_client(client: &IAudioClient) -> Result<()> {
-    unsafe { client.Stop() }.context("停止独占音频输出失败")?;
-    unsafe { client.Reset() }.context("重置独占音频缓冲区失败")
+    unsafe { client.Stop() }.context("Failed to stop exclusive audio output")?;
+    unsafe { client.Reset() }.context("Failed to reset the exclusive audio buffer")
 }
 
 fn write_buffer(
@@ -491,7 +491,7 @@ fn write_buffer(
     source: &mut DecoderSource,
     volume: &AtomicU32,
 ) -> Result<()> {
-    let buffer = unsafe { render_client.GetBuffer(frames) }.context("获取独占音频缓冲区失败")?;
+    let buffer = unsafe { render_client.GetBuffer(frames) }.context("Failed to get the exclusive audio buffer")?;
     let gain = f32::from_bits(volume.load(Ordering::Relaxed));
     let samples = match sample_format {
         ExclusiveSampleFormat::Pcm16 => {
@@ -544,7 +544,7 @@ fn write_buffer(
         }
     };
     debug_assert_eq!(samples, frames as usize * channels as usize);
-    unsafe { render_client.ReleaseBuffer(frames, 0) }.context("提交独占音频缓冲区失败")
+    unsafe { render_client.ReleaseBuffer(frames, 0) }.context("Failed to release the exclusive audio buffer")
 }
 
 fn to_i16(value: f32) -> i16 {

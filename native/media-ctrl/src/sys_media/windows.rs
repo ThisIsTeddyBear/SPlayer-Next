@@ -98,7 +98,7 @@ where
 {
     let mut guard = CTX
         .lock()
-        .map_err(|e| anyhow::anyhow!("SMTC 锁失败: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("SMTC lock failed: {e}"))?;
     if let Some(ctx) = guard.as_mut() {
         f(ctx)
     } else {

@@ -60,7 +60,7 @@ pub async fn make_image_thumbnail(data: Buffer, max_size: u32) -> Result<Buffer>
     let thumb =
         tokio::task::spawn_blocking(move || metadata::make_thumbnail_jpeg(&bytes, max_size))
             .await
-            .map_err(|e| Error::from_reason(format!("缩略图任务失败: {e}")))?
+            .map_err(|e| Error::from_reason(format!("Thumbnail task failed: {e}")))?
             .into_napi()?;
     Ok(thumb.into())
 }
@@ -70,7 +70,7 @@ pub async fn make_image_thumbnail(data: Buffer, max_size: u32) -> Result<Buffer>
 pub async fn read_track_tags(path: String) -> Result<JsTrackTags> {
     let tags = tokio::task::spawn_blocking(move || metadata::read_tags(&path))
         .await
-        .map_err(|e| Error::from_reason(format!("读取标签任务失败: {e}")))?
+        .map_err(|e| Error::from_reason(format!("Tag read task failed: {e}")))?
         .into_napi()?;
     Ok(JsTrackTags {
         title: tags.title,
@@ -127,7 +127,7 @@ pub async fn write_track_tags(
             .iter()
             .map(|request| {
                 if let Err(error) = metadata::write_tags(request) {
-                    warn!(path = %request.path, "标签写入失败: {error:#}");
+                    warn!(path = %request.path, "Failed to write tags: {error:#}");
                     return JsTagWriteResult {
                         path: request.path.clone(),
                         success: false,
@@ -142,7 +142,7 @@ pub async fn write_track_tags(
                             std::fs::remove_file(metadata::cover_thumb_path(&request.path, dir));
                     }
                 }
-                info!(path = %request.path, "标签写入成功");
+                info!(path = %request.path, "Tags written successfully");
                 JsTagWriteResult {
                     path: request.path.clone(),
                     success: true,
@@ -153,5 +153,5 @@ pub async fn write_track_tags(
             .collect()
     })
     .await
-    .map_err(|e| Error::from_reason(format!("标签写入任务失败: {e}")))
+    .map_err(|e| Error::from_reason(format!("Tag write task failed: {e}")))
 }

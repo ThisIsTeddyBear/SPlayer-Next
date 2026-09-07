@@ -303,7 +303,7 @@ async fn run_mpris_loop(
         .desktop_entry("top.imsyy.splayer_next")
         .build()
         .await
-        .map_err(|e| anyhow::anyhow!("MPRIS 初始化失败: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("Failed to initialize MPRIS: {e}"))?;
 
     setup_signals(&player, handler.clone());
 

@@ -96,7 +96,7 @@ const callApi = async <T>(
   if (!response.ok) throw new Error(`${endpoint}: HTTP ${response.status}`);
   const body = (await response.json()) as { "subsonic-response"?: Record<string, unknown> };
   const result = body["subsonic-response"];
-  if (!result) throw new Error("响应缺少 subsonic-response 包装");
+  if (!result) throw new Error("Response is missing the subsonic-response wrapper");
   if (result.status !== "ok") {
     const error = result.error as { code?: number; message?: string } | undefined;
     throw new Error(error?.message ?? `Subsonic error code ${error?.code}`);

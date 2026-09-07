@@ -176,6 +176,6 @@ pub fn scan_dirs(
 pub fn cancel_scan() {
     if let Some(cancel) = SCAN_CANCEL.lock().as_ref() {
         cancel.store(true, Ordering::Release);
-        info!("已发送扫描取消信号");
+        info!("Scan cancellation signal sent");
     }
 }

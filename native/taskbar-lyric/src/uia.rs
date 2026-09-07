@@ -36,11 +36,11 @@ pub struct TaskbarContentBounds {
 
 impl TaskbarScanner {
     pub fn new() -> Result<Self> {
-        let com_guard = ComApartmentGuard::try_init().context("COM 初始化失败")?;
+        let com_guard = ComApartmentGuard::try_init().context("Failed to initialize COM")?;
         // SAFETY: CoCreateInstance 在 apartment 内调用，自动化对象由 guard 生命周期覆盖
         let automation = unsafe {
             CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)
-                .context("无法创建 UIAutomation 实例")?
+                .context("Could not create a UIAutomation instance")?
         };
         Ok(Self {
             automation,
@@ -122,6 +122,6 @@ impl TaskbarScanner {
             }
         }
 
-        bail!("未找到有效的任务栏图标区域")
+        bail!("No valid taskbar icon area was found")
     }
 }

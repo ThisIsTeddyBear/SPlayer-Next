@@ -75,7 +75,6 @@ const filenameFor = (cacheKey: string): string => {
   return `${hash}.bin`;
 };
 
- */
 const absPath = (filename: string): string => path.join(cacheDir, filename);
 
 /**

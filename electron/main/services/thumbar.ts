@@ -108,18 +108,18 @@ class ThumbarImpl implements Thumbar {
 
     if (success) {
       this.hasRegistered = true;
-      if (retryCount > 0) thumbarLog.info(`Thumbar 第 ${retryCount} 次重试后注册成功`);
+      if (retryCount > 0) thumbarLog.info(`Thumbar registered after retry ${retryCount}`);
     }
 
     // 未注册成功进行重试
     if (!success && !this.hasRegistered && retryCount < REGISTER_RETRY_MAX) {
-      thumbarLog.warn(`Thumbar 注册失败，准备进行第 ${retryCount + 1} 次重试...`);
+      thumbarLog.warn(`Thumbar registration failed; preparing retry ${retryCount + 1}...`);
       this.retryTimeout = setTimeout(
         () => this.renderButtons(retryCount + 1),
         REGISTER_RETRY_DELAY_MS,
       );
     } else if (!success) {
-      thumbarLog.warn("Thumbar 注册失败，已达到重试上限");
+      thumbarLog.warn("Thumbar registration failed; retry limit reached");
     }
   }
 
@@ -155,11 +155,11 @@ class ThumbarImpl implements Thumbar {
 export const initThumbar = (win: BrowserWindow): Thumbar | null => {
   if (process.platform !== "win32") return null;
   try {
-    thumbarLog.info("初始化缩略图工具栏");
+    thumbarLog.info("Initializing thumbnail toolbar");
     thumbar = new ThumbarImpl(win);
     return thumbar;
   } catch (error) {
-    thumbarLog.error("初始化失败:", error);
+    thumbarLog.error("Initialization failed:", error);
     return null;
   }
 };

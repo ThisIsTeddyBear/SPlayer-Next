@@ -12,12 +12,14 @@ use crate::decoder;
 use crate::error::{AudioErrorKind, AudioResultExt};
 use crate::source::DecoderSource;
 
+#[cfg(target_os = "windows")]
 mod exclusive;
 
 pub type OutputFailureCallback = Arc<dyn Fn() + Send + Sync + 'static>;
 
 pub enum OutputStream {
     Shared(cpal::Stream),
+    #[cfg(target_os = "windows")]
     Exclusive(exclusive::ExclusiveStream),
 }
 
@@ -25,6 +27,7 @@ impl OutputStream {
     pub fn play(&self) -> Result<()> {
         match self {
             Self::Shared(stream) => stream.play().map_err(Into::into),
+            #[cfg(target_os = "windows")]
             Self::Exclusive(stream) => stream.play(),
         }
     }
@@ -32,11 +35,13 @@ impl OutputStream {
     pub fn pause(&self) -> Result<()> {
         match self {
             Self::Shared(stream) => stream.pause().map_err(Into::into),
+            #[cfg(target_os = "windows")]
             Self::Exclusive(stream) => stream.pause(),
         }
     }
 
     pub fn stop(&self) {
+        #[cfg(target_os = "windows")]
         if let Self::Exclusive(stream) = self {
             stream.stop();
         }
@@ -48,6 +53,7 @@ enum OutputBackend {
         device: cpal::Device,
         config: SupportedStreamConfig,
     },
+    #[cfg(target_os = "windows")]
     Exclusive(exclusive::ExclusiveConfig),
 }
 
@@ -72,6 +78,7 @@ impl AudioOutput {
         generation: u64,
         on_failure: OutputFailureCallback,
     ) -> Result<Self> {
+        #[cfg(target_os = "windows")]
         if exclusive_audio {
             let device_id = device_id.map(str::to_owned);
             let config_device_id = device_id.clone();
@@ -97,6 +104,7 @@ impl AudioOutput {
                 on_failure,
             });
         }
+        #[cfg(not(target_os = "windows"))]
         let _ = exclusive_audio;
 
         let (device, config) = open_device(device_id, requested_sample_rate)
@@ -117,6 +125,7 @@ impl AudioOutput {
     pub fn sample_rate(&self) -> u32 {
         match &self.backend {
             OutputBackend::Shared { config, .. } => config.sample_rate(),
+            #[cfg(target_os = "windows")]
             OutputBackend::Exclusive(config) => config.sample_rate(),
         }
     }
@@ -124,6 +133,7 @@ impl AudioOutput {
     pub fn channels(&self) -> u16 {
         match &self.backend {
             OutputBackend::Shared { config, .. } => config.channels(),
+            #[cfg(target_os = "windows")]
             OutputBackend::Exclusive(config) => config.channels(),
         }
     }
@@ -147,6 +157,7 @@ impl AudioOutput {
                 })
                 .with_audio_kind(AudioErrorKind::Device)
             }
+            #[cfg(target_os = "windows")]
             OutputBackend::Exclusive(config) => exclusive::ExclusiveStream::new(
                 config.clone(),
                 source,
@@ -162,11 +173,11 @@ impl AudioOutput {
 
 impl Drop for AudioOutput {
     fn drop(&mut self) {
-        debug!(generation = self.generation, "释放音频输出配置");
+        debug!(generation = self.generation, "Releasing audio output configuration");
     }
 }
 
-///
+#[cfg(target_os = "windows")]
 mod mta {
     use std::panic::{catch_unwind, AssertUnwindSafe};
     use std::sync::mpsc::{channel, sync_channel, SyncSender};
@@ -196,7 +207,7 @@ mod mta {
                     .map(|_| job_tx)
             })
             .as_ref()
-            .ok_or_else(|| anyhow!("启动 MTA 线程失败"))
+            .ok_or_else(|| anyhow!("Failed to start the MTA thread"))
     }
 
     pub(super) fn run<T: Send + 'static>(
@@ -207,13 +218,15 @@ mod mta {
             .send(Box::new(move || {
                 let _ = result_tx.send(f());
             }))
-            .map_err(|_| anyhow!("MTA 线程已退出"))?;
-        result_rx.recv().map_err(|_| anyhow!("MTA 线程发生 panic"))?
+            .map_err(|_| anyhow!("The MTA thread has exited"))?;
+        result_rx.recv().map_err(|_| anyhow!("The MTA thread panicked"))?
     }
 }
 
+#[cfg(target_os = "windows")]
 use mta::run as run_in_mta;
 
+#[cfg(not(target_os = "windows"))]
 fn run_in_mta<T, F: FnOnce() -> Result<T>>(f: F) -> Result<T> {
     f()
 }
@@ -299,22 +312,24 @@ fn open_device_internal(
     let host = cpal::default_host();
     let device = match device_id {
         Some(selector) => {
-            find_device(&host, selector).with_context(|| format!("输出设备 '{selector}' 不存在"))?
+            find_device(&host, selector).with_context(|| format!("Output device '{selector}' was not found"))?
         }
         None => {
-            let default = host.default_output_device().context("没有可用的输出设备")?;
-            let default_id = device_id_string(&default).context("读取默认输出设备 ID 失败")?;
-            find_device(&host, &default_id).context("解析默认输出设备端点失败")?
+            let default = host.default_output_device().context("No output device is available")?;
+            let default_id = device_id_string(&default).context("Failed to read the default output device ID")?;
+            find_device(&host, &default_id).context("Failed to resolve the default output device endpoint")?
         }
     };
     let default_config = device
         .default_output_config()
-        .context("读取输出设备配置失败")?;
+        .context("Failed to read the output device configuration")?;
+    #[cfg(target_os = "windows")]
     {
         let _ = requested_sample_rate;
         Ok((device, default_config))
     }
 
+    #[cfg(not(target_os = "windows"))]
     {
         let config = match requested_sample_rate {
             Some(rate) => {
@@ -400,7 +415,7 @@ fn build_typed_stream_for_format(
         SampleFormat::U64 => build!(u64),
         SampleFormat::F32 => build!(f32),
         SampleFormat::F64 => build!(f64),
-        _ => Err(anyhow!("不支持的输出样本格式: {sample_format}")),
+        _ => Err(anyhow!("Unsupported output sample format: {sample_format}")),
     }
 }
 
@@ -424,6 +439,7 @@ where
                 return;
             }
             for output in data {
+                *output = T::from_sample(source.next().unwrap_or(0.0) * gain);
             }
         },
         move |error| {
@@ -431,9 +447,9 @@ where
             let invalidated =
                 err_msg.contains("no longer valid") || err_msg.contains("-2004287484");
             if invalidated {
-                info!("音频输出流因设备切换失效，准备重建");
+                info!("Audio output stream became invalid after a device change; rebuilding");
             } else {
-                warn!(%error, "音频输出流失败");
+                warn!(%error, "Audio output stream failed");
             }
             on_failure();
         },
@@ -461,12 +477,12 @@ mod tests {
     #[test]
     fn keeps_real_devices_in_the_selectable_list() {
         assert!(!is_synthetic_default_device("Built-in Audio Analog Stereo"));
-        assert!(!is_synthetic_default_device("扬声器 (Realtek(R) Audio)"));
+        assert!(!is_synthetic_default_device("Speakers (Realtek(R) Audio)"));
     }
 
     #[test]
     fn legacy_display_names_do_not_parse_as_device_ids() {
-        assert!("扬声器 (Realtek(R) Audio)"
+        assert!("Speakers (Realtek(R) Audio)"
             .parse::<cpal::DeviceId>()
             .is_err());
         assert!("Built-in Audio Analog Stereo"

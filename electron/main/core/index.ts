@@ -66,7 +66,7 @@ const logProcessMemory = (): void => {
     const label = detail ? `${metric.type}(${detail})` : metric.type;
     return `${label} ${mb}MB`;
   });
-  coreLog.info(`内存占用: ${parts.join(" | ")}`);
+  coreLog.info(`Memory usage: ${parts.join(" | ")}`);
 };
 
 /**
@@ -153,7 +153,7 @@ export const initApp = (): void => {
       }
       if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
     });
-    coreLog.info("应用初始化完成");
+    coreLog.info("Application initialization complete");
   });
   // 所有窗口关闭时退出应用
   app.on("window-all-closed", () => {
@@ -163,7 +163,7 @@ export const initApp = (): void => {
   });
   // 退出前清理
   app.on("before-quit", () => {
-    coreLog.info("应用即将退出，清理资源");
+    coreLog.info("Application is about to exit; cleaning up resources");
     shutdownMedia();
     closeDatabase();
     void stopServer();

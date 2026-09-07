@@ -36,6 +36,6 @@ pub fn init_logger(log_dir: String, is_dev: bool) {
     INIT.call_once(|| {
         crate::logger::init_logger(&log_dir, is_dev);
         ffmpeg_audio::log::set_log_level(ffmpeg_audio::sys::LogLevel::Fatal);
-        info!(log_dir, is_dev, "audio-engine 日志系统已初始化");
+        info!(log_dir, is_dev, "audio-engine logging initialized");
     });
 }

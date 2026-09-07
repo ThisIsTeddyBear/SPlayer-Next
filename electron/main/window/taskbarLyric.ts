@@ -196,7 +196,7 @@ const tryStart = <T>(name: string, factory: () => T): T | null => {
   try {
     return factory();
   } catch (error) {
-    taskbarLog.warn(`${name} 启动失败`, error);
+      taskbarLog.warn(`${name} failed to start`, error);
     return null;
   }
 };
@@ -228,7 +228,7 @@ const stopLayoutWatchers = (): void => {
 /**
  */
 const onExplorerRestart = (): void => {
-  taskbarLog.info("探测到 explorer 重启，重建 watcher 与嵌入");
+    taskbarLog.info("Explorer restarted; rebuilding the watcher and window embedding");
   stopLayoutWatchers();
   service?.reinit();
   if (nativeModule) startWatchers(nativeModule);
@@ -236,7 +236,7 @@ const onExplorerRestart = (): void => {
 
 export const createTaskbarLyricWindow = (): BrowserWindow | null => {
   if (process.platform !== "win32") {
-    taskbarLog.warn("任务栏歌词仅支持 Windows");
+    taskbarLog.warn("Taskbar lyrics are supported on Windows only");
     return null;
   }
 
@@ -248,7 +248,7 @@ export const createTaskbarLyricWindow = (): BrowserWindow | null => {
   if (!nativeModule) {
     nativeModule = loadNativeModule<TaskbarLyricNative>("taskbar-lyric.node", "taskbar-lyric");
     if (!nativeModule) {
-      taskbarLog.error("原生模块加载失败");
+    taskbarLog.error("Failed to load the native module");
       return null;
     }
   }
@@ -296,12 +296,12 @@ export const createTaskbarLyricWindow = (): BrowserWindow | null => {
     const hwndPtrBigInt = win.getNativeWindowHandle().readBigUInt64LE(0);
     if (hwndPtrBigInt > BigInt(Number.MAX_SAFE_INTEGER)) {
       taskbarLog.error(
-        `嵌入窗口失败：hwnd=${hwndPtrBigInt.toString()} 超出 JS Number 安全整数范围`,
+      `Failed to embed window: hwnd=${hwndPtrBigInt.toString()} exceeds JavaScript's safe integer range`,
       );
       return;
     }
     const hwndPtr = Number(hwndPtrBigInt);
-    taskbarLog.info(`嵌入窗口 hwnd=${hwndPtr}`);
+  taskbarLog.info(`Embedded window hwnd=${hwndPtr}`);
     svc.embedWindowByPtr(hwndPtr);
     svc.update(resolveLyricWidth());
     startWatchers(mod);

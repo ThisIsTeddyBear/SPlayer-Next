@@ -91,7 +91,7 @@ export const useStreamingStore = defineStore("streaming", () => {
    */
   const runConnect = async (id: string, isActive: () => boolean): Promise<ConnectResult> => {
     const cfg = servers.value.find((s) => s.id === id);
-    if (!cfg) return { ok: false, error: "找不到服务器配置", code: "unknown" };
+    if (!cfg) return { ok: false, error: "Server configuration was not found", code: "unknown" };
     const writeStatus = (next: typeof connectionStatus.value): void => {
       if (isActive()) connectionStatus.value = next;
     };
@@ -180,44 +180,44 @@ export const useStreamingStore = defineStore("streaming", () => {
   const fetchAlbumSongs = (albumId: string): Promise<Track[]> =>
     activeServerId.value
       ? window.api.streaming.getAlbumSongs(activeServerId.value, albumId)
-      : Promise.reject(new Error("没有激活的流媒体服务器"));
+      : Promise.reject(new Error("No streaming server is active"));
 
   /**
    */
   const fetchPlaylistSongs = (playlistId: string): Promise<Track[]> =>
     activeServerId.value
       ? window.api.streaming.getPlaylistSongs(activeServerId.value, playlistId)
-      : Promise.reject(new Error("没有激活的流媒体服务器"));
+      : Promise.reject(new Error("No streaming server is active"));
 
   /**
    */
   const fetchArtistAlbums = (artistId: string): Promise<Album[]> =>
     activeServerId.value
       ? window.api.streaming.getArtistAlbums(activeServerId.value, artistId)
-      : Promise.reject(new Error("没有激活的流媒体服务器"));
+      : Promise.reject(new Error("No streaming server is active"));
 
   /**
    */
   const fetchArtistSongs = (artistId: string): Promise<Track[]> =>
     activeServerId.value
       ? window.api.streaming.getArtistSongs(activeServerId.value, artistId)
-      : Promise.reject(new Error("没有激活的流媒体服务器"));
+      : Promise.reject(new Error("No streaming server is active"));
 
   /**
    */
   const search = (query: string): Promise<StreamingSearchResult> =>
     activeServerId.value
       ? window.api.streaming.search(activeServerId.value, query)
-      : Promise.reject(new Error("没有激活的流媒体服务器"));
+      : Promise.reject(new Error("No streaming server is active"));
 
   /**
    */
   const getStreamUrl = async (track: Track, opts?: { playSessionId?: string }): Promise<string> => {
     if (track.source !== "streaming" || !track.serverId || !track.originalId) {
-      throw new Error("非流媒体 Track");
+      throw new Error("Track is not from a streaming server");
     }
     const cfg = servers.value.find((server) => server.id === track.serverId);
-    if (!cfg) throw new Error("找不到服务器配置");
+    if (!cfg) throw new Error("Server configuration was not found");
     if (cfg.id === activeServerId.value && !connectionStatus.value.connected) {
       const result = await runConnect(cfg.id, () => cfg.id === activeServerId.value);
       if (!result.ok) throw new Error(result.error);

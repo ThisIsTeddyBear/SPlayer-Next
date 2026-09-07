@@ -35,7 +35,7 @@ export const registerPluginIpc = (): void => {
   // 注意：不要把主窗口作为 parent 传入，frameless 窗口 + 模态对话框会在 Windows 上卡死主窗
   ipcMain.handle("plugin:pickAndInstall", async () => {
     const res = await dialog.showOpenDialog({
-      title: "选择插件脚本",
+      title: "Select plugin script",
       filters: [{ name: "Plugin Script", extensions: ["js"] }],
       properties: ["openFile"],
     });

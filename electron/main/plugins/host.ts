@@ -34,7 +34,7 @@ export const dispatchHostCall = async (
       });
     }
     if (method.startsWith("player.") && !grant.includes("control")) {
-      coreLog.warn(`[plugin:${pluginId}] 缺少 "control" 权限，拒绝调用 ${method}`);
+      coreLog.warn(`[plugin:${pluginId}] lacks the "control" permission; rejecting ${method}`);
       throw Object.assign(new Error(`plugin "${pluginId}" lacks "control" grant`), {
         code: PluginErrorCodes.PERMISSION_DENIED,
       });

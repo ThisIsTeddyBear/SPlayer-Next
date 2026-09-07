@@ -64,7 +64,7 @@ const pushCover = (cover: Buffer | string | null): void => {
     // Windows 上 toBitmap 返回 BGRA，正好对应 DWM 的 32bpp DIBSection
     native.setCover(resized.toBitmap(), width, height);
   } catch (error) {
-    nativeLog.warn("更新任务栏缩略图封面失败", error);
+    nativeLog.warn("Failed to update taskbar thumbnail cover", error);
   }
 };
 
@@ -85,7 +85,7 @@ export const enableTaskbarThumbnail = (win: BrowserWindow): void => {
   if (ptr === null) return;
   enabled = mod.enable(ptr);
   if (enabled) {
-    nativeLog.debug("任务栏缩略图自定义已启用");
+    nativeLog.debug("Custom taskbar thumbnails enabled");
     // 无歌曲时先显示默认封面，避免空白
     pushCover(lastCover);
   }
@@ -96,7 +96,7 @@ export const disableTaskbarThumbnail = (): void => {
   if (!isWin || !enabled || !native) return;
   native.disable();
   enabled = false;
-  nativeLog.debug("任务栏缩略图自定义已关闭");
+  nativeLog.debug("Custom taskbar thumbnails disabled");
 };
 
 /**

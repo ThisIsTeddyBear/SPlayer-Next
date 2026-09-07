@@ -8,7 +8,7 @@ mod imp {
     pub fn boost_current_audio_thread(name: &str) {
         unsafe {
             if let Err(err) = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST) {
-                warn!(thread = name, error = %err, "设置音频线程优先级失败");
+                warn!(thread = name, error = %err, "Failed to set audio thread priority");
             }
         }
     }

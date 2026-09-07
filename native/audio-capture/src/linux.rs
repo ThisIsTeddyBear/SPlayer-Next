@@ -67,7 +67,7 @@ impl CaptureBackend for LinuxBackend {
             .ok_or_else(|| BackendError::CaptureFailed("创建连接上下文失败".into()))?;
         context
             .connect(None, ContextFlagSet::NOFLAGS, None)
-            .map_err(|e| BackendError::CaptureFailed(format!("连接 PulseAudio 失败: {e}")))?;
+            .map_err(|e| BackendError::CaptureFailed(format!("Failed to connect to PulseAudio: {e}")))?;
         wait_context_ready(&mut mainloop, &mut context)?;
 
         let device: Option<String> = match self.source {
@@ -91,7 +91,7 @@ impl CaptureBackend for LinuxBackend {
         };
         stream
             .connect_record(device.as_deref(), Some(&attr), StreamFlagSet::NOFLAGS)
-            .map_err(|e| BackendError::CaptureFailed(format!("连接采集源失败: {e}")))?;
+            .map_err(|e| BackendError::CaptureFailed(format!("Failed to connect the capture source: {e}")))?;
         wait_stream_ready(&mut mainloop, &stream)?;
 
         let deadline = Instant::now() + Duration::from_millis(self.duration_ms as u64);
@@ -162,13 +162,13 @@ pub fn open_backend(
 fn pump(mainloop: &mut Mainloop) -> Result<(), BackendError> {
     mainloop
         .prepare(Some(MicroSeconds(POLL_TIMEOUT_US)))
-        .map_err(|e| BackendError::CaptureFailed(format!("准备主循环失败: {e}")))?;
+        .map_err(|e| BackendError::CaptureFailed(format!("Failed to prepare the main loop: {e}")))?;
     mainloop
         .poll()
-        .map_err(|e| BackendError::CaptureFailed(format!("主循环 poll 失败: {e}")))?;
+        .map_err(|e| BackendError::CaptureFailed(format!("Main loop polling failed: {e}")))?;
     mainloop
         .dispatch()
-        .map_err(|e| BackendError::CaptureFailed(format!("主循环 dispatch 失败: {e}")))?;
+        .map_err(|e| BackendError::CaptureFailed(format!("Main loop dispatch failed: {e}")))?;
     Ok(())
 }
 

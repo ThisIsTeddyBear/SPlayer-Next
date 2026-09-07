@@ -24,7 +24,7 @@ const safeCall = (fn: () => void): void => {
   try {
     fn();
   } catch (error) {
-    mediaLog.error("media-ctrl 调用失败:", error);
+    mediaLog.error("media-ctrl call failed:", error);
   }
 };
 
@@ -47,7 +47,7 @@ const applyDiscordConfig = (discord?: DiscordSettings): void => {
 export const init = (): void => {
   mc = loadNativeModule<MediaCtrlModule>("media-ctrl.node", "media-ctrl");
   if (!mc) {
-    mediaLog.warn("media-ctrl 模块未找到，媒体集成不可用");
+  mediaLog.warn("media-ctrl module was not found; media integration is unavailable");
     return;
   }
 
@@ -62,9 +62,9 @@ export const init = (): void => {
       mc.enable();
     }
     applyDiscordConfig(mediaConfig.discord);
-    mediaLog.info("系统媒体控件已初始化");
+    mediaLog.info("System media controls initialized");
   } catch (error) {
-    mediaLog.error("初始化失败:", error);
+    mediaLog.error("Initialization failed:", error);
   }
 };
 

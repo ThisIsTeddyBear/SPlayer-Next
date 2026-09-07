@@ -29,12 +29,12 @@ const handleCover = async (request: Request): Promise<Response> => {
       return new Response(null, { status: 204 });
     }
     if (!response.ok) {
-      streamingLog.warn(`流媒体封面请求失败: HTTP ${response.status}`);
+      streamingLog.warn(`Streaming cover request failed: HTTP ${response.status}`);
       return new Response(null, { status: 502 });
     }
     return response;
   } catch (error) {
-    streamingLog.warn("流媒体封面加载失败:", error);
+    streamingLog.warn("Failed to load streaming cover:", error);
     return new Response(null, { status: 502 });
   }
 };

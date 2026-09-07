@@ -468,7 +468,7 @@ class PluginRegistry extends EventEmitter {
       onRegistered: ({ events, controls, settings, menus: declaredMenus }) => {
         const menus = rt.manifest.grant.includes("ui") ? declaredMenus : [];
         if (declaredMenus.length && !menus.length) {
-          coreLog.warn(`[plugin:${id}] 声明了菜单但缺少 "ui" 权限，已忽略`);
+          coreLog.warn(`[plugin:${id}] declared a menu but lacks the "ui" permission; ignored`);
         }
         rt.events = events;
         rt.controls = controls;
@@ -523,7 +523,7 @@ class PluginRegistry extends EventEmitter {
     }
     for (const rt of enabled) this.setStatus(rt, { state: "loading" });
     const delayMs = [2_000, 8_000, 30_000][this.hostRestartAttempts - 1] ?? 30_000;
-    coreLog.warn(`[plugin] host 丢失，${delayMs}ms 后重载 ${enabled.length} 个插件`);
+    coreLog.warn(`[plugin] host lost; reloading ${enabled.length} plugins in ${delayMs}ms`);
     this.hostRestartTimer = setTimeout(() => {
       this.hostRestartTimer = null;
       for (const rt of enabled) {

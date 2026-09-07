@@ -98,7 +98,7 @@ pub(crate) fn take_valid_hwnd(hwnd_ptr: usize) -> Option<HWND> {
     if unsafe { IsWindow(Some(hwnd)) }.as_bool() {
         Some(hwnd)
     } else {
-        warn!("无效 HWND (0x{hwnd_ptr:x})，跳过");
+        warn!("Skipping invalid HWND (0x{hwnd_ptr:x})");
         None
     }
 }

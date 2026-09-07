@@ -117,7 +117,7 @@ export const registerLibraryIpc = (): void => {
       startScan(dirs, incremental ?? true);
       return { success: true };
     } catch (error) {
-      libraryLog.error("启动扫描失败:", error);
+      libraryLog.error("Failed to start scan:", error);
       return { success: false, error: ErrorCode.UNKNOWN };
     }
   });
@@ -228,7 +228,7 @@ export const registerLibraryIpc = (): void => {
       }
       return { success: true, data };
     } catch (error) {
-      libraryLog.error("搜索本地歌词失败:", error);
+      libraryLog.error("Failed to search local lyrics:", error);
       return { success: false, error: ErrorCode.UNKNOWN };
     }
   });
@@ -268,7 +268,7 @@ export const registerLibraryIpc = (): void => {
   // 弹出目录选择器，添加扫描目录
   ipcMain.handle("library:addScanDir", async () => {
     const result = await dialog.showOpenDialog({
-      title: "选择音乐文件夹",
+      title: "Select music folder",
       properties: ["openDirectory"],
     });
     if (result.canceled || result.filePaths.length === 0) {
@@ -281,7 +281,7 @@ export const registerLibraryIpc = (): void => {
     }
     dirs.push(dir);
     store.set("library.scanDirs", dirs);
-    libraryLog.info(`添加扫描目录: ${dir}`);
+    libraryLog.info(`Added scan directory: ${dir}`);
     return { success: true, data: dir };
   });
 
@@ -298,7 +298,7 @@ export const registerLibraryIpc = (): void => {
       // 正在扫描时必须先取消
       if (isScanning()) cancelScan();
       deleteTracksByDir(dir);
-      libraryLog.info(`移除扫描目录: ${dir}`);
+      libraryLog.info(`Removed scan directory: ${dir}`);
       return { success: true };
     } catch (_error) {
       return { success: false, error: ErrorCode.UNKNOWN };
@@ -316,7 +316,7 @@ export const registerLibraryIpc = (): void => {
       const tags = await getEngine().readTrackTags(path);
       return { success: true, data: tags };
     } catch (error) {
-      libraryLog.error(`读取标签失败 [${path}]:`, error);
+      libraryLog.error(`Failed to read tags [${path}]:`, error);
       return { success: false, error: ErrorCode.TAG_READ_FAILED };
     }
   });
@@ -334,7 +334,7 @@ export const registerLibraryIpc = (): void => {
           cover = await fs.readFile(coverPath);
         } else if (coverUrl) {
           cover = (await fetchBytes(coverUrl, { requireImage: true })) ?? undefined;
-          if (!cover) libraryLog.warn(`封面下载失败，跳过封面只写文本: ${coverUrl}`);
+          if (!cover) libraryLog.warn(`Cover download failed; writing text only: ${coverUrl}`);
         }
         if (cover) replacedCovers.add(edit.path);
         requests.push({ ...fields, cover });
@@ -360,10 +360,10 @@ export const registerLibraryIpc = (): void => {
         error: r.error ?? undefined,
         track: byPath.get(r.path),
       }));
-      libraryLog.info(`标签写入完成: ${upserts.length}/${results.length} 成功`);
+      libraryLog.info(`Tag write complete: ${upserts.length}/${results.length} succeeded`);
       return { success: true, data };
     } catch (error) {
-      libraryLog.error("写入标签失败:", error);
+      libraryLog.error("Failed to write tags:", error);
       return { success: false, error: ErrorCode.TAG_WRITE_FAILED };
     }
   });
@@ -371,7 +371,7 @@ export const registerLibraryIpc = (): void => {
   // 弹出文件选择器，选择封面图片，返回路径与预览 dataUrl
   ipcMain.handle("library:pickCoverImage", async () => {
     const result = await dialog.showOpenDialog({
-      title: "选择封面图片",
+      title: "Select cover image",
       properties: ["openFile"],
       filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png"] }],
     });
@@ -391,7 +391,7 @@ export const registerLibraryIpc = (): void => {
       const dataUrl = `data:image/jpeg;base64,${Buffer.from(thumb).toString("base64")}`;
       return { success: true, data: { path: coverPath, dataUrl } };
     } catch (error) {
-      libraryLog.error("读取封面图片失败:", error);
+      libraryLog.error("Failed to read cover image:", error);
       return { success: false, error: ErrorCode.TAG_WRITE_FAILED };
     }
   });
@@ -411,10 +411,10 @@ export const registerLibraryIpc = (): void => {
       if (deleted.length > 0) {
         deleteTracksByPaths(deleted);
       }
-      libraryLog.info(`删除 ${deleted.length} 个文件，${failed.length} 个失败`);
+      libraryLog.info(`Deleted ${deleted.length} files; ${failed.length} failed`);
       return { success: true, data: { deleted: deleted.length, failed: failed.length } };
     } catch (error) {
-      libraryLog.error("批量删除文件失败:", error);
+      libraryLog.error("Failed to delete files in bulk:", error);
       return { success: false, error: ErrorCode.UNKNOWN };
     }
   });

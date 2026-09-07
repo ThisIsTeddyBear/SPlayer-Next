@@ -86,7 +86,7 @@ fn register_property(
         )
     };
     if status != kAudioHardwareNoError {
-        return Err(anyhow!("注册 CoreAudio 属性监听失败: {status}"));
+        return Err(anyhow!("Failed to register CoreAudio property listener: {status}"));
     }
     Ok(PropertyRegistration { object_id, address })
 }
@@ -101,7 +101,7 @@ fn unregister_property(registration: PropertyRegistration, context_id: usize) {
         )
     };
     if status != kAudioHardwareNoError {
-        tracing::warn!(status, "移除 CoreAudio 属性监听失败");
+        tracing::warn!(status, "Failed to remove CoreAudio property listener");
     }
 }
 
@@ -122,7 +122,7 @@ fn audio_device_ids() -> Result<Vec<AudioDeviceID>> {
         )
     };
     if status != kAudioHardwareNoError {
-        return Err(anyhow!("读取 CoreAudio 设备列表大小失败: {status}"));
+        return Err(anyhow!("Failed to read CoreAudio device list size: {status}"));
     }
 
     let device_count = data_size as usize / mem::size_of::<AudioDeviceID>();
@@ -138,7 +138,7 @@ fn audio_device_ids() -> Result<Vec<AudioDeviceID>> {
         )
     };
     if status != kAudioHardwareNoError {
-        return Err(anyhow!("读取 CoreAudio 设备列表失败: {status}"));
+        return Err(anyhow!("Failed to read CoreAudio device list: {status}"));
     }
     devices.truncate(data_size as usize / mem::size_of::<AudioDeviceID>());
     Ok(devices)
@@ -243,7 +243,7 @@ impl PlatformBackend for Backend {
         let context_id = std::ptr::from_ref(context.as_ref()) as usize;
         callbacks()
             .lock()
-            .map_err(|_| anyhow!("CoreAudio 回调注册表已损坏"))?
+            .map_err(|_| anyhow!("CoreAudio callback registry is corrupted"))?
             .insert(context_id, command_tx.clone());
 
         let thread = thread::Builder::new()
@@ -312,7 +312,7 @@ impl PlatformBackend for Backend {
             })
             .map_err(|error| {
                 remove_callback(context_id);
-                anyhow!("启动 CoreAudio 设备监听线程失败: {error}")
+                anyhow!("Failed to start the CoreAudio device watcher thread: {error}")
             })?;
 
         match ready_rx.recv() {
@@ -326,7 +326,7 @@ impl PlatformBackend for Backend {
             }
             Err(error) => {
                 let _ = thread.join();
-                Err(anyhow!("CoreAudio 设备监听线程提前退出: {error}"))
+                Err(anyhow!("CoreAudio device watcher thread exited unexpectedly: {error}"))
             }
         }
     }

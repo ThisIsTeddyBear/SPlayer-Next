@@ -8,7 +8,7 @@ impl PlatformBackend for Backend {
     const SUPPORTED: bool = false;
 
     fn new(_callback: DeviceChangedCallback) -> Result<Self> {
-        Err(anyhow!("当前平台不支持原生音频设备监听"))
+        Err(anyhow!("Native audio device watching is not supported on this platform"))
     }
 
     fn stop(&mut self) {}

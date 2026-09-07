@@ -9,16 +9,19 @@ use crate::JsCaptureEvent;
 
 pub type CaptureEmitter = Arc<dyn Fn(JsCaptureEvent) + Send + Sync>;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum CaptureSource {
     System,
     Microphone,
 }
 
+#[derive(Clone)]
 pub struct CaptureConfig {
     pub source: CaptureSource,
     pub duration_ms: u32,
 }
 
+#[derive(Debug)]
 pub enum BackendError {
     #[allow(dead_code)]
     Unsupported,
@@ -31,9 +34,9 @@ pub enum BackendError {
 impl fmt::Display for BackendError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Unsupported => write!(f, "当前平台不支持本机采集"),
-            Self::NoDevice => write!(f, "未找到可用的音频设备"),
-            Self::PermissionDenied => write!(f, "缺少音频采集权限"),
+            Self::Unsupported => write!(f, "Native audio capture is not supported on this platform"),
+            Self::NoDevice => write!(f, "No audio capture device is available"),
+            Self::PermissionDenied => write!(f, "Audio capture permission is required"),
             Self::CaptureFailed(msg) => write!(f, "{msg}"),
         }
     }
@@ -149,12 +152,12 @@ impl CaptureSink {
     }
 
     pub fn emit_done(&mut self, cancelled: bool) {
-        debug!(samples = self.mono.len(), "采集完成，开始降采样");
+        debug!(samples = self.mono.len(), "Capture complete; starting downsampling");
         let data = if cancelled {
             None
         } else {
             let mono_8k = downsample_mono(&self.mono, self.sample_rate, TARGET_SAMPLE_RATE);
-            info!(samples = mono_8k.len(), "采集结束，输出 8kHz PCM");
+            info!(samples = mono_8k.len(), "Capture complete; returning 8 kHz PCM");
             let mut bytes = Vec::with_capacity(mono_8k.len() * 4);
             for v in mono_8k {
                 bytes.extend_from_slice(&v.to_le_bytes());
@@ -172,7 +175,7 @@ impl CaptureSink {
     }
 
     pub fn emit_error(&self, error: BackendError) {
-        tracing::error!(%error, code = error.code(), "采集失败");
+        tracing::error!(%error, code = error.code(), "Audio capture failed");
         (self.emitter)(JsCaptureEvent {
             event_type: "error".into(),
             data: None,

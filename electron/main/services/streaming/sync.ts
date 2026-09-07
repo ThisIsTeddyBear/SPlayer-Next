@@ -91,7 +91,7 @@ const syncServer = async (
     deleteStalePlaylists(config.id, generation);
     notifyLibraryUpdated(config.id);
     streamingLog.info(
-      `${config.type} 媒体库同步完成 [${config.name}]: 歌曲 ${songCount}，专辑 ${albums.length}，歌手 ${artists.length}，歌单 ${playlists.length}`,
+      `${config.type} library sync complete [${config.name}]: ${songCount} songs, ${albums.length} albums, ${artists.length} artists, ${playlists.length} playlists`,
     );
     return true;
   } catch (error) {
@@ -99,7 +99,7 @@ const syncServer = async (
       invalidateStreamingSession(config.id);
     }
     notifyLibraryUpdated(config.id);
-    streamingLog.warn(`${config.type} 媒体库同步失败 [${config.name}]:`, error);
+    streamingLog.warn(`${config.type} library sync failed [${config.name}]:`, error);
     return false;
   }
 };
@@ -117,7 +117,7 @@ export const queueStreamingSync = (config: StreamingRuntimeConfig, force = false
   }
   if (!force && syncedServers.has(config.id)) return false;
   if (!isDbOpen()) {
-    streamingLog.warn(`数据库尚未初始化，跳过流媒体同步 [${config.name}]`);
+    streamingLog.warn(`Database is not initialized; skipping streaming sync [${config.name}]`);
     return false;
   }
   cancelledServers.delete(config.id);
@@ -132,7 +132,7 @@ export const queueStreamingSync = (config: StreamingRuntimeConfig, force = false
       syncedServers.delete(config.id);
       if (cancelledServers.has(config.id)) return;
       notifyLibraryUpdated(config.id);
-      streamingLog.warn(`${config.type} 同步登录失败 [${config.name}]:`, error);
+      streamingLog.warn(`${config.type} sync sign-in failed [${config.name}]:`, error);
     })
     .finally(() => {
       runningServers.delete(config.id);

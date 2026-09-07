@@ -31,7 +31,7 @@ impl PlaybackHandle {
         if !paused {
             stream
                 .play()
-                .context("启动音频输出失败")
+                .context("Failed to start audio output")
                 .with_audio_kind(AudioErrorKind::Device)?;
         }
         Ok(Self {
@@ -43,13 +43,13 @@ impl PlaybackHandle {
 
     pub fn play(&self) {
         if let Err(error) = self.stream.play() {
-            warn!(%error, "恢复音频输出失败");
+            warn!(%error, "Failed to resume audio output");
         }
     }
 
     pub fn pause(&self) {
         if let Err(error) = self.stream.pause() {
-            warn!(%error, "暂停音频输出失败");
+            warn!(%error, "Failed to pause audio output");
         }
     }
 

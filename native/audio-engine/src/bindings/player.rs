@@ -34,7 +34,7 @@ enum ReinitOutcome {
     OutputFailed { error: anyhow::Error },
 }
 
-const LOAD_SUPERSEDED_REASON: &str = "[Cancelled] load 已被更新的 load 取代";
+const LOAD_SUPERSEDED_REASON: &str = "[Cancelled] load was superseded by a newer load";
 
 fn is_cancelled_napi_error(error: &Error) -> bool {
     error.reason.starts_with("[Cancelled]")
@@ -44,11 +44,13 @@ fn is_device_napi_error(error: &Error) -> bool {
     error.reason.starts_with("[Device]")
 }
 
+#[napi(object)]
 pub struct JsExternalLyric {
     pub format: String,
     pub path: String,
 }
 
+#[napi(object)]
 pub struct JsMusicMetadata {
     pub title: Option<String>,
     pub artist: Option<String>,
@@ -66,18 +68,23 @@ pub struct JsMusicMetadata {
     pub cover: Option<String>,
 }
 
+#[napi(object)]
 pub struct JsAudioDevice {
     pub id: String,
     pub name: String,
     pub is_default: bool,
 }
 
+#[napi(object)]
 pub struct JsFftData {
     pub ldata: Vec<f64>,
     pub rdata: Vec<f64>,
 }
 
+#[napi(object)]
+#[derive(Default)]
 pub struct JsPlayerEvent {
+    #[napi(js_name = "type")]
     pub event_type: String,
     pub state: Option<String>,
     pub position: Option<f64>,
@@ -85,6 +92,7 @@ pub struct JsPlayerEvent {
     pub fft_data: Option<JsFftData>,
 }
 
+#[napi(object)]
 pub struct JsPlayerStatus {
     pub state: String,
     pub position: f64,
@@ -102,15 +110,18 @@ fn state_to_str(state: PlayerState) -> &'static str {
     }
 }
 
+#[napi]
 pub struct AudioPlayer {
     inner: Arc<Mutex<InnerPlayer>>,
     device_watcher: Mutex<Option<device_watcher::DeviceWatcher>>,
 }
 
+#[napi]
 impl AudioPlayer {
+    #[napi(constructor)]
     pub fn new() -> Result<Self> {
         let inner = InnerPlayer::new().into_napi()?;
-        info!("AudioPlayer 实例已创建");
+        info!("AudioPlayer instance created");
         Ok(Self {
             inner: Arc::new(Mutex::new(inner)),
             device_watcher: Mutex::new(None),
@@ -118,8 +129,9 @@ impl AudioPlayer {
     }
 
     ///
+    #[napi]
     pub async fn reinit_output(&self) -> Result<()> {
-        info!("重新初始化音频输出设备");
+        info!("Reinitializing the audio output device");
 
         let (
             seek_take_opt,
@@ -199,7 +211,7 @@ impl AudioPlayer {
                 if let Err(error) =
                     decoder_data.reconfigure_player_output(output.sample_rate(), output.channels())
                 {
-                    warn!(error = %error, "输出格式变化后重建重采样器失败");
+                    warn!(error = %error, "Failed to rebuild the resampler after an output format change");
                     return ReinitOutcome::Reload {
                         source: current_source,
                         was_playing,
@@ -225,7 +237,7 @@ impl AudioPlayer {
                 ) {
                     Ok(handle) => handle,
                     Err(error) => {
-                        warn!(error = %error, "输出重建后启动解码线程失败");
+                        warn!(error = %error, "Failed to start the decoder thread after rebuilding output");
                         return ReinitOutcome::Reload {
                             source: current_source,
                             was_playing,
@@ -253,7 +265,7 @@ impl AudioPlayer {
                         .commit_seeked(token, position, shared, handle, Some(*output))
                         .into_napi()?;
                     if !committed {
-                        info!("reinit 已被更新的 load/seek/stop 取代，丢弃结果");
+                        info!("Reinitialization was superseded by a newer load, seek, or stop; discarding result");
                     }
                     return Ok(());
                 }
@@ -288,7 +300,7 @@ impl AudioPlayer {
                         return Ok(());
                     }
                     player.enter_paused_for_recovery();
-                    warn!(error = %error, "输出重建失败，播放器进入暂停态");
+                    warn!(error = %error, "Failed to rebuild output; player is entering the paused state");
                     return Err(error).into_napi();
                 }
             }
@@ -315,10 +327,12 @@ impl AudioPlayer {
         Ok(())
     }
 
+    #[napi]
     pub fn set_cover_cache_dir(&self, dir: String) {
         self.inner.lock().set_cover_cache_dir(dir);
     }
 
+    #[napi(ts_args_type = "callback: (event: JsPlayerEvent) => void")]
     pub fn on_event(&self, callback: Function<JsPlayerEvent, ()>) -> Result<()> {
         let tsfn = callback.build_threadsafe_function().build()?;
 
@@ -367,36 +381,41 @@ impl AudioPlayer {
         Ok(())
     }
 
+    #[napi]
     pub fn supports_device_watcher(&self) -> bool {
         device_watcher::is_supported()
     }
 
+    #[napi(ts_args_type = "callback: (defaultChanged: boolean) => void")]
     pub fn on_device_change(&self, callback: Function<bool, ()>) -> Result<()> {
         let tsfn = callback.build_threadsafe_function().build()?;
         let watcher = device_watcher::DeviceWatcher::new(Box::new(move |default_changed| {
             tsfn.call(default_changed, ThreadsafeFunctionCallMode::NonBlocking);
         }))
         .into_napi()?;
-        info!("原生音频设备监听已启动");
+        info!("Native audio device watcher started");
         Ok(())
     }
 
+    #[napi]
     pub fn stop_device_watcher(&self) {
         if let Some(mut watcher) = self.device_watcher.lock().take() {
             watcher.stop();
-            info!("原生音频设备监听已停止");
+            info!("Native audio device watcher stopped");
         }
     }
 
     ///
+    #[napi]
     pub async fn load(
         &self,
         source: String,
+        #[napi(ts_arg_type = "boolean")] auto_play: Option<bool>,
     ) -> Result<JsMusicMetadata> {
         use crate::shared::Shared;
 
         let auto_play = auto_play.unwrap_or(true);
-        info!(source = %source, auto_play, "加载音频源");
+        info!(source = %source, auto_play, "Loading audio source");
 
         let handle = HttpCancelHandle::new();
         let (
@@ -530,6 +549,7 @@ impl AudioPlayer {
         }
     }
 
+    #[napi]
     pub async fn play(&self) -> Result<()> {
         let (revival_source, position) = {
             let mut player = self.inner.lock();
@@ -556,19 +576,23 @@ impl AudioPlayer {
         Ok(())
     }
 
+    #[napi]
     pub fn pause(&self) {
         self.inner.lock().pause();
     }
 
+    #[napi]
     pub fn pause_immediately(&self) {
         self.inner.lock().pause_immediately();
     }
 
+    #[napi]
     pub fn stop(&self) {
         self.inner.lock().stop();
     }
 
     ///
+    #[napi]
     pub async fn seek(&self, position: f64) -> Result<()> {
         use crate::shared::Shared;
 
@@ -620,7 +644,7 @@ impl AudioPlayer {
                 match decoder::resume_decode(decoder_data, Arc::clone(&shared), equalizer, tempo) {
                     Ok(handle) => handle,
                     Err(err) => {
-                        warn!(error = %err, "seek 后启动解码线程失败，回退到重新加载");
+                        warn!(error = %err, "Failed to start the decoder thread after seeking; falling back to reload");
                         return SeekOutcome::Fallback;
                     }
                 };
@@ -636,13 +660,13 @@ impl AudioPlayer {
                     .commit_seeked(token, position, shared, handle, None)
                     .into_napi()?;
                 if !committed {
-                    info!(position, "seek 已被更新的 load/seek/stop 取代，丢弃结果");
+                    info!(position, "Seek was superseded by a newer load, seek, or stop; discarding result");
                 }
                 Ok(())
             }
             SeekOutcome::Fallback => {
                 if !self.inner.lock().is_load_token_current(token) {
-                    info!(position, "seek 失败且已被取代，跳过回退重载");
+                    info!(position, "Seek failed but was superseded; skipping fallback reload");
                     return Ok(());
                 }
                 if let Some(src) = current_source {
@@ -659,36 +683,43 @@ impl AudioPlayer {
                     }
                     Ok(())
                 } else {
-                    Err(Error::from_reason("seek 失败且无 current_source"))
+                    Err(Error::from_reason("Seek failed and there is no current source"))
                 }
             }
         }
     }
 
+    #[napi]
     pub fn set_volume(&self, volume: f64) {
         self.inner.lock().set_volume(volume as f32);
     }
 
+    #[napi]
     pub fn get_volume(&self) -> f64 {
         self.inner.lock().volume() as f64
     }
 
+    #[napi]
     pub fn set_fade_duration(&self, duration_ms: f64) {
         self.inner.lock().set_fade_duration(duration_ms as u64);
     }
 
+    #[napi]
     pub fn get_fade_duration(&self) -> f64 {
         self.inner.lock().fade_duration() as f64
     }
 
+    #[napi]
     pub fn get_position(&self) -> f64 {
         self.inner.lock().position()
     }
 
+    #[napi]
     pub fn get_duration(&self) -> f64 {
         self.inner.lock().duration()
     }
 
+    #[napi]
     pub fn get_status(&self) -> JsPlayerStatus {
         let player = self.inner.lock();
         JsPlayerStatus {
@@ -700,35 +731,43 @@ impl AudioPlayer {
         }
     }
 
+    #[napi]
     pub fn set_fft_enabled(&self, enabled: bool) {
         self.inner.lock().set_fft_enabled(enabled);
     }
 
+    #[napi]
     pub fn get_fft_enabled(&self) -> bool {
         self.inner.lock().fft_enabled()
     }
 
+    #[napi]
     pub fn set_normalization_enabled(&self, enabled: bool) {
         self.inner.lock().set_normalization_enabled(enabled);
     }
 
+    #[napi]
     pub fn get_normalization_enabled(&self) -> bool {
         self.inner.lock().normalization_enabled()
     }
 
+    #[napi]
     pub fn set_equalizer_enabled(&self, enabled: bool) {
         self.inner.lock().set_equalizer_enabled(enabled);
     }
 
+    #[napi]
     pub fn get_equalizer_enabled(&self) -> bool {
         self.inner.lock().equalizer_enabled()
     }
 
+    #[napi]
     pub fn set_equalizer_bands(&self, gains_db: Vec<f64>) {
         let bands: Vec<f32> = gains_db.into_iter().map(|v| v as f32).collect();
         self.inner.lock().set_equalizer_bands(&bands);
     }
 
+    #[napi]
     pub fn get_equalizer_bands(&self) -> Vec<f64> {
         self.inner
             .lock()
@@ -738,14 +777,17 @@ impl AudioPlayer {
             .collect()
     }
 
+    #[napi]
     pub fn set_preamp_gain(&self, preamp_db: f64) {
         self.inner.lock().set_preamp_gain(preamp_db as f32);
     }
 
+    #[napi]
     pub fn get_preamp_gain(&self) -> f64 {
         self.inner.lock().preamp_gain() as f64
     }
 
+    #[napi]
     pub fn get_fft_data(&self) -> JsFftData {
         let (ldata, rdata) = self.inner.lock().fft_data();
         let ldata = ldata.into_iter().map(|v| v as f64).collect();
@@ -753,12 +795,14 @@ impl AudioPlayer {
         JsFftData { ldata, rdata }
     }
 
+    #[napi]
     pub fn get_cover_raw(&self) -> Option<napi::bindgen_prelude::Buffer> {
         let player = self.inner.lock();
         let data = player.cover_raw()?;
         Some(data.to_vec().into())
     }
 
+    #[napi]
     pub fn get_output_devices(&self) -> Vec<JsAudioDevice> {
         audio_output::list_output_devices()
             .into_iter()
@@ -770,27 +814,33 @@ impl AudioPlayer {
             .collect()
     }
 
+    #[napi]
     pub fn get_default_device_name(&self) -> Option<String> {
         audio_output::default_device_name()
     }
 
+    #[napi]
     pub fn get_default_device_id(&self) -> Option<String> {
         audio_output::default_device_id()
     }
 
+    #[napi]
     pub async fn set_output_device(&self, device_id: Option<String>) -> Result<()> {
         self.inner.lock().set_output_device(device_id);
         self.reinit_output().await
     }
 
+    #[napi]
     pub async fn set_exclusive_audio(&self, enabled: bool) -> Result<()> {
+        #[cfg(not(target_os = "windows"))]
         {
             if enabled {
-                return Err(Error::from_reason("WASAPI 独占音频仅支持 Windows"));
+                return Err(Error::from_reason("WASAPI exclusive audio is supported on Windows only"));
             }
             return Ok(());
         }
 
+        #[cfg(target_os = "windows")]
         {
             let (previous, was_playing) = {
                 let player = self.inner.lock();
@@ -812,7 +862,7 @@ impl AudioPlayer {
                     }
                     Ok(()) => {}
                     Err(recovery_error) => {
-                        warn!(error = %recovery_error, "独占输出切换失败后无法恢复原输出");
+                        warn!(error = %recovery_error, "Could not restore the previous output after exclusive output switching failed");
                     }
                 }
                 return Err(error);
@@ -822,30 +872,37 @@ impl AudioPlayer {
     }
 
     ///
+    #[napi]
     pub fn get_selected_device_name(&self) -> Option<String> {
         self.inner.lock().selected_device().map(String::from)
     }
 
+    #[napi]
     pub fn set_speed(&self, speed: f64) {
         self.inner.lock().set_speed(speed as f32);
     }
 
+    #[napi]
     pub fn set_pitch(&self, semitones: i32) {
         self.inner.lock().set_pitch(semitones.clamp(-12, 12) as i8);
     }
 
+    #[napi]
     pub fn set_pitch_sync(&self, sync: bool) {
         self.inner.lock().set_pitch_sync(sync);
     }
 
+    #[napi]
     pub fn get_speed(&self) -> f64 {
         self.inner.lock().speed() as f64
     }
 
+    #[napi]
     pub fn get_pitch(&self) -> i32 {
         self.inner.lock().pitch() as i32
     }
 
+    #[napi]
     pub fn get_pitch_sync(&self) -> bool {
         self.inner.lock().pitch_sync()
     }

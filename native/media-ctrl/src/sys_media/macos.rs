@@ -308,7 +308,7 @@ impl SystemMediaControls for MacosImpl {
             let mut guard = self
                 .event_handler
                 .lock()
-                .map_err(|e| anyhow::anyhow!("锁中毒: {e:?}"))?;
+                .map_err(|e| anyhow::anyhow!("Lock poisoned: {e:?}"))?;
             *guard = Some(callback);
         }
         // 重复注册（preload HMR）时先卸掉旧 target，否则每个媒体键事件会成倍派发

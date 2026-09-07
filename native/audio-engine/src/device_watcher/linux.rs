@@ -166,10 +166,10 @@ impl PlatformBackend for Backend {
                 pipewire::init();
                 let result = run_watcher(callback, command_rx, ready_tx);
                 if let Err(error) = result {
-                    tracing::warn!(error = %error, "PipeWire 设备监听已退出");
+                    tracing::warn!(error = %error, "PipeWire device watcher exited");
                 }
             })
-            .map_err(|error| anyhow!("启动 PipeWire 设备监听线程失败: {error}"))?;
+            .map_err(|error| anyhow!("Failed to start the PipeWire device watcher thread: {error}"))?;
 
         match ready_rx.recv() {
             Ok(Ok(())) => Ok(Self {
@@ -182,7 +182,7 @@ impl PlatformBackend for Backend {
             }
             Err(error) => {
                 let _ = thread.join();
-                Err(anyhow!("PipeWire 设备监听线程提前退出: {error}"))
+                Err(anyhow!("PipeWire device watcher thread exited unexpectedly: {error}"))
             }
         }
     }

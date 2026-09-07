@@ -170,7 +170,7 @@ fn worker_loop(rx: &Receiver<TaskbarCommand>, tsfn: &LayoutTsfn) {
 
 /// Drop 旧策略（自动 restore），新建策略并用最近的 hwnd 重新嵌入
 fn do_reinit(strategy: &mut Option<Box<dyn TaskbarStrategy>>, last_hwnd: Option<usize>) {
-    debug!("TaskbarCreated → 重建策略");
+    debug!("TaskbarCreated received; rebuilding strategy");
     *strategy = None;
     *strategy = create_strategy();
     if let (Some(s), Some(hwnd)) = (strategy.as_ref(), last_hwnd.and_then(take_valid_hwnd)) {

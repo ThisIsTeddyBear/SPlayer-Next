@@ -497,6 +497,10 @@ if (process.contextIsolated) {
     console.error(error);
   }
 } else {
-  window.electron = electronAPI;
-  window.api = api;
+  const target = globalThis as typeof globalThis & {
+    electron: typeof electronAPI;
+    api: typeof api;
+  };
+  target.electron = electronAPI;
+  target.api = api;
 }

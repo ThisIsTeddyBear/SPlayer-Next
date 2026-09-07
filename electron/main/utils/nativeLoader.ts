@@ -23,10 +23,10 @@ export const loadNativeModule = <T = unknown>(fileName: string, devDirName: stri
 
   try {
     const mod = requireNative(nativeModulePath) as T;
-    nativeLog.debug(`加载 ${fileName} 成功`);
+    nativeLog.debug(`Loaded ${fileName}`);
     return mod;
   } catch (error) {
-    nativeLog.error(`加载 ${fileName} 失败:`, error);
+    nativeLog.error(`Failed to load ${fileName}:`, error);
     return null;
   }
 };

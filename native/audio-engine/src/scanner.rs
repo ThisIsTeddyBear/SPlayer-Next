@@ -186,7 +186,7 @@ pub fn scan_directories(
     callback: &dyn Fn(ScanEvent),
 ) {
     let scan_start = Instant::now();
-    info!("开始扫描，目录数: {}", dirs.len());
+    info!("Starting scan; directory count: {}", dirs.len());
 
     // 构建已有文件索引 path → (mtime, size)
     let existing: HashMap<&str, (u64, u64)> = incremental_data
@@ -208,12 +208,12 @@ pub fn scan_directories(
 
     for dir in dirs {
         if cancel.load(Ordering::Relaxed) {
-            info!("扫描已取消（文件收集阶段）");
+            info!("Scan cancelled during file collection");
             return;
         }
         let dir_path = Path::new(dir);
         if !dir_path.is_dir() {
-            warn!("跳过无效目录: {dir}");
+            warn!("Skipping invalid directory: {dir}");
             unavailable_dirs.push(dir.clone());
             continue;
         }
@@ -223,7 +223,7 @@ pub fn scan_directories(
                 Ok(entry) => entry,
                 Err(error) => {
                     had_traversal_error = true;
-                    warn!(directory = dir, error = %error, "目录遍历不完整，本轮不计算该目录下的删除项");
+                    warn!(directory = dir, error = %error, "Directory traversal was incomplete; deleted items in this directory will not be calculated this scan");
                     continue;
                 }
             };
@@ -241,7 +241,7 @@ pub fn scan_directories(
             let path_str = path.to_string_lossy().into_owned();
             let Some((mtime, ctime, size)) = file_stat(path) else {
                 had_traversal_error = true;
-                warn!(path = %path.display(), "无法读取文件状态，本轮不计算所属目录下的删除项");
+                warn!(path = %path.display(), "Could not read file status; deleted items in its directory will not be calculated this scan");
                 continue;
             };
             scanned_paths.push(path_str.clone());
@@ -274,7 +274,7 @@ pub fn scan_directories(
 
     for (path_str, mtime, ctime, size) in &audio_files {
         if cancel.load(Ordering::Relaxed) {
-            info!("扫描已取消（元数据提取阶段，已处理 {scanned}/{total}）");
+            info!("Scan cancelled during metadata extraction; processed {scanned}/{total}");
             callback(ScanEvent::Done {
                 scanned,
                 total,
@@ -297,7 +297,7 @@ pub fn scan_directories(
                 batch.push(track);
             }
             None => {
-                debug!("跳过文件 {path_str}: FFmpeg 无法解析");
+                debug!("Skipping file {path_str}: FFmpeg could not parse it");
             }
         }
 
@@ -319,7 +319,7 @@ pub fn scan_directories(
     let removed_paths = collect_removed_paths(&existing, &scanned_paths, &unavailable_dirs);
 
     if !removed_paths.is_empty() {
-        info!("发现 {} 个已删除文件", removed_paths.len());
+        info!("Found {} deleted files", removed_paths.len());
     }
 
     let parse_elapsed = parse_start.elapsed();

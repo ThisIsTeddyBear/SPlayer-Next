@@ -68,8 +68,8 @@ export const initLogger = (): void => {
   // 自动清理旧日志
   autoCleanLogs(logsDir, isDev ? 7 : 30);
 
-  log.info(`日志系统已初始化 (${isDev ? "development" : "production"})`);
-  log.info(`日志目录: ${logsDir}`);
+  log.info(`Logging initialized (${isDev ? "development" : "production"})`);
+  log.info(`Log directory: ${logsDir}`);
 };
 
 // 分作用域导出

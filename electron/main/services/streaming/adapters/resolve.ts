@@ -85,5 +85,5 @@ export const resolveStreamingAdapter = async (
     const session = await getSession(config);
     return { config: { ...config, ...session }, adapter: jellyfinAdapter };
   }
-  throw new Error(`不支持的服务器类型: ${config.type}`);
+  throw new Error(`Unsupported server type: ${config.type}`);
 };

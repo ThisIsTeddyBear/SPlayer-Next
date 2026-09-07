@@ -65,11 +65,11 @@ fn editing_tag_type(file_type: FileType) -> TagType {
 /// 打开并解析文件，按内容嗅探格式（不信任扩展名，临时文件无正确扩展名）
 fn open_tagged(path: &Path) -> Result<TaggedFile> {
     Probe::open(path)
-        .context("打开文件失败")?
+        .context("Failed to open file")?
         .guess_file_type()
-        .context("识别文件格式失败")?
+        .context("Failed to identify file format")?
         .read()
-        .context("解析音频文件失败")
+        .context("Failed to parse audio file")
 }
 
 /// 读取文件的全部可编辑标签
@@ -206,7 +206,7 @@ fn apply_to_file(path: &Path, request: &TagWriteRequest) -> Result<()> {
 
     if let Some(ref data) = request.cover {
         // from_reader 校验图片签名并识别 mime，非图片数据直接报错
-        let mut picture = Picture::from_reader(&mut data.as_slice()).context("封面图片数据无效")?;
+        let mut picture = Picture::from_reader(&mut data.as_slice()).context("Cover image data is invalid")?;
         picture.set_pic_type(PictureType::CoverFront);
         while !tag.pictures().is_empty() {
             tag.remove_picture(0);
@@ -216,7 +216,7 @@ fn apply_to_file(path: &Path, request: &TagWriteRequest) -> Result<()> {
 
     tagged
         .save_to_path(path, WriteOptions::default())
-        .context("写入标签失败")?;
+        .context("Failed to write tags")?;
     Ok(())
 }
 
@@ -239,11 +239,11 @@ pub fn write_tags(request: &TagWriteRequest) -> Result<()> {
     anyhow::ensure!(original.is_file(), "文件不存在: {}", request.path);
 
     let temp = temp_path(original);
-    fs::copy(original, &temp).context("创建临时副本失败")?;
+    fs::copy(original, &temp).context("Failed to create temporary copy")?;
 
     let applied = apply_to_file(&temp, request)
         // Windows 下 rename 可原子覆盖已存在目标（MOVEFILE_REPLACE_EXISTING）
-        .and_then(|()| fs::rename(&temp, original).context("覆盖原文件失败"));
+        .and_then(|()| fs::rename(&temp, original).context("Failed to replace original file"));
     if applied.is_err() {
         let _ = fs::remove_file(&temp);
     }

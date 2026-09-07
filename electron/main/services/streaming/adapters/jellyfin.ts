@@ -78,7 +78,7 @@ const callApi = async <T>(
 /**
  */
 const requireUserId = (config: StreamingRuntimeConfig): string => {
-  if (!config.accessToken || !config.userId) throw new Error("缺少 accessToken / userId");
+  if (!config.accessToken || !config.userId) throw new Error("Missing accessToken or userId");
   return config.userId;
 };
 
@@ -189,7 +189,7 @@ export const authenticate = async (
     },
   );
   if (!result.AccessToken || !result.User?.Id) {
-    throw new Error("登录响应缺少 AccessToken/UserId");
+    throw new Error("Sign-in response is missing AccessToken or UserId");
   }
   return { accessToken: result.AccessToken, userId: result.User.Id };
 };

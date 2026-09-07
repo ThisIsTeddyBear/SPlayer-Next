@@ -155,7 +155,7 @@ impl Worker {
 
     fn disconnect(&mut self) {
         if let Some(mut c) = self.client.take() {
-            debug!("断开 Discord IPC 连接");
+            debug!("Disconnecting Discord IPC");
             let _ = c.close();
         }
         self.last_end_ts = None;
@@ -170,7 +170,7 @@ impl Worker {
         let mut client = DiscordIpcClient::new(APP_ID);
         match client.connect() {
             Ok(()) => {
-                info!("Discord IPC 已连接");
+                info!("Discord IPC connected");
                 self.client = Some(client);
                 self.last_end_ts = None;
                 self.next_retry_at = None;
@@ -254,7 +254,7 @@ impl Worker {
             PlaybackStatus::Paused => {
                 if !show_paused {
                     if let Err(e) = client.clear_activity() {
-                        debug!(error = %e, "Discord clear_activity 失败，断开重连");
+                        debug!(error = %e, "Discord clear_activity failed; disconnecting and reconnecting");
                         return false;
                     }
                     *last_end = None;
@@ -300,7 +300,7 @@ impl Worker {
 
         if should_send {
             if let Err(e) = client.set_activity(activity) {
-                debug!(error = %e, "Discord set_activity 失败，断开重连");
+                debug!(error = %e, "Discord set_activity failed; disconnecting and reconnecting");
                 return false;
             }
             *dirty = false;
@@ -373,7 +373,7 @@ pub fn init() {
         thread,
         shutdown,
     });
-    info!("Discord RPC 后台线程已启动");
+    info!("Discord RPC background thread started");
 }
 
 fn send(msg: Msg) {
@@ -397,7 +397,7 @@ pub fn shutdown() {
         let _ = handle.sender.send(Msg::Shutdown);
         drop(handle.sender);
         let _ = handle.thread.join();
-        info!("Discord RPC 后台线程已停止");
+        info!("Discord RPC background thread stopped");
     }
 }
 

@@ -84,10 +84,12 @@ impl AudioCaptureSession {
         let source = match config.source.as_str() {
             "system" => CaptureSource::System,
             "microphone" => CaptureSource::Microphone,
-            other => return Err(napi::Error::from_reason(format!("未知采集来源: {other}"))),
+            other => return Err(napi::Error::from_reason(format!("Unknown capture source: {other}"))),
         };
         if !platform_supported() {
-            return Err(napi::Error::from_reason("当前平台不支持本机采集"));
+            return Err(napi::Error::from_reason(
+                "Native audio capture is not supported on this platform",
+            ));
         }
         let cfg = CaptureConfig {
             source,

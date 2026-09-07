@@ -134,7 +134,7 @@ export const registerConfigIpc = (): void => {
       value !== "beta" &&
       value !== "alpha"
     ) {
-      throw new Error(`无效的更新通道: ${String(value)}`);
+      throw new Error(`Invalid update channel: ${String(value)}`);
     }
     const previous = store.get(keyPath as ConfigPath);
     store.set(keyPath, value);
@@ -157,7 +157,7 @@ export const registerConfigIpc = (): void => {
     ): Promise<{ ok: boolean; reason?: "canceled" | "writeFailed" }> => {
       const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       const result = await dialog.showSaveDialog({
-        title: "导出设置备份",
+        title: "Export settings backup",
         defaultPath: `splayer-settings-${stamp}.json`,
         filters: [{ name: "JSON", extensions: ["json"] }],
       });
@@ -180,7 +180,7 @@ export const registerConfigIpc = (): void => {
       { ok: true; data: unknown } | { ok: false; reason: "canceled" | "readFailed" | "parseFailed" }
     > => {
       const result = await dialog.showOpenDialog({
-        title: "选择设置备份文件",
+        title: "Select settings backup file",
         filters: [{ name: "JSON", extensions: ["json"] }],
         properties: ["openFile"],
       });

@@ -45,17 +45,17 @@ where
     // 未命中则获取写锁并初始化
     let mut cache = CONVERTER_CACHE
         .write()
-        .map_err(|e| Error::from_reason(format!("无法获取 OpenCC 缓存锁: {e}")))?;
+        .map_err(|e| Error::from_reason(format!("Could not acquire the OpenCC cache lock: {e}")))?;
 
     if !cache.contains_key(config_key) {
         let instance = OpenCC::from_config(builtin)
-            .map_err(|e| Error::from_reason(format!("初始化 OpenCC 失败 ({builtin:?}): {e}")))?;
+            .map_err(|e| Error::from_reason(format!("Failed to initialize OpenCC ({builtin:?}): {e}")))?;
         cache.insert(config_key.to_string(), instance);
     }
 
     let instance = cache
         .get(config_key)
-        .ok_or_else(|| Error::from_reason("获取 OpenCC 实例失败"))?;
+        .ok_or_else(|| Error::from_reason("Failed to get an OpenCC instance"))?;
 
     Ok(f(instance))
 }
@@ -75,7 +75,7 @@ pub fn convert(text: String, config: String) -> Result<String> {
     let builtin = parse_builtin_config(&normalized_config).ok_or_else(|| {
         Error::new(
             Status::InvalidArg,
-            format!("不支持的 OpenCC 配置名: {config}"),
+            format!("Unsupported OpenCC configuration: {config}"),
         )
     })?;
 
@@ -99,7 +99,7 @@ pub fn convert_batch(texts: Vec<String>, config: String) -> Result<Vec<String>> 
     let builtin = parse_builtin_config(&normalized_config).ok_or_else(|| {
         Error::new(
             Status::InvalidArg,
-            format!("不支持的 OpenCC 配置名: {config}"),
+            format!("Unsupported OpenCC configuration: {config}"),
         )
     })?;
 

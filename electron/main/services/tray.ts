@@ -165,7 +165,7 @@ export const initTray = (): void => {
   tray.on("click", () => focusMainWindow());
   // 系统主题变化时刷新菜单图标
   nativeTheme.on("updated", refreshTray);
-  trayLog.info("初始化系统托盘");
+  trayLog.info("Initializing system tray");
 };
 
 /**

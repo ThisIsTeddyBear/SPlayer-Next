@@ -62,7 +62,7 @@ impl RegistryWatcher {
 
         // SAFETY: 手动重置事件，由 stop() 触发；失败时通过 ? 传播
         let raw_event = unsafe { CreateEventW(None, true, false, None) }
-            .map_err(|e| napi::Error::from_reason(format!("创建停止事件失败: {e}")))?;
+            .map_err(|e| napi::Error::from_reason(format!("Failed to create stop event: {e}")))?;
 
         let stop_event = Arc::new(EventHandle(raw_event));
         let is_running = Arc::new(AtomicBool::new(true));

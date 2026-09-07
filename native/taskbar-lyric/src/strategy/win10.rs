@@ -51,7 +51,7 @@ impl TaskbarStrategy for LegacyStrategy {
     fn init(&mut self) -> bool {
         if let Some(hwnd) = find_taskbar_hwnd() {
             self.h_taskbar = hwnd;
-            debug!("找到 Shell_TrayWnd");
+            debug!("Found Shell_TrayWnd");
         } else {
             return false;
         }
@@ -61,7 +61,7 @@ impl TaskbarStrategy for LegacyStrategy {
                 Self::find_child_window(self.h_taskbar, w!("ReBarWindow32"), Some(w!("WorkerW")));
 
             if self.h_rebar.0.is_null() {
-                error!("未能找到 ReBarWindow32");
+                error!("Could not find ReBarWindow32");
                 return false;
             }
 
@@ -72,12 +72,12 @@ impl TaskbarStrategy for LegacyStrategy {
             );
 
             if self.h_tasklist.0.is_null() {
-                error!("未能找到 MSTaskSwWClass/MSTaskListWClass");
+                error!("Could not find MSTaskSwWClass/MSTaskListWClass");
                 return false;
             }
         }
 
-        debug!("Win10 策略初始化成功");
+        debug!("Win10 strategy initialized");
         true
     }
 

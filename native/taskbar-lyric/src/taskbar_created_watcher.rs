@@ -41,7 +41,7 @@ unsafe extern "system" fn window_proc(
     lparam: LPARAM,
 ) -> LRESULT {
     if msg == *TASKBAR_CREATED_MSG {
-        debug!("收到 TaskbarCreated 广播");
+        debug!("Received TaskbarCreated broadcast");
         let callback = GLOBAL_CALLBACK
             .lock()
             .ok()
@@ -87,7 +87,7 @@ impl TaskbarCreatedWatcher {
             if RegisterClassExW(&raw const wndclass) == 0 {
                 let err = GetLastError();
                 if err != ERROR_CLASS_ALREADY_EXISTS {
-                    error!("RegisterClassExW 失败: {:?}", err);
+                    error!("RegisterClassExW failed: {:?}", err);
                     return;
                 }
             }
@@ -109,12 +109,12 @@ impl TaskbarCreatedWatcher {
             .unwrap_or_default();
 
             if hwnd.0.is_null() {
-                error!("CreateWindowExW 失败");
+                error!("CreateWindowExW failed");
                 let _ = UnregisterClassW(WINDOW_CLASS, Some(hinstance.into()));
                 return;
             }
 
-            debug!("TaskbarCreated 监听窗口已创建");
+            debug!("TaskbarCreated listener window created");
 
             let mut msg = MSG::default();
             while GetMessageW(&raw mut msg, None, 0, 0).as_bool() {
@@ -126,7 +126,7 @@ impl TaskbarCreatedWatcher {
             let _ = UnregisterClassW(WINDOW_CLASS, Some(hinstance.into()));
         });
 
-        let thread_id = rx.recv().map_err(|e| anyhow!("获取线程 ID 失败: {e}"))?;
+        let thread_id = rx.recv().map_err(|e| anyhow!("Failed to get the thread ID: {e}"))?;
 
         Ok(Self {
             thread_id: Some(thread_id),

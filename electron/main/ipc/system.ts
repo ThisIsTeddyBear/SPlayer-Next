@@ -89,7 +89,7 @@ export const registerSystemIpc = (): void => {
   // 用于 canvas 取色等需要绕过跨域 tainted 的场景；限定 image/* 响应
   ipcMain.handle("system:fetchRemoteBytes", async (_event, url: string) => {
     if (typeof url !== "string" || !/^https?:\/\//i.test(url)) {
-      return { success: false, error: "无效的 URL" };
+      return { success: false, error: "Invalid URL" };
     }
     const buf = await fetchBytes(url, { requireImage: true });
     return { success: true, data: buf };

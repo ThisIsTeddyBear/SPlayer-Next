@@ -71,11 +71,11 @@ export const testStreamingConnection = async (
     const result = await resolved.adapter.ping(resolved.config);
     if (result.ok) return result;
     const code = result.code ?? classifyError(result.error);
-    streamingLog.warn(`${input.type} 测试连接失败 [${input.name}]: ${result.error}`);
+    streamingLog.warn(`${input.type} connection test failed [${input.name}]: ${result.error}`);
     return { ...result, code };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    streamingLog.warn(`${input.type} 测试连接失败 [${input.name}]: ${message}`);
+    streamingLog.warn(`${input.type} connection test failed [${input.name}]: ${message}`);
     return { ok: false, error: message, code: classifyError(error) };
   } finally {
     invalidateStreamingSession(config.id);
@@ -102,18 +102,18 @@ export const connectStreamingServer = async (serverId: string): Promise<Streamin
     const resolved = await resolveStreamingAdapter(config);
     const ping = await resolved.adapter.ping(resolved.config);
     if (!ping.ok) {
-      streamingLog.warn(`${config.type} 连接失败 [${config.name}]: ${ping.error}`);
+      streamingLog.warn(`${config.type} connection failed [${config.name}]: ${ping.error}`);
       return {
         ok: false,
-        error: ping.error ?? "连接失败",
+        error: ping.error ?? "Connection failed",
         code: ping.code ?? classifyError(ping.error),
       };
     }
     const server = markStreamingServerConnected(serverId);
-    streamingLog.info(`${config.type} 连接成功 [${config.name}]`);
+    streamingLog.info(`${config.type} connected [${config.name}]`);
     return { ok: true, server };
   } catch (error) {
-    streamingLog.warn(`${config.type} 连接失败 [${config.name}]:`, error);
+    streamingLog.warn(`${config.type} connection failed [${config.name}]:`, error);
     return {
       ok: false,
       error: error instanceof Error ? error.message : String(error),

@@ -36,7 +36,7 @@ impl Win11Strategy {
 impl TaskbarStrategy for Win11Strategy {
     fn init(&mut self) -> bool {
         let Some(hwnd) = find_taskbar_hwnd() else {
-            error!("Win11 初始化失败，找不到 Shell_TrayWnd");
+            error!("Failed to initialize Win11 strategy: Shell_TrayWnd was not found");
             return false;
         };
 
@@ -44,12 +44,12 @@ impl TaskbarStrategy for Win11Strategy {
             unsafe { FindWindowExW(Some(hwnd), None, BRIDGE_CLASS, None) }.unwrap_or_default();
 
         if h_bridge.0.is_null() {
-            error!("Win11 初始化失败，找不到 XAML 桥");
+            error!("Failed to initialize Win11 strategy: XAML bridge was not found");
             return false;
         }
 
         self.h_taskbar = hwnd;
-        debug!("Win11 策略初始化成功");
+        debug!("Win11 strategy initialized");
         true
     }
 
@@ -88,7 +88,7 @@ impl TaskbarStrategy for Win11Strategy {
             match TaskbarScanner::new() {
                 Ok(s) => self.scanner = Some(s),
                 Err(_) => {
-                    error!("Scanner 初始化失败");
+                    error!("Failed to initialize scanner");
                     return None;
                 }
             }
@@ -98,7 +98,7 @@ impl TaskbarStrategy for Win11Strategy {
             match scanner.scan_taskbar(self.h_taskbar) {
                 Ok(b) => b,
                 Err(_) => {
-                    error!("scan_taskbar 失败");
+                    error!("scan_taskbar failed");
                     self.scanner = None;
                     return None;
                 }

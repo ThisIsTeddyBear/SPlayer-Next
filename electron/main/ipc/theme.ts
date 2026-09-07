@@ -23,7 +23,7 @@ export const registerThemeIpc = (): void => {
   ipcMain.handle("theme:pickBackgroundImage", async (): Promise<string | null> => {
     try {
       const result = await dialog.showOpenDialog({
-        title: "选择背景图片",
+        title: "Select background image",
         properties: ["openFile"],
         filters: [{ name: "Images", extensions: ["jpg", "jpeg", "png", "webp", "bmp", "gif"] }],
       });

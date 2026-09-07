@@ -44,7 +44,7 @@ export const restoreQueue = async (): Promise<void> => {
     queueEntries.value = list.map(restoreQueueItem);
     originalQueue.value = original?.map(restoreQueueItem) ?? null;
   } catch (e) {
-    console.error("[queue] 恢复持久化数据失败:", e);
+    console.error("[queue] Failed to restore persisted data:", e);
   }
 };
 

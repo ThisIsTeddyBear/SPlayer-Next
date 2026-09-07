@@ -81,7 +81,7 @@ impl InnerPlayer {
         }
         self.output
             .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("ensure_output 后置条件违反"))
+            .ok_or_else(|| anyhow::anyhow!("ensure_output postcondition was violated"))
     }
 
     pub fn make_failure_callback(&self, generation: u64) -> OutputFailureCallback {
@@ -117,7 +117,7 @@ impl InnerPlayer {
     pub fn new() -> Result<Self> {
         let output = None;
         let initial_rate = decoder::DEFAULT_TARGET_SAMPLE_RATE;
-        debug!("InnerPlayer 已创建");
+        debug!("InnerPlayer created");
 
         Ok(Self {
             output,
@@ -162,7 +162,7 @@ impl InnerPlayer {
     }
 
     pub fn set_output_device(&mut self, device_id: Option<String>) {
-        info!(device = ?device_id, "切换输出设备");
+        info!(device = ?device_id, "Switching output device");
         self.selected_device = device_id;
     }
 

@@ -163,12 +163,12 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
         break;
       }
       case "outputFailed": {
-        playerLog.warn("检测到音频输出流错误，触发恢复");
+        playerLog.warn("Detected audio output stream error; starting recovery");
         requestReinit(inst);
         break;
       }
       case "outputStalled": {
-        playerLog.warn("检测到音频输出停滞，触发恢复");
+        playerLog.warn("Detected stalled audio output; starting recovery");
         requestReinit(inst);
         break;
       }
@@ -295,7 +295,7 @@ export const registerPlayerIpc = (): void => {
           quality,
         },
       };
-      playerLog.debug(`加载成功: ${displayTitle}`);
+      playerLog.debug(`Loaded successfully: ${displayTitle}`);
       return { success: true, data };
     } catch (error) {
       if (seq === loadSeq) activeCueRange = null;
@@ -504,7 +504,7 @@ export const registerPlayerIpc = (): void => {
     try {
       const ext = extname(filePath).toLowerCase();
       if (!LYRIC_FILE_EXTS.has(ext)) {
-        return fail(ErrorCode.UNKNOWN, new Error(`不支持的歌词文件类型: ${ext}`));
+        return fail(ErrorCode.UNKNOWN, new Error(`Unsupported lyric file type: ${ext}`));
       }
       const content = await readFileAutoEncoding(filePath);
       return { success: true, data: content };
@@ -637,7 +637,7 @@ export const registerPlayerIpc = (): void => {
                 },
               });
             } else {
-              playerLog.warn(`无效的音量值: ${event.volume}`);
+              playerLog.warn(`Invalid volume value: ${event.volume}`);
             }
           }
           break;
@@ -659,7 +659,7 @@ export const registerPlayerIpc = (): void => {
                 },
               });
             } else {
-              playerLog.warn(`无效的播放速率值: ${event.rate}`);
+              playerLog.warn(`Invalid playback rate value: ${event.rate}`);
             }
           }
           break;
@@ -681,13 +681,13 @@ export const registerPlayerIpc = (): void => {
       await new Promise((r) => setTimeout(r, RETRY_DELAYS[i]));
       try {
         await inst.reinitOutput();
-        playerLog.info(`唤醒后重建音频输出成功（第 ${i + 1} 次尝试）`);
+        playerLog.info(`Rebuilt audio output after wake (attempt ${i + 1})`);
         return;
       } catch (error) {
-        playerLog.warn(`重建音频输出第 ${i + 1} 次失败:`, error);
+        playerLog.warn(`Failed to rebuild audio output on attempt ${i + 1}:`, error);
       }
     }
-    playerLog.error("重建音频输出全部失败，销毁播放器实例");
+    playerLog.error("All audio-output rebuild attempts failed; destroying player instance");
     resetPlayer();
     stopDeviceMonitoring();
     const stoppedEvent = {

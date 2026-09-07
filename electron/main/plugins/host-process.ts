@@ -96,7 +96,7 @@ class PluginHost {
 
       this.startTimer = setTimeout(() => {
         if (generation === this.generation && !this.hostReady) {
-          coreLog.error("[plugin-host] host 启动超时");
+          coreLog.error("[plugin-host] host startup timed out");
           this.handleHostCrash("start-timeout");
         }
       }, PLUGIN_LOAD_TIMEOUT);
@@ -107,7 +107,7 @@ class PluginHost {
       });
       child.on("exit", (code) => {
         if (generation !== this.generation) return;
-        coreLog.warn(`[plugin-host] host 进程退出 code=${code}`);
+        coreLog.warn(`[plugin-host] host process exited with code=${code}`);
         this.handleHostCrash("exit");
       });
       child.stdout?.on("data", (chunk: Buffer) =>
@@ -339,7 +339,7 @@ class PluginHost {
       if (!this.child) return;
       this.heartbeatMisses++;
       if (this.heartbeatMisses > HEARTBEAT_MAX_MISSES) {
-        coreLog.warn("[plugin-host] 心跳丢失，重启 host");
+        coreLog.warn("[plugin-host] heartbeat lost; restarting host");
         this.handleHostCrash("heartbeat");
         return;
       }

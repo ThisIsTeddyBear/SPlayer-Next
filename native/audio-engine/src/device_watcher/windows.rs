@@ -83,7 +83,7 @@ impl ComApartmentGuard {
     unsafe fn init() -> Result<Self> {
         unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
             .ok()
-            .map_err(|error| anyhow!("初始化 COM 失败: {error}"))?;
+            .map_err(|error| anyhow!("Failed to initialize COM: {error}"))?;
         Ok(Self)
     }
 }
@@ -124,7 +124,7 @@ impl PlatformBackend for Backend {
                     match CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) {
                         Ok(enumerator) => enumerator,
                         Err(error) => {
-                            let _ = ready_tx.send(Err(format!("创建设备枚举器失败: {error}")));
+                            let _ = ready_tx.send(Err(format!("Failed to create the device enumerator: {error}")));
                             return;
                         }
                     };
@@ -134,7 +134,7 @@ impl PlatformBackend for Backend {
                 .into();
 
                 if let Err(error) = enumerator.RegisterEndpointNotificationCallback(&client) {
-                    let _ = ready_tx.send(Err(format!("注册设备通知失败: {error}")));
+                    let _ = ready_tx.send(Err(format!("Failed to register device notifications: {error}")));
                     return;
                 }
                 if ready_tx.send(Ok(())).is_err() {
@@ -151,7 +151,7 @@ impl PlatformBackend for Backend {
 
                 let _ = enumerator.UnregisterEndpointNotificationCallback(&client);
             })
-            .map_err(|error| anyhow!("启动设备监听线程失败: {error}"))?;
+            .map_err(|error| anyhow!("Failed to start the device watcher thread: {error}"))?;
 
         match ready_rx.recv() {
             Ok(Ok(())) => Ok(Self {
@@ -164,7 +164,7 @@ impl PlatformBackend for Backend {
             }
             Err(error) => {
                 let _ = thread.join();
-                Err(anyhow!("设备监听线程提前退出: {error}"))
+                Err(anyhow!("Device watcher thread exited unexpectedly: {error}"))
             }
         }
     }

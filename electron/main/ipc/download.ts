@@ -36,7 +36,7 @@ export const registerDownloadIpc = (): void => {
   });
   ipcMain.handle("download:pickDir", async () => {
     const result = await dialog.showOpenDialog({
-      title: "选择下载目录",
+      title: "Select download directory",
       properties: ["openDirectory", "createDirectory"],
     });
     if (result.canceled || result.filePaths.length === 0) {

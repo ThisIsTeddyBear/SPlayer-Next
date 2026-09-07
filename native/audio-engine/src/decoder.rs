@@ -144,7 +144,7 @@ pub fn prepare_decode(
     let duration_secs = reader.duration().map(|d| d.as_secs_f64()).unwrap_or(0.0);
     let stream_info = metadata::extract_stream_info(info);
     ensure!(stream_info.channels > 0, "源音频没有有效声道");
-    let source_channels = u16::try_from(stream_info.channels).context("源音频声道数超出范围")?;
+    let source_channels = u16::try_from(stream_info.channels).context("Source audio channel count is out of range")?;
     let codec = info.codec_name.clone().unwrap_or_default();
 
     let raw_metadata = reader.metadata();
@@ -240,7 +240,7 @@ pub fn start_prepared_decode(
             }
             data
         })
-        .context("启动解码线程失败")
+        .context("Failed to start the decoder thread")
         .with_audio_kind(AudioErrorKind::DecodeFailed)?;
 
     Ok((metadata, handle, cancel_handle))
@@ -278,7 +278,7 @@ pub fn resume_decode(
             }
             data
         })
-        .context("启动解码线程失败")
+        .context("Failed to start the decoder thread")
         .with_audio_kind(AudioErrorKind::DecodeFailed)
 }
 
@@ -351,12 +351,12 @@ fn open_source(
     let (reader, cancel) = if source.starts_with("http://") || source.starts_with("https://") {
         let http = HttpAudioSource::new_with_cancel_handle(source, &cancel_handle)?;
         let reader =
-            AudioReader::new(http).with_context(|| format!("打开网络音频失败: {source}"))?;
+            AudioReader::new(http).with_context(|| format!("Failed to open network audio: {source}"))?;
         (reader, Some(cancel_handle))
     } else {
-        let file = File::open(source).with_context(|| format!("打开本地文件失败: {source}"))?;
+        let file = File::open(source).with_context(|| format!("Failed to open local file: {source}"))?;
         let reader =
-            AudioReader::new(file).with_context(|| format!("打开本地音频失败: {source}"))?;
+            AudioReader::new(file).with_context(|| format!("Failed to open local audio: {source}"))?;
         (reader, None)
     };
 
@@ -374,7 +374,7 @@ fn build_player_resampler(
         .format::<f32>();
     reader
         .build_resampler(player_opts)
-        .with_context(|| "构建播放重采样器失败")
+        .with_context(|| "Failed to create the playback resampler")
 }
 
 fn build_resamplers(
@@ -390,7 +390,7 @@ fn build_resamplers(
         .format::<f32>();
     let fft_resampler = reader
         .build_resampler(fft_opts)
-        .with_context(|| "构建 FFT 重采样器失败")?;
+        .with_context(|| "Failed to create the FFT resampler")?;
 
     Ok((player_resampler, fft_resampler))
 }
@@ -410,7 +410,7 @@ fn run_decoding_loop(data: &mut DecoderData, shared: &Shared) {
         match data.reader.receive_frame() {
             Ok(Some(frame)) => {
                 if data.player_resampler.process::<f32>(Some(&frame)).is_err() {
-                    debug!("player resampler 处理失败，结束解码");
+                    debug!("Playback resampler processing failed; ending decode");
                     shared.mark_decode_failed();
                     return;
                 }
@@ -418,7 +418,7 @@ fn run_decoding_loop(data: &mut DecoderData, shared: &Shared) {
                 player_samples.extend_from_slice(data.player_resampler.output_as::<f32>());
 
                 if data.fft_resampler.process::<f32>(Some(&frame)).is_err() {
-                    debug!("fft resampler 处理失败，结束解码");
+                    debug!("FFT resampler processing failed; ending decode");
                     shared.recycle_player_buffer(player_samples);
                     shared.mark_decode_failed();
                     return;
@@ -472,7 +472,7 @@ fn run_decoding_loop(data: &mut DecoderData, shared: &Shared) {
             }
             Err(e) => {
                 if shared.is_stopping() {
-                    debug!(error = %e, "解码线程因停止信号退出");
+                    debug!(error = %e, "Decoder thread exited after receiving a stop signal");
                     return;
                 }
                 let io_failure = match &e {
@@ -481,7 +481,7 @@ fn run_decoding_loop(data: &mut DecoderData, shared: &Shared) {
                     _ => false,
                 };
                 shared.mark_decode_failed();
-                debug!(error = %e, had_success, io_failure, "解码线程异常结束");
+                debug!(error = %e, had_success, io_failure, "Decoder thread ended unexpectedly");
                 return;
             }
         }

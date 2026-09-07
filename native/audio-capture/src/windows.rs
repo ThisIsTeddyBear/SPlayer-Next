@@ -65,7 +65,7 @@ impl ComApartmentGuard {
     unsafe fn init() -> Result<Self, BackendError> {
         unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) }
             .ok()
-            .map_err(|e| BackendError::CaptureFailed(format!("初始化 COM 失败: {e}")))?;
+            .map_err(|e| BackendError::CaptureFailed(format!("Failed to initialize COM: {e}")))?;
         Ok(Self)
     }
 }
@@ -114,7 +114,7 @@ impl CaptureBackend for WindowsBackend {
 
     fn run(&self, sink: &mut CaptureSink) -> Result<(), BackendError> {
         unsafe { self.audio_client.Start() }
-            .map_err(|e| BackendError::CaptureFailed(format!("启动采集失败: {e}")))?;
+            .map_err(|e| BackendError::CaptureFailed(format!("Failed to start capture: {e}")))?;
         let result = self.capture_loop(sink);
         unsafe {
             let _ = self.audio_client.Stop();
@@ -299,7 +299,7 @@ pub fn open_backend(
 
     let enumerator: IMMDeviceEnumerator =
         unsafe { CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL) }
-            .map_err(|e| BackendError::CaptureFailed(format!("创建设备枚举器失败: {e}")))?;
+            .map_err(|e| BackendError::CaptureFailed(format!("Failed to create the device enumerator: {e}")))?;
     let device: IMMDevice = unsafe { enumerator.GetDefaultAudioEndpoint(flow, eConsole) }
         .map_err(|_| BackendError::NoDevice)?;
 
@@ -339,7 +339,7 @@ pub fn open_backend(
         Err(_) => {
             // 回退：混音格式 + 手动混音/降采样
             let mix = unsafe { client.GetMixFormat() }
-                .map_err(|e| BackendError::CaptureFailed(format!("获取混音格式失败: {e}")))?;
+                .map_err(|e| BackendError::CaptureFailed(format!("Failed to get the mix format: {e}")))?;
             let fmt = parse_mix_format(mix)?;
             let fresh: IAudioClient =
                 unsafe { device.Activate(CLSCTX_ALL, None) }.map_err(map_init_error)?;
@@ -362,9 +362,9 @@ pub fn open_backend(
     };
 
     let capture_client: IAudioCaptureClient = unsafe { client.GetService() }
-        .map_err(|e| BackendError::CaptureFailed(format!("获取采集接口失败: {e}")))?;
+        .map_err(|e| BackendError::CaptureFailed(format!("Failed to get the capture interface: {e}")))?;
     let audio_event = unsafe { CreateEventW(None, false, false, PCWSTR::null()) }
-        .map_err(|e| BackendError::CaptureFailed(format!("创建事件句柄失败: {e}")))?;
+        .map_err(|e| BackendError::CaptureFailed(format!("Failed to create the event handle: {e}")))?;
     let cancel_event = match unsafe { CreateEventW(None, false, false, PCWSTR::null()) } {
         Ok(evt) => evt,
         Err(e) => {

@@ -55,7 +55,7 @@ const save = (): void => {
 const encryptPassword = (password: string): string => {
   if (!password) return "";
   if (!safeStorage.isEncryptionAvailable()) {
-    streamingLog.warn("系统安全存储不可用，流媒体密码将以 base64 形式保存");
+    streamingLog.warn("System secure storage is unavailable; streaming passwords will be stored as base64");
     return Buffer.from(password, "utf-8").toString("base64");
   }
   return safeStorage.encryptString(password).toString("base64");
@@ -104,7 +104,7 @@ export const getStreamingConfig = (): {
  */
 export const getStreamingServer = (serverId: string): StreamingRuntimeConfig => {
   const server = getState().servers.find((item) => item.id === serverId);
-  if (!server) throw new Error("找不到流媒体服务器");
+  if (!server) throw new Error("Streaming server was not found");
   return toRuntimeConfig(server);
 };
 
@@ -131,7 +131,7 @@ export const updateStreamingServer = (
   input: StreamingServerInput,
 ): StreamingServerConfig => {
   const server = getState().servers.find((item) => item.id === serverId);
-  if (!server) throw new Error("找不到流媒体服务器");
+  if (!server) throw new Error("Streaming server was not found");
   server.name = input.name.trim();
   server.type = input.type;
   server.url = input.url.trim().replace(/\/+$/, "");
@@ -156,7 +156,7 @@ export const removeStreamingServer = (serverId: string): void => {
 export const setActiveStreamingServer = (serverId: string | null): void => {
   const current = getState();
   if (serverId && !current.servers.some((server) => server.id === serverId)) {
-    throw new Error("找不到流媒体服务器");
+    throw new Error("Streaming server was not found");
   }
   current.activeServerId = serverId;
   save();
@@ -166,7 +166,7 @@ export const setActiveStreamingServer = (serverId: string | null): void => {
  */
 export const markStreamingServerConnected = (serverId: string): StreamingServerConfig => {
   const server = getState().servers.find((item) => item.id === serverId);
-  if (!server) throw new Error("找不到流媒体服务器");
+  if (!server) throw new Error("Streaming server was not found");
   server.lastConnected = Date.now();
   save();
   return toServerConfig(server);

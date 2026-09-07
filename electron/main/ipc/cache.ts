@@ -214,7 +214,7 @@ export const registerCacheIpc = (): void => {
     async (): Promise<{ ok: boolean; dir: string; reason?: "canceled" | "notEmpty" }> => {
       const current = getAppCacheDir();
       const result = await dialog.showOpenDialog({
-        title: "选择缓存目录",
+        title: "Select cache directory",
         properties: ["openDirectory", "createDirectory"],
       });
       if (result.canceled || result.filePaths.length === 0) {
