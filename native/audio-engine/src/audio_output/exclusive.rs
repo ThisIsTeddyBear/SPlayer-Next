@@ -105,35 +105,35 @@ impl ExclusiveConfig {
             );
         }
 
-        let channels = candidate_channels(source_channels, bit_perfect);
-        let formats = candidate_formats(source_bits_per_sample, bit_perfect);
+        if bit_perfect {
+            if let Some(config) = find_supported_config(
+                &client,
+                device_id,
+                sample_rate,
+                source_channels,
+                source_bits_per_sample,
+                true,
+            ) {
+                return Ok(config);
+            }
+        }
 
-        for channels in channels {
-            for sample_format in formats {
-                let config = Self {
-                    device_id: device_id.map(str::to_owned),
-                    sample_rate,
-                    channels,
-                    sample_format: *sample_format,
-                    bit_perfect,
-                };
-                let wave_format = config.wave_format();
-                let supported = unsafe {
-                    client.IsFormatSupported(
-                        AUDCLNT_SHAREMODE_EXCLUSIVE,
-                        &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
-                        None,
-                    )
-                }
-                .is_ok();
-                if supported {
-                    return Ok(config);
-                }
+        // 保留独占输出，但在设备不接受源格式时协商可用格式并交给解码器重采样。
+        for output_rate in candidate_sample_rates(sample_rate) {
+            if let Some(config) = find_supported_config(
+                &client,
+                device_id,
+                output_rate,
+                source_channels,
+                source_bits_per_sample,
+                false,
+            ) {
+                return Ok(config);
             }
         }
 
         bail!(
-            "The selected output device does not support exclusive playback at {} Hz. Close other applications using audio or select a device that supports this sample rate.",
+            "The selected output device does not support exclusive playback for {} Hz audio. Close other applications using audio or select a compatible device.",
             sample_rate
         )
     }
@@ -174,6 +174,54 @@ impl ExclusiveConfig {
             SubFormat: self.sample_format.sub_format(),
         }
     }
+}
+
+fn find_supported_config(
+    client: &IAudioClient,
+    device_id: Option<&str>,
+    sample_rate: u32,
+    source_channels: u16,
+    source_bits_per_sample: u32,
+    bit_perfect: bool,
+) -> Option<ExclusiveConfig> {
+    for channels in candidate_channels(source_channels, bit_perfect) {
+        for sample_format in candidate_formats(source_bits_per_sample, bit_perfect) {
+            let config = ExclusiveConfig {
+                device_id: device_id.map(str::to_owned),
+                sample_rate,
+                channels,
+                sample_format: *sample_format,
+                bit_perfect,
+            };
+            let wave_format = config.wave_format();
+            let supported = unsafe {
+                client.IsFormatSupported(
+                    AUDCLNT_SHAREMODE_EXCLUSIVE,
+                    &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
+                    None,
+                )
+            }
+            .is_ok();
+            if supported {
+                return Some(config);
+            }
+        }
+    }
+    None
+}
+
+fn candidate_sample_rates(source_rate: u32) -> Vec<u32> {
+    const COMMON_RATES: [u32; 9] = [
+        32_000, 44_100, 48_000, 88_200, 96_000, 176_400, 192_000, 352_800, 384_000,
+    ];
+
+    let mut rates = COMMON_RATES
+        .into_iter()
+        .filter(|rate| *rate != source_rate)
+        .collect::<Vec<_>>();
+    rates.sort_by_key(|rate| rate.abs_diff(source_rate));
+    rates.insert(0, source_rate);
+    rates
 }
 
 fn channel_mask(channels: u16) -> u32 {
@@ -590,5 +638,29 @@ fn to_i32(value: f32) -> i32 {
         i32::MIN
     } else {
         (value.clamp(-1.0, 1.0) * i32::MAX as f32).round() as i32
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::candidate_sample_rates;
+
+    #[test]
+    fn keeps_the_source_rate_before_resampling() {
+        assert_eq!(candidate_sample_rates(48_000)[0], 48_000);
+    }
+
+    #[test]
+    fn prefers_96khz_for_192khz_when_higher_rates_are_unavailable() {
+        let rates = candidate_sample_rates(192_000);
+        let rate_96k = rates.iter().position(|rate| *rate == 96_000).unwrap();
+        let rate_48k = rates.iter().position(|rate| *rate == 48_000).unwrap();
+        assert!(rate_96k < rate_48k);
+    }
+
+    #[test]
+    fn picks_the_closest_common_rate_for_nonstandard_sources() {
+        let rates = candidate_sample_rates(44_100);
+        assert_eq!(rates[1], 48_000);
     }
 }

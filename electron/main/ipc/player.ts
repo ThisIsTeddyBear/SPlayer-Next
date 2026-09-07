@@ -79,6 +79,9 @@ const classifyLoadError = (error: unknown, source: string): ErrorCode => {
   if (isNativeCancelledError(error)) {
     return ErrorCode.LOAD_SUPERSEDED;
   }
+  if (/exclusive playback|exclusive audio|rejected exclusive/i.test(msg)) {
+    return ErrorCode.EXCLUSIVE_AUDIO_UNAVAILABLE;
+  }
   if (isNativeDeviceError(error) || /output device|NoDevice|DeviceNotAvailable/i.test(msg)) {
     return ErrorCode.DEVICE_NOT_FOUND;
   }
