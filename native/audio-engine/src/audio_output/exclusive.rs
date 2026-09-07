@@ -11,8 +11,7 @@ use windows::Win32::{
     Media::Audio::{
         eConsole, eRender, IAudioClient, IAudioRenderClient, IMMDevice, IMMDeviceEnumerator,
         MMDeviceEnumerator, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-        SPEAKER_FRONT_CENTER, SPEAKER_FRONT_LEFT, SPEAKER_FRONT_RIGHT, WAVEFORMATEX,
-        WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0,
+        WAVEFORMATEX, WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0,
     },
     System::{
         Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED},
@@ -25,6 +24,10 @@ use crate::priority;
 use crate::source::DecoderSource;
 
 const WAVE_FORMAT_EXTENSIBLE: u16 = 0xfffe;
+/// Windows 声道掩码位。
+const SPEAKER_FRONT_LEFT: u32 = 0x1;
+const SPEAKER_FRONT_RIGHT: u32 = 0x2;
+const SPEAKER_FRONT_CENTER: u32 = 0x4;
 const KSDATAFORMAT_SUBTYPE_PCM: GUID =
     GUID::from_u128(0x00000001_0000_0010_8000_00aa00389b71);
 const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: GUID =
