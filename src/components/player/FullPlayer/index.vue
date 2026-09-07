@@ -133,7 +133,7 @@ const handleLyricSeek = async (timeMs: number): Promise<void> => {
     if (trackId) window.api.nowPlaying.setLyricOffset(trackId, timeMs - getCurrentTime());
     return;
   }
-  await player.seek(timeMs);
+  await player.seek(Math.max(0, timeMs - status.lyricOffsetMs));
   if (!isPlaying.value) await player.play();
 };
 
