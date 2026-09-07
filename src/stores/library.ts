@@ -81,10 +81,10 @@ export const useLibraryStore = defineStore("library", () => {
   };
 
   /** 预取本地媒体库中歌手头像 */
-  const loadArtistAvatars = async (): Promise<void> => {
-    const names = [
-      ...new Set(tracks.value.flatMap((track) => track.artists.map((artist) => artist.name))),
-    ];
+  const loadArtistAvatars = async (artistNames?: readonly string[]): Promise<void> => {
+    const names = artistNames
+      ? [...new Set(artistNames)]
+      : [...new Set(tracks.value.flatMap((track) => track.artists.map((artist) => artist.name)))];
     if (!names.length) return;
     const unsubscribe = window.api.library.onArtistImage(({ artistName, image }) => {
       setArtistAvatar(artistName, image);

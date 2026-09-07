@@ -89,7 +89,9 @@ const handleClick = (item: CoverItem): void => {
 onMounted(async () => {
   source.value =
     mode === "artist" ? await libraryStore.getArtistList() : await libraryStore.getAlbumList();
-  if (mode === "artist") void libraryStore.loadArtistAvatars();
+  if (mode === "artist") {
+    void libraryStore.loadArtistAvatars(source.value.map((artist) => artist.name));
+  }
 });
 </script>
 
