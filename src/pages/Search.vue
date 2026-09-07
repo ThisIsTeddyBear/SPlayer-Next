@@ -140,7 +140,10 @@ const fetchTab = async (tab: TabKey, append: boolean): Promise<void> => {
   }
   error.value = "";
   try {
-    const all = localResults(tab);
+    const response =
+      tab === "lyrics" ? await window.api.library.searchLyrics(keyword.value) : undefined;
+    if (response && !response.success) throw new Error(response.error);
+    const all = response?.data ?? localResults(tab);
     const offset = append ? state.items.length : 0;
     const items = all.slice(offset, offset + PAGE_SIZE).map((item) => markRaw(item));
     if (append) (state.items as Array<Track | CoverItem>).push(...items);

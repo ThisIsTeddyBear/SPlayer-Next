@@ -74,16 +74,29 @@ watch(dialogOpen, (open) => {
     >
       <IconLucideSearch class="size-4 text-on-surface-variant/50 shrink-0" />
       <span class="flex-1 min-w-0 truncate text-left text-base text-on-surface-variant/40">
-        {{ t('nav.searchPlaceholder') }}
+        {{ t("nav.searchPlaceholder") }}
       </span>
     </button>
-    <SButton class="app-no-drag shrink-0" variant="tertiary" circle :size="40" :icon-size="20" @click="recognitionOpen = true">
+    <SButton
+      class="app-no-drag shrink-0"
+      variant="tertiary"
+      circle
+      :size="40"
+      :icon-size="20"
+      @click="recognitionOpen = true"
+    >
       <template #icon><IconLucideAudioWaveform /></template>
     </SButton>
   </div>
 
   <RecognitionDialog v-model:open="recognitionOpen" />
-  <SDialog v-model:open="dialogOpen" :closable="false" :content-style="{ padding: 0 }" width="560px" top="12vh">
+  <SDialog
+    v-model:open="dialogOpen"
+    :closable="false"
+    :content-style="{ padding: 0 }"
+    width="560px"
+    top="12vh"
+  >
     <div class="flex flex-col">
       <div class="px-4 pt-4 pb-3">
         <NavSearchInput
@@ -97,47 +110,69 @@ watch(dialogOpen, (open) => {
         <template v-if="query">
           <button
             type="button"
-            class="min-w-0 flex items-center gap-2.5 px-2 py-2 rounded-lg text-left hover:bg-on-surface/5 transition-colors"
+            class="min-w-0 flex items-center gap-2.5 px-2 py-2 rounded-lg border-none bg-transparent text-left hover:bg-on-surface/5 transition-colors"
             @click="submit()"
           >
             <IconLucideSearch class="size-4 shrink-0 text-primary" />
-            <span class="flex-1 truncate text-sm text-on-surface">{{ t('nav.searchGoto', { keyword: searchQuery.trim() }) }}</span>
+            <span class="flex-1 truncate text-sm text-on-surface">
+              {{ t("nav.searchGoto", { keyword: searchQuery.trim() }) }}
+            </span>
           </button>
           <button
             v-for="track in suggestions"
             :key="track.id"
             type="button"
-            class="min-w-0 flex flex-col gap-0.5 px-2 py-2 rounded-lg text-left hover:bg-on-surface/5 transition-colors"
+            class="min-w-0 flex flex-col gap-0.5 px-2 py-2 rounded-lg border-none bg-transparent text-left hover:bg-on-surface/5 transition-colors"
             @click="submit(track.title)"
           >
             <span class="truncate text-sm text-on-surface">{{ track.title }}</span>
             <span class="truncate text-xs text-on-surface-variant">
-              {{ [...track.artists.map((artist) => artist.name), track.album?.name].filter(Boolean).join(' · ') }}
+              {{
+                [...track.artists.map((artist) => artist.name), track.album?.name]
+                  .filter(Boolean)
+                  .join(" · ")
+              }}
             </span>
           </button>
-          <div v-if="suggestions.length === 0" class="py-8 text-center text-sm text-on-surface-variant">
-            {{ t('nav.searchEmpty') }}
+          <div
+            v-if="suggestions.length === 0"
+            class="py-8 text-center text-sm text-on-surface-variant"
+          >
+            {{ t("nav.searchEmpty") }}
           </div>
         </template>
         <template v-else>
           <div v-if="data.searchHistory.length" class="flex flex-col gap-2">
             <div class="px-2 flex items-center gap-1.5 text-sm font-medium text-primary">
               <IconLucideHistory class="size-4" />
-              <span>{{ t('nav.searchSection.history') }}</span>
+              <span>{{ t("nav.searchSection.history") }}</span>
             </div>
             <div class="flex flex-wrap gap-1.5">
-              <STag v-for="keyword in data.searchHistory" :key="keyword" closable round class="cursor-pointer" @click="submit(keyword)" @close="data.removeSearchHistory(keyword)">
+              <STag
+                v-for="keyword in data.searchHistory"
+                :key="keyword"
+                closable
+                round
+                class="cursor-pointer"
+                @click="submit(keyword)"
+                @close="data.removeSearchHistory(keyword)"
+              >
                 {{ keyword }}
               </STag>
             </div>
-            <SButton variant="ghost" size="tiny" class="self-start" @click="data.clearSearchHistory()">
+            <SButton
+              variant="tertiary"
+              size="tiny"
+              class="self-start"
+              @click="data.clearSearchHistory()"
+            >
               <template #icon><IconLucideTrash2 /></template>
-              {{ t('common.clear') }}
+              {{ t("common.clear") }}
             </SButton>
           </div>
           <div v-else class="py-10 flex flex-col items-center gap-2 text-on-surface-variant/40">
             <IconLucideSearch class="size-8" />
-            <span class="text-xs">{{ t('nav.searchEmpty') }}</span>
+            <span class="text-xs">{{ t("nav.searchEmpty") }}</span>
           </div>
         </template>
       </div>

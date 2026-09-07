@@ -97,6 +97,7 @@
     "confirm": "Confirm",
     "cancel": "Cancel",
     "close": "Close",
+    "clear": "Clear",
     "configure": "Configure",
     "more": "More",
     "save": "Save",
@@ -394,7 +395,7 @@
     "emptyKeyword": "Type a keyword to start searching",
     "noResults": "No matching results",
     "noResultsHint": "Try another keyword or switch the source",
-    "lyricsUnavailable": "Lyrics are not indexed in the local library yet.",
+    "lyricsUnavailable": "No local lyric text matched this search.",
     "errorTitle": "Search failed",
     "tabs": {
       "songs": "Songs",

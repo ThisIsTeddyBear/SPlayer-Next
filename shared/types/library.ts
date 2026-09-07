@@ -57,6 +57,8 @@ export interface LibraryApi {
   getTracksByIds: (ids: string[]) => Promise<IpcResponse<Track[]>>;
   /** 搜索曲目 */
   searchTracks: (query: string) => Promise<IpcResponse<Track[]>>;
+  /** 搜索本地侧载歌词文本 */
+  searchLyrics: (query: string) => Promise<IpcResponse<Track[]>>;
   /** 获取曲目总数 */
   getTrackCount: () => Promise<IpcResponse<number>>;
   /** 随机取一首曲目 */

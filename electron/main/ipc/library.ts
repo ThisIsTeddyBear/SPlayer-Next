@@ -1,5 +1,6 @@
 import { ipcMain, dialog } from "electron";
 import fs from "node:fs/promises";
+import path from "node:path";
 import { store } from "@main/store";
 import {
   getAllTracks,
@@ -20,11 +21,31 @@ import { startScan, cancelScan, isScanning, scannedToUpsert } from "@main/servic
 import { getEngine } from "@main/services/engine";
 import { fetchBytes } from "@main/utils/fetchBytes";
 import { getCoverCacheDir } from "@main/utils/config";
+import { readFileAutoEncoding } from "@main/utils/encoding";
 import { libraryLog } from "@main/utils/logger";
 import { prefetchArtistImages } from "@main/services/artistImages";
 import { ErrorCode } from "@shared/types/errors";
+import type { Track } from "@shared/types/player";
 import type { JsTagWriteRequest } from "@splayer/audio-engine";
 import type { TagEditRequest, TagWriteOutcome } from "@shared/types/tagEditor";
+
+const lyricExtensions = [".ttml", ".json", ".lys", ".qrc", ".krc", ".yrc", ".lrc", ".ass", ".srt"];
+
+/** 查找歌曲同名的侧载歌词文件 */
+const containsLyric = async (trackPath: string, query: string): Promise<boolean> => {
+  const extension = path.extname(trackPath);
+  if (!extension) return false;
+  const basePath = trackPath.slice(0, -extension.length);
+  for (const lyricExtension of lyricExtensions) {
+    try {
+      const content = await readFileAutoEncoding(`${basePath}${lyricExtension}`);
+      if (content.toLocaleLowerCase().includes(query)) return true;
+    } catch (_error) {
+      continue;
+    }
+  }
+  return false;
+};
 
 /** 注册音乐库相关 IPC */
 export const registerLibraryIpc = (): void => {
@@ -122,6 +143,34 @@ export const registerLibraryIpc = (): void => {
     try {
       return { success: true, data: searchTracks(query) };
     } catch (_error) {
+      return { success: false, error: ErrorCode.UNKNOWN };
+    }
+  });
+
+  // 搜索本地侧载歌词；歌曲数量通常较大，分批读取避免一次性占满文件句柄。
+  ipcMain.handle("library:searchLyrics", async (_event, query: string) => {
+    try {
+      const normalizedQuery = query.trim().toLocaleLowerCase();
+      if (!normalizedQuery) return { success: true, data: [] };
+      const all = getAllTracks();
+      const containerPaths = new Set(
+        all.flatMap((track) => (track.cueAudioPath ? [track.cueAudioPath] : [])),
+      );
+      const tracks = all.filter((track) => track.path && !containerPaths.has(track.path));
+      const data: Track[] = [];
+      const batchSize = 12;
+      for (let index = 0; index < tracks.length; index += batchSize) {
+        const batch = tracks.slice(index, index + batchSize);
+        const matches = await Promise.all(
+          batch.map(async (track) =>
+            track.path && (await containsLyric(track.path, normalizedQuery)) ? track : null,
+          ),
+        );
+        data.push(...matches.filter((track): track is NonNullable<typeof track> => track !== null));
+      }
+      return { success: true, data };
+    } catch (error) {
+      libraryLog.error("搜索本地歌词失败:", error);
       return { success: false, error: ErrorCode.UNKNOWN };
     }
   });

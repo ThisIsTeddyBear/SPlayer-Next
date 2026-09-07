@@ -207,6 +207,8 @@ const api = {
     getTracksByIds: (ids: string[]) => ipcRenderer.invoke("library:getTracksByIds", ids),
     // 搜索曲目
     searchTracks: (query: string) => ipcRenderer.invoke("library:searchTracks", query),
+    // 搜索本地侧载歌词文本
+    searchLyrics: (query: string) => ipcRenderer.invoke("library:searchLyrics", query),
     // 获取曲目总数
     getTrackCount: () => ipcRenderer.invoke("library:getTrackCount"),
     // 随机取一首曲目
