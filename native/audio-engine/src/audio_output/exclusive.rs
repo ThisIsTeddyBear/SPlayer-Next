@@ -109,7 +109,7 @@ impl ExclusiveConfig {
                 let supported = unsafe {
                     client.IsFormatSupported(
                         AUDCLNT_SHAREMODE_EXCLUSIVE,
-                        &wave_format.Format,
+                        &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
                         None,
                     )
                 }
@@ -367,7 +367,7 @@ fn run_stream(
             AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
             period_hns,
             period_hns,
-            &wave_format.Format,
+            &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
             None,
         )
     }
