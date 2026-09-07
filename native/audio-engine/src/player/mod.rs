@@ -172,10 +172,41 @@ impl InnerPlayer {
 
     pub fn set_exclusive_audio(&mut self, enabled: bool) {
         self.exclusive_audio = enabled;
+        if enabled {
+            self.cancel_fade();
+            self.target_volume = 1.0;
+            self.fade_duration_ms = 0;
+            if let Some(playback) = &self.playback {
+                playback.set_volume(1.0);
+            }
+            self.normalization_enabled = false;
+            if let Some(shared) = &self.shared {
+                shared.set_normalization_enabled(false);
+            }
+            self.equalizer.lock().set_enabled(false);
+            self.equalizer.lock().reset_state();
+            let mut tempo = self.tempo.lock();
+            tempo.set_speed(1.0);
+            tempo.set_pitch(0);
+            tempo.set_pitch_sync(true);
+            tempo.reset();
+        }
     }
 
     pub fn exclusive_audio(&self) -> bool {
         self.exclusive_audio
+    }
+
+    pub fn bit_perfect_active(&self) -> bool {
+        self.exclusive_audio
+            && self
+                .shared
+                .as_ref()
+                .is_some_and(|shared| shared.is_bit_perfect())
+            && self
+                .output
+                .as_ref()
+                .is_some_and(AudioOutput::is_bit_perfect)
     }
 
     pub fn set_event_callback(&mut self, cb: EventEmitter) {
@@ -226,7 +257,11 @@ impl InnerPlayer {
 
                 self.cancel_fade();
                 if let Some(ref playback) = self.playback {
-                    playback.set_volume(0.0);
+                    if self.exclusive_audio {
+                        playback.set_volume(1.0);
+                    } else {
+                        playback.set_volume(0.0);
+                    }
                     playback.play();
                 }
 
@@ -237,7 +272,9 @@ impl InnerPlayer {
                 self.start_position_timer();
                 self.start_fft_timer();
 
-                self.start_fade(0.0, self.target_volume, None);
+                if !self.exclusive_audio {
+                    self.start_fade(0.0, self.target_volume, None);
+                }
                 Ok(None)
             }
             PlayerState::Stopped | PlayerState::Idle => Ok(self.current_source.clone()),
@@ -246,6 +283,10 @@ impl InnerPlayer {
 
     pub fn pause(&mut self) {
         if self.state != PlayerState::Playing {
+            return;
+        }
+        if self.exclusive_audio {
+            self.pause_immediately();
             return;
         }
 
@@ -330,6 +371,13 @@ impl InnerPlayer {
     }
 
     pub fn set_volume(&mut self, volume: f32) {
+        if self.exclusive_audio {
+            self.target_volume = 1.0;
+            if let Some(playback) = &self.playback {
+                playback.set_volume(1.0);
+            }
+            return;
+        }
         self.target_volume = volume;
         if let Some(ref playback) = self.playback {
             playback.set_volume(volume);
@@ -341,6 +389,10 @@ impl InnerPlayer {
     }
 
     pub fn set_fade_duration(&mut self, duration_ms: u64) {
+        if self.exclusive_audio {
+            self.fade_duration_ms = 0;
+            return;
+        }
         self.fade_duration_ms = duration_ms;
     }
 
@@ -379,6 +431,13 @@ impl InnerPlayer {
     }
 
     pub fn set_normalization_enabled(&mut self, enabled: bool) {
+        if self.exclusive_audio {
+            self.normalization_enabled = false;
+            if let Some(shared) = &self.shared {
+                shared.set_normalization_enabled(false);
+            }
+            return;
+        }
         self.normalization_enabled = enabled;
         if let Some(ref shared) = self.shared {
             shared.set_normalization_enabled(enabled);
@@ -390,6 +449,10 @@ impl InnerPlayer {
     }
 
     pub fn set_equalizer_enabled(&mut self, enabled: bool) {
+        if self.exclusive_audio {
+            self.equalizer.lock().set_enabled(false);
+            return;
+        }
         self.equalizer.lock().set_enabled(enabled);
     }
 
@@ -414,14 +477,23 @@ impl InnerPlayer {
     }
 
     pub fn set_speed(&mut self, speed: f32) {
+        if self.exclusive_audio {
+            return;
+        }
         self.tempo.lock().set_speed(speed);
     }
 
     pub fn set_pitch(&mut self, semitones: i8) {
+        if self.exclusive_audio {
+            return;
+        }
         self.tempo.lock().set_pitch(semitones);
     }
 
     pub fn set_pitch_sync(&mut self, sync: bool) {
+        if self.exclusive_audio {
+            return;
+        }
         self.tempo.lock().set_pitch_sync(sync);
     }
 

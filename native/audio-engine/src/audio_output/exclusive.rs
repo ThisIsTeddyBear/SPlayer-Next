@@ -81,6 +81,7 @@ pub struct ExclusiveConfig {
     sample_rate: u32,
     channels: u16,
     sample_format: ExclusiveSampleFormat,
+    bit_perfect: bool,
 }
 
 impl ExclusiveConfig {
@@ -89,6 +90,7 @@ impl ExclusiveConfig {
         sample_rate: u32,
         source_channels: u16,
         source_bits_per_sample: u32,
+        bit_perfect: bool,
     ) -> Result<Self> {
         if sample_rate == 0 || source_channels == 0 {
             bail!("Exclusive audio requires a valid sample rate and channel count");
@@ -97,8 +99,14 @@ impl ExclusiveConfig {
         let device = open_device(device_id)?;
         let client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None) }
             .context("Failed to activate the exclusive audio device")?;
-        let channels = candidate_channels(source_channels);
-        let formats = candidate_formats(source_bits_per_sample);
+        if bit_perfect && !matches!(source_bits_per_sample, 16 | 24) {
+            bail!(
+                "Bit-perfect playback supports 16-bit and 24-bit integer PCM sources only; this track reports {source_bits_per_sample}-bit audio"
+            );
+        }
+
+        let channels = candidate_channels(source_channels, bit_perfect);
+        let formats = candidate_formats(source_bits_per_sample, bit_perfect);
 
         for channels in channels {
             for sample_format in formats {
@@ -107,6 +115,7 @@ impl ExclusiveConfig {
                     sample_rate,
                     channels,
                     sample_format: *sample_format,
+                    bit_perfect,
                 };
                 let wave_format = config.wave_format();
                 let supported = unsafe {
@@ -141,6 +150,10 @@ impl ExclusiveConfig {
         self.sample_format.name()
     }
 
+    pub fn is_bit_perfect(&self) -> bool {
+        self.bit_perfect
+    }
+
     fn wave_format(&self) -> WAVEFORMATEXTENSIBLE {
         let bits_per_sample = self.sample_format.bits_per_sample();
         let block_align = self.channels * (bits_per_sample / 8);
@@ -171,7 +184,11 @@ fn channel_mask(channels: u16) -> u32 {
     }
 }
 
-fn candidate_channels(source_channels: u16) -> Vec<u16> {
+fn candidate_channels(source_channels: u16, bit_perfect: bool) -> Vec<u16> {
+    if bit_perfect {
+        return vec![source_channels];
+    }
+
     match source_channels {
         1 => vec![2, 1],
         2 => vec![2],
@@ -179,7 +196,18 @@ fn candidate_channels(source_channels: u16) -> Vec<u16> {
     }
 }
 
-fn candidate_formats(source_bits_per_sample: u32) -> &'static [ExclusiveSampleFormat] {
+fn candidate_formats(
+    source_bits_per_sample: u32,
+    bit_perfect: bool,
+) -> &'static [ExclusiveSampleFormat] {
+    if bit_perfect {
+        return match source_bits_per_sample {
+            16 => &[ExclusiveSampleFormat::Pcm16],
+            24 => &[ExclusiveSampleFormat::Pcm24],
+            _ => unreachable!("bit-perfect source format was validated before negotiation"),
+        };
+    }
+
     match source_bits_per_sample {
         0..=16 => &[
             ExclusiveSampleFormat::Pcm16,
@@ -548,19 +576,13 @@ fn write_buffer(
 }
 
 fn to_i16(value: f32) -> i16 {
-    if value <= -1.0 {
-        i16::MIN
-    } else {
-        (value.clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16
-    }
+    let scaled = (value.clamp(-1.0, 1.0) * 32_768.0).round();
+    scaled.clamp(i16::MIN as f32, i16::MAX as f32) as i16
 }
 
 fn to_i24_in_i32(value: f32) -> i32 {
-    if value <= -1.0 {
-        i32::MIN
-    } else {
-        ((value.clamp(-1.0, 1.0) * 8_388_607.0).round() as i32) << 8
-    }
+    let scaled = (value.clamp(-1.0, 1.0) * 8_388_608.0).round();
+    (scaled.clamp(-8_388_608.0, 8_388_607.0) as i32) << 8
 }
 
 fn to_i32(value: f32) -> i32 {

@@ -69,6 +69,7 @@ export const handleEvent = async (event: PlayerEvent): Promise<void> => {
       }
       status.duration = event.data.duration;
       status.volume = event.data.volume;
+      status.bitPerfectActive = event.data.bitPerfectActive;
       if (event.data.speed != null) {
         status.speed = event.data.speed;
         playback.setSpeed(event.data.speed);

@@ -23,7 +23,7 @@ export declare class AudioPlayer {
    *
    */
   seek(position: number): Promise<void>
-  setVolume(volume: number): void
+  setVolume(volume: number): number
   getVolume(): number
   setFadeDuration(durationMs: number): void
   getFadeDuration(): number
@@ -118,6 +118,7 @@ export interface JsPlayerStatus {
   duration: number
   volume: number
   isFinished: boolean
+  bitPerfectActive: boolean
 }
 
 export interface JsScanEvent {

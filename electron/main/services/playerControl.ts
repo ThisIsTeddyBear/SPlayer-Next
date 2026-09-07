@@ -39,7 +39,9 @@ export const playerControl = {
   addToQueue: (tracks: Track[], position: "next" | "end"): void =>
     sendToMain("player:event", { type: "addToQueue", data: { tracks, position } }),
   seek,
-  setVolume: (volume: number): void => getPlayer().setVolume(volume),
+  setVolume: (volume: number): void => {
+    getPlayer().setVolume(volume);
+  },
   /** 当前播放进度（毫秒） */
   getPosition: (): number => toMs(getPlayer().getPosition()),
 };

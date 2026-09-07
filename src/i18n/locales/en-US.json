@@ -488,6 +488,7 @@
     },
     "lyricCredit": "Lyrics by",
     "noLyrics": "No lyrics available",
+    "bitPerfectActive": "Bit-perfect active",
     "copyLyric": {
       "title": "Copy Lyrics",
       "contentLabel": "Content to copy",
@@ -886,9 +887,9 @@
       "description": "Pause playback when switching the output device, e.g. when a Bluetooth device disconnects"
     },
     "exclusiveAudio": {
-      "label": "Exclusive Audio",
-      "description": "Use WASAPI exclusive mode at the track's native sample rate, bypassing the Windows mixer. This is available on Windows only.",
-      "confirm": "This takes exclusive control of the selected audio device while SPlayer has a track open. Other apps may not be able to use it until the track is closed or Exclusive Audio is turned off."
+      "label": "Bit-Perfect Exclusive Audio",
+      "description": "Play 16-bit and 24-bit PCM tracks through WASAPI exclusive mode only when the device exactly supports the track's sample rate, channels, and bit depth. Volume, equalizer, loudness normalization, fades, and speed or pitch changes are disabled while active. Windows only.",
+      "confirm": "This takes exclusive control of the selected audio device while SPlayer has a track open. Bit-perfect playback will not start if the device cannot use the track's exact format. Other apps may not be able to use the device until the track is closed or this setting is turned off."
     },
     "timeFormat": {
       "label": "Time Display Format",

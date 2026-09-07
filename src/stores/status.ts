@@ -14,6 +14,7 @@ export const useStatusStore = defineStore(
     const position = ref(0);
     const duration = ref(0);
     const volume = ref(1);
+    const bitPerfectActive = ref(false);
     const currentSource = ref<string | null>(null);
     const outputDevices = ref<AudioDevice[]>([]);
     const trackLoading = ref(false);
@@ -64,6 +65,7 @@ export const useStatusStore = defineStore(
       position,
       duration,
       volume,
+      bitPerfectActive,
       currentSource,
       isPlaying,
       isPaused,

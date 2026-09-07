@@ -88,6 +88,7 @@ impl AudioOutput {
                     requested_sample_rate.unwrap_or(decoder::DEFAULT_TARGET_SAMPLE_RATE),
                     requested_channels.unwrap_or(decoder::DEFAULT_OUTPUT_CHANNELS),
                     requested_bits_per_sample.unwrap_or(24),
+                    true,
                 )
             })
             .with_audio_kind(AudioErrorKind::Device)?;
@@ -135,6 +136,14 @@ impl AudioOutput {
             OutputBackend::Shared { config, .. } => config.channels(),
             #[cfg(target_os = "windows")]
             OutputBackend::Exclusive(config) => config.channels(),
+        }
+    }
+
+    pub fn is_bit_perfect(&self) -> bool {
+        match &self.backend {
+            OutputBackend::Shared { .. } => false,
+            #[cfg(target_os = "windows")]
+            OutputBackend::Exclusive(config) => config.is_bit_perfect(),
         }
     }
 

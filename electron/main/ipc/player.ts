@@ -123,6 +123,7 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
             volume: inst.getVolume(),
             speed: inst.getSpeed(),
             isFinished: false,
+            bitPerfectActive: inst.getStatus().bitPerfectActive,
           },
         };
         sendToMain("player:event", statusEvent);
@@ -200,6 +201,7 @@ export const registerPlayerIpc = (): void => {
           volume: inst.getVolume(),
           speed: inst.getSpeed(),
           isFinished: false,
+          bitPerfectActive: inst.getStatus().bitPerfectActive,
         },
       };
       sendToMain("player:event", loadingEvent);
@@ -354,9 +356,9 @@ export const registerPlayerIpc = (): void => {
 
   ipcMain.handle("player:setVolume", (_event, volume: number) => {
     try {
-      getPlayer().setVolume(volume);
-      mediaService.setVolume(volume);
-      return { success: true };
+      const actualVolume = getPlayer().setVolume(volume);
+      mediaService.setVolume(actualVolume);
+      return { success: true, data: actualVolume };
     } catch (error) {
       return fail(ErrorCode.UNKNOWN, error);
     }
@@ -395,6 +397,7 @@ export const registerPlayerIpc = (): void => {
         volume: raw.volume,
         speed: getPlayer().getSpeed(),
         isFinished: raw.isFinished,
+        bitPerfectActive: raw.bitPerfectActive,
       },
     };
   });
@@ -623,17 +626,18 @@ export const registerPlayerIpc = (): void => {
         case "SetVolume":
           if (event.volume != null) {
             if (0 <= event.volume && event.volume <= 1) {
-              inst.setVolume(event.volume);
-              mediaService.setVolume(event.volume);
+              const actualVolume = inst.setVolume(event.volume);
+              mediaService.setVolume(actualVolume);
               sendToMain("player:event", {
                 type: "status",
                 data: {
                   state: inst.getStatus().state as PlayerState,
                   position: toDisplayPositionMs(toMs(inst.getPosition())),
                   duration: toDisplayDurationMs(toMs(inst.getDuration())),
-                  volume: event.volume,
+                  volume: actualVolume,
                   speed: inst.getSpeed(),
                   isFinished: false,
+                  bitPerfectActive: inst.getStatus().bitPerfectActive,
                 },
               });
             } else {
@@ -656,6 +660,7 @@ export const registerPlayerIpc = (): void => {
                   volume: inst.getVolume(),
                   speed: event.rate,
                   isFinished: false,
+                  bitPerfectActive: inst.getStatus().bitPerfectActive,
                 },
               });
             } else {
@@ -692,7 +697,15 @@ export const registerPlayerIpc = (): void => {
     stopDeviceMonitoring();
     const stoppedEvent = {
       type: "status",
-      data: { state: "stopped", position: 0, duration: 0, volume: 1, speed: 1, isFinished: false },
+      data: {
+        state: "stopped",
+        position: 0,
+        duration: 0,
+        volume: 1,
+        speed: 1,
+        isFinished: false,
+        bitPerfectActive: false,
+      },
     };
     sendToMain("player:event", stoppedEvent);
     wsBroadcast(stoppedEvent);

@@ -123,6 +123,7 @@ export interface PlayerStatus {
   volume: number;
   speed: number;
   isFinished: boolean;
+  bitPerfectActive: boolean;
 }
 
 export interface AudioDevice {
@@ -167,7 +168,7 @@ export interface PlayerApi {
   pause: () => Promise<IpcResponse>;
   stop: () => Promise<IpcResponse>;
   seek: (positionMs: number) => Promise<IpcResponse>;
-  setVolume: (volume: number) => Promise<IpcResponse>;
+  setVolume: (volume: number) => Promise<IpcResponse<number>>;
   setPauseOnDeviceSwitch: (enabled: boolean) => Promise<IpcResponse>;
   getVolume: () => Promise<IpcResponse<number>>;
   getStatus: () => Promise<IpcResponse<PlayerStatus>>;

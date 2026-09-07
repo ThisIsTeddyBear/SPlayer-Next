@@ -59,6 +59,7 @@ impl OutputLimiter {
                 self.gain += (1.0 - self.gain) * LIMITER_RELEASE;
             }
             for sample in frame {
+                *sample *= self.gain;
             }
         }
     }
@@ -289,8 +290,9 @@ fn process_audio_chunk(
     limiter: &mut OutputLimiter,
     tempo_scratch: &mut Vec<f32>,
     channels: u16,
+    bit_perfect: bool,
 ) -> AudioChunk {
-    if chunk.player_samples.is_empty() {
+    if chunk.player_samples.is_empty() || bit_perfect {
         return chunk;
     }
 
@@ -320,6 +322,7 @@ fn run_dsp_loop(shared: &Shared, equalizer: &Mutex<Equalizer>, tempo: &Mutex<Str
             &mut limiter,
             &mut tempo_scratch,
             shared.channels(),
+            shared.is_bit_perfect(),
         );
         shared.push_output(chunk);
         if shared.is_stopping() {
@@ -433,7 +436,10 @@ fn run_decoding_loop(data: &mut DecoderData, shared: &Shared) {
                 }
                 had_success = true;
 
-                if shared.is_normalization_enabled() && !player_samples.is_empty() {
+                if !shared.is_bit_perfect()
+                    && shared.is_normalization_enabled()
+                    && !player_samples.is_empty()
+                {
                     let gain = if has_replay_gain {
                         shared.normalization_gain()
                     } else {
@@ -441,6 +447,7 @@ fn run_decoding_loop(data: &mut DecoderData, shared: &Shared) {
                     };
                     if (gain - 1.0).abs() > f32::EPSILON {
                         for s in &mut player_samples {
+                            *s *= gain;
                         }
                     }
                 }
@@ -560,6 +567,7 @@ mod tests {
             &mut limiter,
             &mut scratch,
             2,
+            false,
         );
 
         assert!(processed
@@ -588,6 +596,7 @@ mod tests {
             &mut limiter,
             &mut scratch,
             2,
+            false,
         );
 
         assert_eq!(processed.source_sample_count, 4096);

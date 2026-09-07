@@ -39,6 +39,7 @@ pub struct SeekTake {
     pub old_threads: OldThreads,
     pub normalization_enabled: bool,
     pub normalization_gain: f32,
+    pub bit_perfect: bool,
     pub current_source: Option<String>,
     pub was_playing: bool,
     pub original_sample_rate: u32,
@@ -153,12 +154,16 @@ impl InnerPlayer {
             fade_handle: self.fade_handle.take(),
         };
 
-        let (norm_enabled, norm_gain) = match self.shared.take() {
+        let (norm_enabled, norm_gain, bit_perfect) = match self.shared.take() {
             Some(s) => {
                 s.drain_buffer();
-                (s.is_normalization_enabled(), s.normalization_gain())
+                (
+                    s.is_normalization_enabled(),
+                    s.normalization_gain(),
+                    s.is_bit_perfect(),
+                )
             }
-            None => (self.normalization_enabled, 0.0),
+            None => (self.normalization_enabled, 0.0, false),
         };
 
         self.fft.reset();
@@ -167,6 +172,7 @@ impl InnerPlayer {
             old_threads,
             normalization_enabled: norm_enabled,
             normalization_gain: norm_gain,
+            bit_perfect,
             current_source: self.current_source.clone(),
             was_playing: self.state == PlayerState::Playing,
             original_sample_rate: self.original_sample_rate,

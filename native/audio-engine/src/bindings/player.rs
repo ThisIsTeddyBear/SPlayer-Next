@@ -99,6 +99,7 @@ pub struct JsPlayerStatus {
     pub duration: f64,
     pub volume: f64,
     pub is_finished: bool,
+    pub bit_perfect_active: bool,
 }
 
 fn state_to_str(state: PlayerState) -> &'static str {
@@ -169,6 +170,7 @@ impl AudioPlayer {
                 old_threads,
                 normalization_enabled,
                 normalization_gain,
+                bit_perfect: _,
                 current_source,
                 was_playing,
                 original_sample_rate,
@@ -219,6 +221,7 @@ impl AudioPlayer {
                 }
 
                 let shared = crate::shared::Shared::new(output.sample_rate(), output.channels());
+                shared.set_bit_perfect(output.is_bit_perfect());
                 shared.set_normalization_enabled(normalization_enabled);
                 shared.set_normalization_gain(normalization_gain);
                 equalizer
@@ -471,6 +474,7 @@ impl AudioPlayer {
                 failure_callback,
             )?;
             let shared = Shared::new(output.sample_rate(), output.channels());
+            shared.set_bit_perfect(output.is_bit_perfect());
             shared.set_normalization_enabled(normalization_enabled);
             equalizer
                 .lock()
@@ -608,6 +612,7 @@ impl AudioPlayer {
             old_threads,
             normalization_enabled,
             normalization_gain,
+            bit_perfect,
             current_source,
             was_playing,
             original_sample_rate: _,
@@ -630,6 +635,7 @@ impl AudioPlayer {
                 return SeekOutcome::Fallback;
             }
             let shared = Shared::new(output_sample_rate, output_channels);
+            shared.set_bit_perfect(bit_perfect);
             shared.set_normalization_enabled(normalization_enabled);
             shared.set_normalization_gain(normalization_gain);
             equalizer
@@ -690,8 +696,9 @@ impl AudioPlayer {
     }
 
     #[napi]
-    pub fn set_volume(&self, volume: f64) {
+    pub fn set_volume(&self, volume: f64) -> f64 {
         self.inner.lock().set_volume(volume as f32);
+        self.inner.lock().volume() as f64
     }
 
     #[napi]
@@ -728,6 +735,7 @@ impl AudioPlayer {
             duration: player.duration(),
             volume: player.volume() as f64,
             is_finished: player.is_finished(),
+            bit_perfect_active: player.bit_perfect_active(),
         }
     }
 

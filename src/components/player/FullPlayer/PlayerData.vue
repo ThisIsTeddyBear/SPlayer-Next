@@ -196,6 +196,12 @@ const alignItems = computed(() => {
       >
         {{ lyricLabel }}
       </span>
+      <span
+        v-if="status.bitPerfectActive"
+        class="inline-flex items-center justify-center leading-none px-1.5 py-1.2 rounded-md border border-solid border-cover/30 text-cover"
+      >
+        {{ t("player.bitPerfectActive") }}
+      </span>
     </div>
     <!-- 歌手 -->
     <div class="max-w-full flex items-center gap-1.5 text-[1.2em] text-cover/60">

@@ -450,7 +450,7 @@ export const markSeek = (posMs: number): void => {
 export const setVolume = async (vol: number): Promise<void> => {
   const result = await window.api.player.setVolume(vol);
   if (result.success) {
-    useStatusStore().volume = vol;
+    useStatusStore().volume = result.data ?? vol;
   }
 };
 

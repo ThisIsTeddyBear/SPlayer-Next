@@ -34,6 +34,7 @@ pub struct Shared {
     decode_failed: AtomicBool,
     normalization_gain: AtomicU32,
     normalization_enabled: AtomicBool,
+    bit_perfect: AtomicBool,
     cancel_handle: Mutex<Option<HttpCancelHandle>>,
 }
 
@@ -66,6 +67,7 @@ impl Shared {
             decode_failed: AtomicBool::new(false),
             normalization_gain: AtomicU32::new(1.0_f32.to_bits()),
             normalization_enabled: AtomicBool::new(false),
+            bit_perfect: AtomicBool::new(false),
             cancel_handle: Mutex::new(None),
         })
     }
@@ -93,6 +95,14 @@ impl Shared {
 
     pub fn is_normalization_enabled(&self) -> bool {
         self.normalization_enabled.load(Ordering::Relaxed)
+    }
+
+    pub fn set_bit_perfect(&self, enabled: bool) {
+        self.bit_perfect.store(enabled, Ordering::Relaxed);
+    }
+
+    pub fn is_bit_perfect(&self) -> bool {
+        self.bit_perfect.load(Ordering::Relaxed)
     }
 
     pub fn normalization_gain(&self) -> f32 {
