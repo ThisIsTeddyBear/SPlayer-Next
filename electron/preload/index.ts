@@ -289,6 +289,9 @@ const api = {
       ipcRenderer.invoke("lyrics:fetchTTMLOverlay", track, platform),
     matchLocalTTML: (track: unknown) => ipcRenderer.invoke("lyrics:matchLocalTTML", track),
     pickLyricRepoDir: () => ipcRenderer.invoke("lyrics:pickLyricRepoDir"),
+    searchLocalCandidates: (track: unknown) => ipcRenderer.invoke("lyrics:searchLocalCandidates", track),
+    saveLocalCandidate: (track: unknown, content: string, format: string) =>
+      ipcRenderer.invoke("lyrics:saveLocalCandidate", track, content, format),
   },
   opencc: {
     convert: (text: string, config: CjkTransformMode): Promise<string> =>

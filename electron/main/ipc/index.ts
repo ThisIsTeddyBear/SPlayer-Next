@@ -19,6 +19,7 @@ import { registerPlaylistIpc } from "./playlist";
 import { registerRecognitionIpc } from "./recognition";
 import { registerOpenccIpc } from "./opencc";
 import { registerRomanizationIpc } from "./romanization";
+import { registerLyricFetchIpc } from "./lyricFetch";
 
 /** 注册所有 IPC 处理 */
 export const registerIpcHandlers = (): void => {
@@ -27,6 +28,7 @@ export const registerIpcHandlers = (): void => {
   registerConfigIpc();
   registerLibraryIpc();
   registerRomanizationIpc();
+  registerLyricFetchIpc();
   registerNowPlayingIpc();
   registerWindowIpc();
   registerPluginIpc();

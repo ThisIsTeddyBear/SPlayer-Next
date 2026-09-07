@@ -1,5 +1,5 @@
 import type { Platform } from "./platform";
-import type { Track } from "./player";
+import type { IpcResponse, Track } from "./player";
 
 export type LyricFormat = "ttml" | "json" | "lys" | "yrc" | "qrc" | "krc" | "lrc" | "srt" | "ass";
 
@@ -80,6 +80,22 @@ export interface LyricMatchResult extends LyricInput {
   extra?: LyricMatchExtra;
 }
 
+export interface FetchedLyricCandidate {
+  id: number;
+  provider: string;
+  format: LyricFormat;
+  title: string;
+  artist: string;
+  album?: string;
+  duration?: number;
+  content: string;
+}
+
+export interface SavedLyric {
+  path: string;
+  removed: string[];
+}
+
 export type LyricMatchResponse =
   { ok: true; data: LyricMatchResult | null } | { ok: false; error: string };
 
@@ -92,4 +108,10 @@ export interface LyricsApi {
   fetchTTMLOverlay: (track: Track, platform: "netease" | "qqmusic") => Promise<LyricTTMLResponse>;
   matchLocalTTML: (track: Track) => Promise<LyricTTMLResponse>;
   pickLyricRepoDir: () => Promise<string | null>;
+  searchLocalCandidates: (track: Track) => Promise<IpcResponse<FetchedLyricCandidate[]>>;
+  saveLocalCandidate: (
+    track: Track,
+    content: string,
+    format: LyricFormat,
+  ) => Promise<IpcResponse<SavedLyric>>;
 }
