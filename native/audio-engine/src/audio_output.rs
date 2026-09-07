@@ -103,9 +103,10 @@ impl AudioOutput {
         #[cfg(target_os = "windows")]
         if exclusive_audio {
             let device_id = device_id.map(str::to_owned);
+            let config_device_id = device_id.clone();
             let config = run_in_mta(move || {
                 exclusive::ExclusiveConfig::new(
-                    device_id.as_deref(),
+                    config_device_id.as_deref(),
                     requested_sample_rate.unwrap_or(decoder::DEFAULT_TARGET_SAMPLE_RATE),
                     requested_channels.unwrap_or(decoder::DEFAULT_OUTPUT_CHANNELS),
                     requested_bits_per_sample.unwrap_or(24),

@@ -106,7 +106,7 @@ impl ExclusiveConfig {
                     device_id: device_id.map(str::to_owned),
                     sample_rate,
                     channels,
-                    sample_format,
+                    sample_format: *sample_format,
                 };
                 let wave_format = config.wave_format();
                 let supported = unsafe {
@@ -501,7 +501,7 @@ fn write_buffer(
                     frames as usize * channels as usize,
                 )
             };
-            for value in output {
+            for value in output.iter_mut() {
                 *value = to_i16(source.next().unwrap_or(0.0) * gain);
             }
             output.len()
@@ -513,7 +513,7 @@ fn write_buffer(
                     frames as usize * channels as usize,
                 )
             };
-            for value in output {
+            for value in output.iter_mut() {
                 *value = to_i24_in_i32(source.next().unwrap_or(0.0) * gain);
             }
             output.len()
@@ -525,7 +525,7 @@ fn write_buffer(
                     frames as usize * channels as usize,
                 )
             };
-            for value in output {
+            for value in output.iter_mut() {
                 *value = to_i32(source.next().unwrap_or(0.0) * gain);
             }
             output.len()
@@ -537,7 +537,7 @@ fn write_buffer(
                     frames as usize * channels as usize,
                 )
             };
-            for value in output {
+            for value in output.iter_mut() {
                 *value = source.next().unwrap_or(0.0) * gain;
             }
             output.len()
