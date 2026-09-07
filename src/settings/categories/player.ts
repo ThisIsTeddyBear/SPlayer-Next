@@ -1,5 +1,8 @@
 import type { SettingCategory } from "@/types/settings-schema";
 import DeviceSelector from "@/components/settings/custom/DeviceSelector.vue";
+import { useSettingsStore } from "@/stores/settings";
+import { handleError } from "@/utils/errors";
+import { ErrorCode } from "@shared/types/errors";
 import IconLucidePlay from "~icons/lucide/play";
 
 const playerCategory: SettingCategory = {
@@ -148,6 +151,25 @@ const playerCategory: SettingCategory = {
           defaultValue: false,
           action: (enabled) =>
             window.api.player.setPauseOnDeviceSwitch(Boolean(enabled)).then(() => {}),
+        },
+        {
+          key: "exclusiveAudio",
+          type: "switch",
+          binding: { store: "settings", path: "player.exclusiveAudio" },
+          defaultValue: false,
+          visible: () => window.api.system.platform === "win32",
+          confirm: {
+            when: (enabled) => Boolean(enabled),
+            contentKey: "settings.exclusiveAudio.confirm",
+            type: "warning",
+          },
+          action: async (enabled) => {
+            const value = Boolean(enabled);
+            const result = await window.api.player.setExclusiveAudio(value);
+            if (result.success) return;
+            useSettingsStore().player.exclusiveAudio = !value;
+            handleError(result.error ?? ErrorCode.EXCLUSIVE_AUDIO_UNAVAILABLE);
+          },
         },
       ],
     },

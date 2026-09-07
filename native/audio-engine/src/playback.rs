@@ -2,17 +2,16 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use cpal::traits::StreamTrait;
 use tracing::warn;
 
-use crate::audio_output::AudioOutput;
+use crate::audio_output::{AudioOutput, OutputStream};
 use crate::error::{AudioErrorKind, AudioResultExt};
 use crate::source::DecoderSource;
 
 /// 平台统一的播放控制句柄：持有一条独立的 `cpal::Stream`。
 /// 每次加载/seek 由 `attach` 创建，播放期间音量与停止通过原子标志与实时回调通信。
 pub struct PlaybackHandle {
-    stream: cpal::Stream,
+    stream: OutputStream,
     volume: Arc<AtomicU32>,
     stopped: Arc<AtomicBool>,
 }
@@ -57,6 +56,7 @@ impl PlaybackHandle {
     /// 停止播放：实时回调转入静音填充，随句柄销毁释放输出流
     pub fn stop(&self) {
         self.stopped.store(true, Ordering::Release);
+        self.stream.stop();
     }
 
     pub fn set_volume(&self, volume: f32) {

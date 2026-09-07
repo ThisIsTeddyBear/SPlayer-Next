@@ -97,6 +97,16 @@ impl PreparedDecoder {
     pub fn original_sample_rate(&self) -> u32 {
         self.metadata.original_sample_rate
     }
+
+    /// 音源原始声道数，用于独占输出格式协商。
+    pub fn original_channels(&self) -> u16 {
+        self.metadata.channels
+    }
+
+    /// 音源原始位深，用于独占输出格式协商。
+    pub fn bits_per_sample(&self) -> u32 {
+        self.metadata.bits_per_sample
+    }
 }
 
 /// 统一结束解码线程；panic 属于源错误，但仍需结束 source 迭代

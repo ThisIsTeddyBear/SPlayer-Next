@@ -189,11 +189,13 @@ impl AudioPlayer {
             output_generation,
             on_failure,
             device_id,
+            exclusive_audio,
         ) = {
             let mut player = self.inner.lock();
             let position = player.position();
             let is_playing = player.state() == PlayerState::Playing;
             let device_id = player.selected_device().map(String::from);
+            let exclusive_audio = player.exclusive_audio();
             let output_generation = player.reserve_output_generation();
             let on_failure = player.make_failure_callback(output_generation);
             let seek_take = player.take_for_async_seek();
@@ -206,6 +208,7 @@ impl AudioPlayer {
                 output_generation,
                 on_failure,
                 device_id,
+                exclusive_audio,
             )
         };
 
@@ -217,6 +220,8 @@ impl AudioPlayer {
                 current_source,
                 was_playing,
                 original_sample_rate,
+                original_channels,
+                original_bits_per_sample,
                 output_sample_rate: _,
                 output_channels: _,
                 token,
@@ -231,6 +236,9 @@ impl AudioPlayer {
                 let output = match audio_output::AudioOutput::new(
                     device_id.as_deref(),
                     Some(original_sample_rate),
+                    Some(original_channels),
+                    Some(original_bits_per_sample),
+                    exclusive_audio,
                     output_generation,
                     on_failure,
                 ) {
@@ -486,6 +494,7 @@ impl AudioPlayer {
             device_id,
             output_generation,
             failure_callback,
+            exclusive_audio,
             equalizer,
             tempo,
         ) = {
@@ -502,6 +511,7 @@ impl AudioPlayer {
                 player.selected_device().map(String::from),
                 output_generation,
                 failure_callback,
+                player.exclusive_audio(),
                 player.equalizer_handle(),
                 player.tempo_handle(),
             )
@@ -522,6 +532,9 @@ impl AudioPlayer {
             let output = audio_output::AudioOutput::new(
                 device_id.as_deref(),
                 Some(prepared.original_sample_rate()),
+                Some(prepared.original_channels()),
+                Some(prepared.bits_per_sample()),
+                exclusive_audio,
                 output_generation,
                 failure_callback,
             )?;
@@ -682,6 +695,8 @@ impl AudioPlayer {
             current_source,
             was_playing,
             original_sample_rate: _,
+            original_channels: _,
+            original_bits_per_sample: _,
             output_sample_rate,
             output_channels,
             token,
@@ -924,6 +939,48 @@ impl AudioPlayer {
     pub async fn set_output_device(&self, device_id: Option<String>) -> Result<()> {
         self.inner.lock().set_output_device(device_id);
         self.reinit_output().await
+    }
+
+    /// 设置 Windows WASAPI 独占输出。切换时重建当前输出，使设备按音源原始格式重新协商。
+    #[napi]
+    pub async fn set_exclusive_audio(&self, enabled: bool) -> Result<()> {
+        #[cfg(not(target_os = "windows"))]
+        {
+            if enabled {
+                return Err(Error::from_reason("WASAPI 独占音频仅支持 Windows"));
+            }
+            return Ok(());
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let (previous, was_playing) = {
+                let player = self.inner.lock();
+                (
+                    player.exclusive_audio(),
+                    player.state() == PlayerState::Playing,
+                )
+            };
+            if previous == enabled {
+                return Ok(());
+            }
+
+            self.inner.lock().set_exclusive_audio(enabled);
+            if let Err(error) = self.reinit_output().await {
+                self.inner.lock().set_exclusive_audio(previous);
+                match self.reinit_output().await {
+                    Ok(()) if was_playing => {
+                        let _ = self.play().await;
+                    }
+                    Ok(()) => {}
+                    Err(recovery_error) => {
+                        warn!(error = %recovery_error, "独占输出切换失败后无法恢复原输出");
+                    }
+                }
+                return Err(error);
+            }
+            Ok(())
+        }
     }
 
     /// 获取当前选择的输出设备 ID（None = 跟随系统默认）

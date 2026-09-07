@@ -228,6 +228,8 @@ export interface PlayerSettings {
   outputDevice: string | null;
   /** 切换输出设备时暂停播放 */
   pauseOnDeviceSwitch: boolean;
+  /** 是否启用 Windows WASAPI 独占音频输出 */
+  exclusiveAudio: boolean;
   /** 是否启用音乐频谱可视化 */
   enableSpectrum: boolean;
   /** 频谱单条宽度（px） */

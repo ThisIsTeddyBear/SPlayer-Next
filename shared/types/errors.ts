@@ -11,6 +11,8 @@ export enum ErrorCode {
   DEVICE_NOT_FOUND = "DEVICE_NOT_FOUND",
   /** 音频设备初始化失败 */
   DEVICE_INIT_FAILED = "DEVICE_INIT_FAILED",
+  /** 无法启用独占音频输出 */
+  EXCLUSIVE_AUDIO_UNAVAILABLE = "EXCLUSIVE_AUDIO_UNAVAILABLE",
 
   // 文件相关
   /** 文件不存在或无法访问 */

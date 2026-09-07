@@ -140,6 +140,7 @@ export const useSettingsStore = defineStore(
       autoImmersive: true,
       outputDevice: null,
       pauseOnDeviceSwitch: false,
+      exclusiveAudio: false,
       enableSpectrum: false,
       spectrumBarWidth: 4,
       reverseSpectrum: false,

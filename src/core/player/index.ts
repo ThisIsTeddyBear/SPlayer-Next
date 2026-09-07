@@ -1083,6 +1083,15 @@ export const initPlayer = async (): Promise<void> => {
   // 刷新设备列表并恢复上次选择的输出设备
   await refreshDevices();
   await window.api.player.setPauseOnDeviceSwitch(settings.player.pauseOnDeviceSwitch);
+  if (window.api.system.platform === "win32") {
+    const exclusiveResult = await window.api.player.setExclusiveAudio(
+      settings.player.exclusiveAudio,
+    );
+    if (!exclusiveResult.success) {
+      settings.player.exclusiveAudio = false;
+      handleError(exclusiveResult.error ?? ErrorCode.EXCLUSIVE_AUDIO_UNAVAILABLE);
+    }
+  }
   if (settings.player.outputDevice) {
     // 1.0.0 及更早版本存的是显示名，就地换成稳定 ID；设备当前不在线时保留原值等下次启动
     const legacy = useStatusStore().outputDevices.find(

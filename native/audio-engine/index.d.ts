@@ -102,6 +102,8 @@ export declare class AudioPlayer {
   getDefaultDeviceId(): string | null
   /** 切换输出设备（传设备 ID，None/undefined 使用系统默认） */
   setOutputDevice(deviceId?: string | undefined | null): Promise<void>
+  /** 设置 Windows WASAPI 独占输出。切换时重建当前输出，使设备按音源原始格式重新协商。 */
+  setExclusiveAudio(enabled: boolean): Promise<void>
   /**
    * 获取当前选择的输出设备 ID（None = 跟随系统默认）
    *

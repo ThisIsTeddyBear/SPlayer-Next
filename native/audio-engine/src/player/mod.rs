@@ -64,6 +64,8 @@ pub struct InnerPlayer {
     fft_timer_handle: Option<JoinHandle<()>>,
     /// 用户选择的输出设备（设备 ID，None = 跟随系统默认）
     selected_device: Option<String>,
+    /// 是否启用 Windows WASAPI 独占输出
+    exclusive_audio: bool,
     /// 音量归一化开关
     normalization_enabled: bool,
     /// 跨曲目共享的均衡器（load/seek 时交给 DSP 线程）
@@ -79,6 +81,10 @@ pub struct InnerPlayer {
     output_generation: Arc<AtomicU64>,
     /// 当前音频源的原始采样率
     original_sample_rate: u32,
+    /// 当前音频源的原始声道数
+    original_channels: u16,
+    /// 当前音频源的原始位深
+    original_bits_per_sample: u32,
     /// 正在打开的网络音源中断句柄，确保切歌和 stop 能取消元数据探测
     pending_load_handle: Option<HttpCancelHandle>,
 }
@@ -100,6 +106,9 @@ impl InnerPlayer {
             self.output = Some(AudioOutput::new(
                 self.selected_device.as_deref(),
                 requested_sample_rate,
+                None,
+                None,
+                self.exclusive_audio,
                 generation,
                 on_failure,
             )?);
@@ -173,6 +182,7 @@ impl InnerPlayer {
             fft_timer_stop: None,
             fft_timer_handle: None,
             selected_device: None,
+            exclusive_audio: false,
             normalization_enabled: false,
             equalizer: Arc::new(Mutex::new(Equalizer::new(
                 initial_rate,
@@ -185,6 +195,8 @@ impl InnerPlayer {
             load_token: Arc::new(AtomicU64::new(0)),
             output_generation: Arc::new(AtomicU64::new(0)),
             original_sample_rate: decoder::DEFAULT_TARGET_SAMPLE_RATE,
+            original_channels: decoder::DEFAULT_OUTPUT_CHANNELS,
+            original_bits_per_sample: 24,
             pending_load_handle: None,
         })
     }
@@ -198,6 +210,16 @@ impl InnerPlayer {
     /// 获取当前选择的输出设备（None = 跟随系统默认）
     pub fn selected_device(&self) -> Option<&str> {
         self.selected_device.as_deref()
+    }
+
+    /// 设置 WASAPI 独占输出开关。非 Windows 平台由绑定层拦截，不会调用此路径。
+    pub fn set_exclusive_audio(&mut self, enabled: bool) {
+        self.exclusive_audio = enabled;
+    }
+
+    /// 当前是否启用 WASAPI 独占输出。
+    pub fn exclusive_audio(&self) -> bool {
+        self.exclusive_audio
     }
 
     /// 注册事件回调（支持热替换：先停止旧的定时器/渐变，确保旧回调的 Arc 引用尽快释放）

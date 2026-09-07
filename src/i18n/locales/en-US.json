@@ -884,6 +884,11 @@
       "label": "Pause on Device Switch",
       "description": "Pause playback when switching the output device, e.g. when a Bluetooth device disconnects"
     },
+    "exclusiveAudio": {
+      "label": "Exclusive Audio",
+      "description": "Use WASAPI exclusive mode at the track's native sample rate, bypassing the Windows mixer. This is available on Windows only.",
+      "confirm": "This takes exclusive control of the selected audio device while SPlayer has a track open. Other apps may not be able to use it until the track is closed or Exclusive Audio is turned off."
+    },
     "timeFormat": {
       "label": "Time Display Format",
       "description": "How to display time in the player bar and full player (click to quickly toggle)",
@@ -2218,6 +2223,7 @@
     "deviceHint": "No audio output device detected. Please connect headphones or speakers and try again.",
     "DEVICE_NOT_FOUND": "No audio output device found",
     "DEVICE_INIT_FAILED": "Failed to initialize audio device",
+    "EXCLUSIVE_AUDIO_UNAVAILABLE": "Exclusive audio could not be enabled. Close other apps using the device or choose a device that supports this track's native format.",
     "FILE_NOT_FOUND": "File not found or inaccessible",
     "FILE_NO_AUDIO_STREAM": "No audio stream found in file",
     "FILE_DECODE_ERROR": "Audio decode failed",

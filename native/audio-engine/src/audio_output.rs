@@ -1,31 +1,75 @@
 //! 跨平台统一的音频输出（纯 cpal，无 rodio）。
 //!
-//! cpal 0.18 起各后端的 `Stream` 均为 `Send`，可直接由 `PlaybackHandle` 持有，
-//! 无需再为 `!Send` 做专用线程隔离。`AudioOutput` 只负责解析输出设备与配置：
+//! 共享输出的 cpal `Stream` 可直接由 `PlaybackHandle` 持有；Windows 独占输出在专用线程持有
+//! WASAPI COM 接口。`AudioOutput` 只负责解析输出设备与配置：
 //! 设备采样率即播放重采样目标，每次加载/seek 音源时按该配置创建独立输出流。
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
-use cpal::traits::{DeviceTrait, HostTrait};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, Sample, SampleFormat, SizedSample, StreamConfig, SupportedStreamConfig};
 use tracing::{debug, info, warn};
 
+use crate::decoder;
 use crate::error::{AudioErrorKind, AudioResultExt};
 use crate::source::DecoderSource;
+
+#[cfg(target_os = "windows")]
+mod exclusive;
 
 /// 输出失败回调：实时错误线程调用，只允许发送轻量事件。
 /// 禁止获取 `InnerPlayer` 锁、join 线程、枚举设备、创建新流或调用 NAPI async 方法。
 pub type OutputFailureCallback = Arc<dyn Fn() + Send + Sync + 'static>;
+
+/// 输出流实现。Windows 独占模式不经过 CPAL 的共享 WASAPI 路径，避免系统混音器重采样。
+pub enum OutputStream {
+    Shared(cpal::Stream),
+    #[cfg(target_os = "windows")]
+    Exclusive(exclusive::ExclusiveStream),
+}
+
+impl OutputStream {
+    pub fn play(&self) -> Result<()> {
+        match self {
+            Self::Shared(stream) => stream.play().map_err(Into::into),
+            #[cfg(target_os = "windows")]
+            Self::Exclusive(stream) => stream.play(),
+        }
+    }
+
+    pub fn pause(&self) -> Result<()> {
+        match self {
+            Self::Shared(stream) => stream.pause().map_err(Into::into),
+            #[cfg(target_os = "windows")]
+            Self::Exclusive(stream) => stream.pause(),
+        }
+    }
+
+    pub fn stop(&self) {
+        #[cfg(target_os = "windows")]
+        if let Self::Exclusive(stream) = self {
+            stream.stop();
+        }
+    }
+}
+
+enum OutputBackend {
+    Shared {
+        device: cpal::Device,
+        config: SupportedStreamConfig,
+    },
+    #[cfg(target_os = "windows")]
+    Exclusive(exclusive::ExclusiveConfig),
+}
 
 /// 输出设备与配置句柄。`Send`，可放进 `InnerPlayer` 而不需 `unsafe impl Send`。
 ///
 /// 不持有 `cpal::Stream`——输出流由每次加载音源时的 `PlaybackHandle::attach` 按此配置创建，
 /// 因此切歌时无需跨线程移交流，也天然避免新旧流重叠占用设备。
 pub struct AudioOutput {
-    device: cpal::Device,
-    config: SupportedStreamConfig,
+    backend: OutputBackend,
     /// 该输出流的单调代次，用于诊断和过滤销毁后迟到的流错误
     generation: u64,
     on_failure: OutputFailureCallback,
@@ -38,6 +82,9 @@ impl AudioOutput {
     /// * `device_id` - 输出设备 ID，`None` 走系统默认设备
     /// * `requested_sample_rate` - 期望输出采样率；设备支持时按此速率打开（音源精确采样率），
     ///   否则回退到设备默认配置。`None` 表示直接用设备默认配置
+    /// * `requested_channels` - 独占输出优先协商的音源原始声道数
+    /// * `requested_bits_per_sample` - 独占输出优先协商的音源原始位深
+    /// * `exclusive_audio` - Windows 上使用 WASAPI 独占路径；格式不受支持时返回错误而不回退共享模式
     /// * `generation` - 输出流单调代次，见 [`AudioOutput`] 字段说明
     /// * `on_failure` - 运行期流错误回调，见 [`OutputFailureCallback`]
     ///
@@ -47,9 +94,40 @@ impl AudioOutput {
     pub fn new(
         device_id: Option<&str>,
         requested_sample_rate: Option<u32>,
+        requested_channels: Option<u16>,
+        requested_bits_per_sample: Option<u32>,
+        exclusive_audio: bool,
         generation: u64,
         on_failure: OutputFailureCallback,
     ) -> Result<Self> {
+        #[cfg(target_os = "windows")]
+        if exclusive_audio {
+            let device_id = device_id.map(str::to_owned);
+            let config = run_in_mta(move || {
+                exclusive::ExclusiveConfig::new(
+                    device_id.as_deref(),
+                    requested_sample_rate.unwrap_or(decoder::DEFAULT_TARGET_SAMPLE_RATE),
+                    requested_channels.unwrap_or(decoder::DEFAULT_OUTPUT_CHANNELS),
+                    requested_bits_per_sample.unwrap_or(24),
+                )
+            })
+            .with_audio_kind(AudioErrorKind::Device)?;
+            info!(
+                device = device_id.as_deref().unwrap_or("system-default"),
+                sample_rate = config.sample_rate(),
+                channels = config.channels(),
+                sample_format = config.sample_format_name(),
+                "打开 WASAPI 独占音频输出"
+            );
+            return Ok(Self {
+                backend: OutputBackend::Exclusive(config),
+                generation,
+                on_failure,
+            });
+        }
+        #[cfg(not(target_os = "windows"))]
+        let _ = exclusive_audio;
+
         let (device, config) = open_device(device_id, requested_sample_rate)
             .with_audio_kind(AudioErrorKind::Device)?;
         info!(
@@ -59,8 +137,7 @@ impl AudioOutput {
             "打开音频输出配置"
         );
         Ok(Self {
-            device,
-            config,
+            backend: OutputBackend::Shared { device, config },
             generation,
             on_failure,
         })
@@ -68,29 +145,54 @@ impl AudioOutput {
 
     /// 实际输出流采样率（播放重采样目标）
     pub fn sample_rate(&self) -> u32 {
-        self.config.sample_rate()
+        match &self.backend {
+            OutputBackend::Shared { config, .. } => config.sample_rate(),
+            #[cfg(target_os = "windows")]
+            OutputBackend::Exclusive(config) => config.sample_rate(),
+        }
     }
 
     /// 实际输出流声道数
     pub fn channels(&self) -> u16 {
-        self.config.channels()
+        match &self.backend {
+            OutputBackend::Shared { config, .. } => config.channels(),
+            #[cfg(target_os = "windows")]
+            OutputBackend::Exclusive(config) => config.channels(),
+        }
     }
 
     /// 按本配置创建一次播放的输出流，实时回调从 `source` 拉取样本。
-    /// 调用方持有返回的 `Stream`，直到本次播放结束。
+    /// 调用方持有返回的输出流，直到本次播放结束。
     pub(crate) fn build_stream(
         &self,
         source: DecoderSource,
         volume: Arc<AtomicU32>,
         stopped: Arc<AtomicBool>,
-    ) -> Result<cpal::Stream> {
-        let device = self.device.clone();
-        let config = self.config.clone();
-        let on_failure = Arc::clone(&self.on_failure);
-        run_in_mta(move || {
-            build_typed_stream_for_format(&device, &config, source, volume, stopped, on_failure)
-        })
-        .with_audio_kind(AudioErrorKind::Device)
+    ) -> Result<OutputStream> {
+        match &self.backend {
+            OutputBackend::Shared { device, config } => {
+                let device = device.clone();
+                let config = config.clone();
+                let on_failure = Arc::clone(&self.on_failure);
+                run_in_mta(move || {
+                    build_typed_stream_for_format(
+                        &device, &config, source, volume, stopped, on_failure,
+                    )
+                    .map(OutputStream::Shared)
+                })
+                .with_audio_kind(AudioErrorKind::Device)
+            }
+            #[cfg(target_os = "windows")]
+            OutputBackend::Exclusive(config) => exclusive::ExclusiveStream::new(
+                config.clone(),
+                source,
+                volume,
+                stopped,
+                Arc::clone(&self.on_failure),
+            )
+            .map(OutputStream::Exclusive)
+            .with_audio_kind(AudioErrorKind::Device),
+        }
     }
 }
 

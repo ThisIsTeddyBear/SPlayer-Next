@@ -617,6 +617,17 @@ export const registerPlayerIpc = (): void => {
     },
   );
 
+  // 启用/关闭 Windows WASAPI 独占音频输出
+  ipcMain.handle("player:setExclusiveAudio", async (_event, enabled: boolean) => {
+    try {
+      cancelPendingReinit();
+      await getPlayer().setExclusiveAudio(enabled);
+      return { success: true };
+    } catch (error) {
+      return fail(ErrorCode.EXCLUSIVE_AUDIO_UNAVAILABLE, error);
+    }
+  });
+
   // 获取当前选择的输出设备名称
   ipcMain.handle("player:getSelectedDeviceName", () => {
     try {
