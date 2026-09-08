@@ -26,8 +26,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate:
+    name: Release validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm exec electron-vite build
+      - run: xvfb-run --auto-servernum pnpm test:preload --no-sandbox
+
   # 各平台/架构在对应的原生 runner 上独立构建
   build:
+    needs: validate
     name: Build on ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     strategy:

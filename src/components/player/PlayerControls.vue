@@ -12,6 +12,7 @@ withDefaults(
 );
 
 const status = useStatusStore();
+const { t } = useI18n();
 const media = useMediaStore();
 const { isPlaying, isLoading, repeatMode, shuffleMode, heartMode, fmMode } = storeToRefs(status);
 
@@ -27,6 +28,14 @@ const hasTrack = computed(() => !!media.track);
       circle
       ripple
       :size="compact ? 32 : 38"
+      :aria-label="
+        fmMode
+          ? t('player.dislike')
+          : heartMode
+            ? t('player.exitHeartMode')
+            : t('settings.hotkeys.actions.toggleShuffle')
+      "
+      :aria-pressed="!fmMode && !heartMode ? shuffleMode === 'on' : undefined"
       @click="
         fmMode
           ? player.dislikeFmTrack()
@@ -50,6 +59,7 @@ const hasTrack = computed(() => !!media.track);
       ripple
       :size="compact ? 34 : 38"
       :disabled="!hasTrack || fmMode"
+      :aria-label="t('player.prev')"
       @click="player.prevTrack()"
     >
       <template #icon><IconLucideSkipBack /></template>
@@ -62,6 +72,7 @@ const hasTrack = computed(() => !!media.track);
       :class="[compact ? 'mx-0.5' : 'mx-1', 'will-change-transform']"
       :size="compact ? 40 : 44"
       :loading="isLoading"
+      :aria-label="t(isPlaying ? 'player.pause' : 'player.play')"
       :disabled="!hasTrack && !isLoading"
       @click="player.togglePlay()"
     >
@@ -80,6 +91,7 @@ const hasTrack = computed(() => !!media.track);
       ripple
       :size="compact ? 34 : 38"
       :disabled="!hasTrack"
+      :aria-label="t('player.next')"
       @click="player.nextTrack()"
     >
       <template #icon><IconLucideSkipForward /></template>
@@ -92,6 +104,9 @@ const hasTrack = computed(() => !!media.track);
       ripple
       :size="compact ? 32 : 38"
       :disabled="fmMode"
+      :aria-label="
+        t('settings.hotkeys.actions.cycleRepeat') + ': ' + t(`player.repeatMode.${repeatMode}`)
+      "
       @click="player.cycleRepeatMode()"
     >
       <template #icon>

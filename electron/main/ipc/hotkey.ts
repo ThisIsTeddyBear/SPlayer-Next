@@ -2,7 +2,7 @@
  * 快捷键 IPC
  */
 
-import { ipcMain } from "electron";
+import { ipcMain } from "./trusted";
 import {
   getHotkeyConfig,
   setBinding,

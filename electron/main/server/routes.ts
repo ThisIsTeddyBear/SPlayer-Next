@@ -9,6 +9,7 @@ import { getPlayer } from "@main/services/engine";
 import { toMs } from "@main/utils/time";
 import * as nowPlaying from "@main/services/nowPlaying";
 import { playerControl } from "@main/services/playerControl";
+import { toDisplayPositionMs, toDisplayDurationMs } from "@main/services/playbackTimeline";
 import { getWsClientCount } from "./broadcast";
 
 export const buildRoutes = (): Hono => {
@@ -26,8 +27,8 @@ export const buildRoutes = (): Hono => {
     const raw = getPlayer().getStatus();
     return c.json({
       state: raw.state,
-      position: toMs(raw.position),
-      duration: toMs(raw.duration),
+      position: toDisplayPositionMs(toMs(raw.position)),
+      duration: toDisplayDurationMs(toMs(raw.duration)),
       volume: raw.volume,
       isFinished: raw.isFinished,
     });
@@ -56,8 +57,8 @@ export const buildRoutes = (): Hono => {
 
   api.post("/seek", async (c) => {
     const body = (await c.req.json().catch(() => null)) as { positionMs?: number } | null;
-    const positionMs = Number(body?.positionMs);
-    if (!Number.isFinite(positionMs) || positionMs < 0) {
+    const positionMs = body?.positionMs;
+    if (typeof positionMs !== "number" || !Number.isFinite(positionMs) || positionMs < 0) {
       return c.json({ error: "positionMs (number, >=0) required" }, 400);
     }
     try {
@@ -70,8 +71,8 @@ export const buildRoutes = (): Hono => {
 
   api.post("/volume", async (c) => {
     const body = (await c.req.json().catch(() => null)) as { volume?: number } | null;
-    const volume = Number(body?.volume);
-    if (!Number.isFinite(volume) || volume < 0 || volume > 1) {
+    const volume = body?.volume;
+    if (typeof volume !== "number" || !Number.isFinite(volume) || volume < 0 || volume > 1) {
       return c.json({ error: "volume (number, 0..1) required" }, 400);
     }
     playerControl.setVolume(volume);

@@ -1,5 +1,8 @@
 import { BrowserWindow, BrowserWindowConstructorOptions, nativeTheme } from "electron";
 import { join } from "path";
+import os from "node:os";
+import type { RendererRuntime } from "@shared/types/runtime";
+import { secureWindow } from "@main/utils/windowSecurity";
 import icon from "../../../public/icons/favicon.png?asset";
 
 /**
@@ -15,8 +18,27 @@ const getDefaultOptions = (): BrowserWindowConstructorOptions => ({
   backgroundColor: nativeTheme.shouldUseDarkColors ? "#101014" : "#f6f6f6",
   icon,
   webPreferences: {
-    preload: join(__dirname, "../preload/index.mjs"),
-    sandbox: false,
+    preload: join(__dirname, "../preload/index.cjs"),
+    sandbox: true,
+    contextIsolation: true,
+    nodeIntegration: false,
+    webSecurity: true,
+    additionalArguments: [
+      `--splayer-runtime=${encodeURIComponent(
+        JSON.stringify({
+          installType: process.env.PORTABLE_EXECUTABLE_DIR
+            ? "portable"
+            : process.execPath.includes("WindowsApps")
+              ? "appx"
+              : process.platform === "darwin"
+                ? "dmg"
+                : process.platform === "linux"
+                  ? "appimage"
+                  : "nsis",
+          osInfo: { type: os.type(), arch: os.arch(), release: os.release() },
+        } satisfies RendererRuntime),
+      )}`,
+    ],
     // 关闭 WebGL
     webgl: false,
     // 关闭拼写检查
@@ -37,7 +59,7 @@ const getDefaultOptions = (): BrowserWindowConstructorOptions => ({
 export const createWindow = (options: BrowserWindowConstructorOptions = {}): BrowserWindow => {
   const defaultOptions = getDefaultOptions();
 
-  return new BrowserWindow({
+  const window = new BrowserWindow({
     ...defaultOptions,
     ...options,
     webPreferences: {
@@ -45,4 +67,6 @@ export const createWindow = (options: BrowserWindowConstructorOptions = {}): Bro
       ...options.webPreferences,
     },
   });
+  secureWindow(window);
+  return window;
 };

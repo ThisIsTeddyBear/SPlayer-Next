@@ -1,4 +1,5 @@
-import { app, ipcMain, shell } from "electron";
+import { ipcMain } from "./trusted";
+import { app, shell } from "electron";
 import { writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, basename } from "node:path";

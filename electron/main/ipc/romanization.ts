@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain } from "./trusted";
 import { fetchWithProxy } from "@main/utils/proxy";
 
 const TIMEOUT_MS = 6_000;

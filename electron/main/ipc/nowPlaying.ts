@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain } from "./trusted";
 import { broadcast } from "@main/utils/broadcast";
 import { wsBroadcast } from "@main/server/broadcast";
 import * as nowPlaying from "@main/services/nowPlaying";

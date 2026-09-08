@@ -12,13 +12,17 @@ class MicrophoneCaptureProcessor extends AudioWorkletProcessor {
     this.nextInput = 0;
     this.out = [];
     this.outCount = 0;
+    this.stopped = false;
     this.port.onmessage = (event) => {
       if (event.data && event.data.type === 'flush') {
         this.emitChunk();
+        this.stopped = true;
+        this.port.postMessage({ type: 'flushed' });
       }
     };
   }
   process(inputs) {
+    if (this.stopped) return false;
     const input = inputs[0] ? inputs[0][0] : null;
     if (!input) return true;
     for (let i = 0; i < input.length; i++) {

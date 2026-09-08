@@ -1,4 +1,5 @@
-import { dialog, ipcMain } from "electron";
+import { ipcMain } from "./trusted";
+import { dialog } from "electron";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { createHash } from "node:crypto";

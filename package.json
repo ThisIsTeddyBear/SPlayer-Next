@@ -35,6 +35,8 @@
     "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "pnpm typecheck:node && pnpm typecheck:web",
     "test": "pnpm test:node && pnpm test:web",
+    "test:syntax": "node --experimental-vm-modules scripts/check-source-syntax.mjs",
+    "test:preload": "electron scripts/smoke-preload.mjs",
     "test:node": "tsx --test \"electron/**/*.test.ts\" \"src/**/*.test.ts\"",
     "test:web": "vitest run --config vitest.config.ts",
     "test:web:watch": "vitest --config vitest.config.ts",

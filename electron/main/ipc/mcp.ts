@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain } from "./trusted";
 import { getMcpClientConfigParams, getMcpStatus, restartMcpServer } from "@main/services/mcp/http";
 import { detectMcpAgents, injectMcpAgentConfig } from "@main/services/mcp/injector";
 import type { McpClientConfigParams } from "@shared/types/settings";

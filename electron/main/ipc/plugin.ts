@@ -7,7 +7,8 @@
  * 并订阅 `plugin:status` 广播以更新 UI。
  */
 
-import { ipcMain, dialog } from "electron";
+import { ipcMain } from "./trusted";
+import { dialog } from "electron";
 import type { PluginInfo } from "@shared/types/plugin";
 import { pluginRegistry } from "@main/plugins/registry";
 import { resolveUrl, invokeMenu } from "@main/plugins/router";

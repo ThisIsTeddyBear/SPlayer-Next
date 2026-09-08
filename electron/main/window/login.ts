@@ -72,8 +72,7 @@ const openLoginWindow = async (
     show: false,
     webPreferences: {
       session: ses,
-      // sandbox 模式下部分音乐网站 JS 渲染极慢；登录窗口无自有业务代码，关闭沙箱影响可控
-      sandbox: false,
+      sandbox: true,
       spellcheck: false,
       backgroundThrottling: false,
       nodeIntegration: false,
@@ -83,6 +82,8 @@ const openLoginWindow = async (
 
   activeWin.webContents.setUserAgent(FAKE_UA);
   activeWin.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  ses.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  ses.setPermissionCheckHandler(() => false);
 
   return await new Promise<Record<string, string> | null>((resolve) => {
     let settled = false;

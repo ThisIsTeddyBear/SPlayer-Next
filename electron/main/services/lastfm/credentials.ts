@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { safeStorage } from "electron";
+import { encryptSecret as encrypt, decryptSecret as decrypt } from "@main/utils/secretStorage";
 import { writeFileSync as atomicWriteSync } from "atomically";
 import { lastfmLog } from "@main/utils/logger";
 import { configDir } from "@main/utils/paths";
@@ -19,30 +19,6 @@ interface PersistedCredentials {
   username: string;
   encryptedSessionKey: string;
 }
-
-/** 加密会话密钥 */
-const encrypt = (plain: string): string => {
-  if (!plain) return "";
-  if (!safeStorage.isEncryptionAvailable()) {
-    lastfmLog.warn("safeStorage 不可用，sessionKey 将以 base64 明文落盘");
-    return Buffer.from(plain, "utf-8").toString("base64");
-  }
-  return safeStorage.encryptString(plain).toString("base64");
-};
-
-/** 解密会话密钥 */
-const decrypt = (encrypted: string): string => {
-  if (!encrypted) return "";
-  try {
-    const buf = Buffer.from(encrypted, "base64");
-    if (!safeStorage.isEncryptionAvailable()) {
-      return buf.toString("utf-8");
-    }
-    return safeStorage.decryptString(buf);
-  } catch {
-    return "";
-  }
-};
 
 /**
  * 读取本地凭证
@@ -75,6 +51,7 @@ export const save = (username: string, sessionKey: string): void => {
     atomicWriteSync(STORAGE_FILE, JSON.stringify(data, null, 2));
   } catch (err) {
     lastfmLog.error("写入 lastfm.json 失败:", err);
+    throw err;
   }
 };
 

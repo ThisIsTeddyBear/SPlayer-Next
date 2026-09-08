@@ -5,10 +5,16 @@
  * - getStatus：查询当前运行状态（面板挂载时拉一次）
  */
 
-import { ipcMain } from "electron";
-import { restartServer, getServerStatus } from "@main/server";
+import { ipcMain } from "./trusted";
+import { restartServer, getServerStatus, disconnectExternalClients } from "@main/server";
+import { getAccessKey, rotateAccessKey } from "@main/server/accessKey";
 
 export const registerExternalApiIpc = (): void => {
   ipcMain.handle("externalApi:restart", () => restartServer());
   ipcMain.handle("externalApi:getStatus", () => getServerStatus());
+  ipcMain.handle("externalApi:getAccessKey", () => getAccessKey());
+  ipcMain.handle("externalApi:rotateAccessKey", () => {
+    rotateAccessKey();
+    disconnectExternalClients();
+  });
 };

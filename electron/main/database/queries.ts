@@ -192,10 +192,10 @@ export const upsertTracks = (tracks: UpsertTrack[]): void => {
 export const getCueTrackPathsByDirs = (dirs: string[]): string[] => {
   if (dirs.length === 0) return [];
   const rows: { path: string }[] = [];
-  const stmt = getDb().prepare("SELECT path FROM tracks WHERE cue_path LIKE ?");
+  const stmt = getDb().prepare("SELECT path FROM tracks WHERE cue_path LIKE ? ESCAPE '\\'");
   for (const dir of dirs) {
     const prefix = dir.endsWith("/") || dir.endsWith("\\") ? dir : dir + path.sep;
-    rows.push(...(stmt.all(prefix + "%") as { path: string }[]));
+    rows.push(...(stmt.all(prefix.replace(/[%_\\]/g, "\\$&") + "%") as { path: string }[]));
   }
   return rows.map((row) => row.path);
 };
@@ -236,7 +236,8 @@ export const searchTracks = (query: string): Track[] => {
 /** 删除指定目录下的所有曲目 */
 export const deleteTracksByDir = (dir: string): void => {
   const prefix = dir.endsWith("/") || dir.endsWith("\\") ? dir : dir + path.sep;
-  const patterns = [prefix + "%", prefix + "%", prefix + "%"];
+  const pattern = prefix.replace(/[%_\\]/g, "\\$&") + "%";
+  const patterns = [pattern, pattern, pattern];
   const database = getDb();
   database.transaction(() => {
     database
@@ -244,12 +245,15 @@ export const deleteTracksByDir = (dir: string): void => {
         `DELETE FROM playlist_tracks
          WHERE playlist_id IN (SELECT id FROM playlists WHERE type = 'local')
            AND track_id IN (
-             SELECT id FROM tracks WHERE path LIKE ? OR cue_path LIKE ? OR cue_audio_path LIKE ?
+             SELECT id FROM tracks WHERE path LIKE ? ESCAPE '\\'
+               OR cue_path LIKE ? ESCAPE '\\' OR cue_audio_path LIKE ? ESCAPE '\\'
            )`,
       )
       .run(...patterns);
     database
-      .prepare("DELETE FROM tracks WHERE path LIKE ? OR cue_path LIKE ? OR cue_audio_path LIKE ?")
+      .prepare(
+        "DELETE FROM tracks WHERE path LIKE ? ESCAPE '\\' OR cue_path LIKE ? ESCAPE '\\' OR cue_audio_path LIKE ? ESCAPE '\\'",
+      )
       .run(...patterns);
   })();
 };
@@ -376,9 +380,16 @@ export const getLibraryStats = (): LibraryStats => {
 /** 按 ID 批量获取曲目 */
 export const getTracksByIds = (ids: string[]): Track[] => {
   if (ids.length === 0) return [];
-  const placeholders = ids.map(() => "?").join(",");
-  const rows = getDb()
-    .prepare(`SELECT * FROM tracks WHERE id IN (${placeholders})`)
-    .all(...ids) as TrackRow[];
+  const uniqueIds = [...new Set(ids)];
+  const rows: TrackRow[] = [];
+  for (let offset = 0; offset < uniqueIds.length; offset += 500) {
+    const batch = uniqueIds.slice(offset, offset + 500);
+    const placeholders = batch.map(() => "?").join(",");
+    rows.push(
+      ...(getDb()
+        .prepare(`SELECT * FROM tracks WHERE id IN (${placeholders})`)
+        .all(...batch) as TrackRow[]),
+    );
+  }
   return rows.map(rowToTrack);
 };

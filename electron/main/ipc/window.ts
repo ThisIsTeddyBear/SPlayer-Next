@@ -1,4 +1,5 @@
-import { app, ipcMain } from "electron";
+import { ipcMain } from "./trusted";
+import { app } from "electron";
 import { store } from "@main/store";
 import { isWin } from "@main/utils/config";
 import {

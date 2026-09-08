@@ -18,7 +18,7 @@ import {
   type PluginManifest,
   type PluginType,
 } from "@shared/types/plugin";
-import { HOST_API_LEVEL, PluginErrorCodes } from "@shared/defaults/plugin-api";
+import { HOST_API_LEVEL, INSTALL_URL_MAX_SIZE, PluginErrorCodes } from "@shared/defaults/plugin-api";
 
 const GZ_PREFIX = "gz_";
 
@@ -44,7 +44,7 @@ export const decompressIfNeeded = (raw: string): string => {
   if (!trimmed.startsWith(GZ_PREFIX)) return raw;
   const payload = trimmed.slice(GZ_PREFIX.length);
   const buf = Buffer.from(payload, "base64");
-  return zlib.inflateSync(buf).toString("utf-8");
+  return zlib.inflateSync(buf, { maxOutputLength: INSTALL_URL_MAX_SIZE }).toString("utf-8");
 };
 
 interface HeaderFields {

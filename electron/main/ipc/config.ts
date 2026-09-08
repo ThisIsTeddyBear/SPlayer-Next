@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
-import { dialog, ipcMain } from "electron";
+import { ipcMain } from "./trusted";
+import { dialog } from "electron";
 import { store } from "@main/store";
 import type { ConfigPath } from "@main/store/types";
 import { systemLog } from "@main/utils/logger";
@@ -27,7 +28,7 @@ import {
 } from "@main/window";
 import { broadcast } from "@main/utils/broadcast";
 import { isWin } from "@main/utils/config";
-import { startServer, stopServer } from "@main/server";
+import { startServer, stopServer, disconnectExternalClients } from "@main/server";
 import { startMcpServer, stopMcpServer } from "@main/services/mcp/http";
 import { setOrpheusProtocolRegistered } from "@main/services/orpheus";
 import { setTaskbarThumbnailEnabled } from "@main/services/thumbnail";
@@ -76,6 +77,9 @@ const applyConfigChange = (keyPath: string, value: unknown, previous: unknown): 
       break;
     case "externalApi.enabled":
       void (value ? startServer() : stopServer());
+      break;
+    case "externalApi.wsEnabled":
+      if (!value) disconnectExternalClients();
       break;
     case "mcp.enabled":
       void (value ? startMcpServer() : stopMcpServer());

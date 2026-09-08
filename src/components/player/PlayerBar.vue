@@ -97,6 +97,7 @@ const { items: menuItems, handleSelect: onMenuSelect } = useTrackMenu(toRef(medi
         <PlayerTimeInfo compact />
       </div>
       <SSlider
+        :aria-label="$t('player.seek')"
         :model-value="position"
         :min="0"
         :max="duration"
@@ -118,6 +119,7 @@ const { items: menuItems, handleSelect: onMenuSelect } = useTrackMenu(toRef(medi
   <div v-else class="relative h-full">
     <div class="absolute left-0 right-0 top-0 -translate-y-1/2 z-10">
       <SSlider
+        :aria-label="$t('player.seek')"
         :model-value="position"
         :min="0"
         :max="duration"

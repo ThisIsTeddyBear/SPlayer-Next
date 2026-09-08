@@ -1,4 +1,3 @@
-import { ElectronAPI } from "@electron-toolkit/preload";
 import { PlayerApi, TrackSource } from "@shared/types/player";
 import {
   ConfigApi,
@@ -33,7 +32,7 @@ import { OpenccApi } from "@shared/types/opencc";
 
 declare global {
   interface Window {
-    electron: ElectronAPI;
+    electron: { process: { versions: Record<string, string> } };
     api: {
       config: ConfigApi;
       player: PlayerApi;
@@ -107,6 +106,8 @@ declare global {
       recognition: RecognitionApi;
       lastfm: LastfmApi;
       externalApi: {
+        getAccessKey: () => Promise<string>;
+        rotateAccessKey: () => Promise<void>;
         restart: () => Promise<ExternalApiStatus>;
         getStatus: () => Promise<ExternalApiStatus>;
         onStatus: (callback: (status: ExternalApiStatus) => void) => () => void;

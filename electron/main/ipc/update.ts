@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain } from "./trusted";
 import * as updater from "@main/services/updater";
 
 /** 注册更新相关 IPC */

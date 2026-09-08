@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain } from "./trusted";
 import type { AiModelSaveInput } from "@shared/types/ai";
 import {
   listAiModels,

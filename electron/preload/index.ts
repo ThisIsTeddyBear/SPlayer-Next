@@ -1,6 +1,5 @@
-import os from "os";
 import { contextBridge, ipcRenderer, webUtils } from "electron";
-import { electronAPI } from "@electron-toolkit/preload";
+import type { RendererRuntime } from "@shared/types/runtime";
 import type { ExternalApiStatus, McpStatus, TaskbarLyricSettings } from "@shared/types/settings";
 import type {
   PluginInfo,
@@ -31,15 +30,12 @@ const subscribe = <T>(channel: string, callback: (data: T) => void): (() => void
   return () => ipcRenderer.removeListener(channel, handler);
 };
 
-/**
- */
-const getInstallType = (): "nsis" | "portable" | "appx" | "dmg" | "appimage" => {
-  if (process.env.PORTABLE_EXECUTABLE_DIR) return "portable";
-  if (process.execPath.includes("WindowsApps")) return "appx";
-  if (process.platform === "darwin") return "dmg";
-  if (process.platform === "linux") return "appimage";
-  return "nsis";
-};
+const runtimePrefix = "--splayer-runtime=";
+const runtimeArgument = process.argv.find((argument) => argument.startsWith(runtimePrefix));
+if (!runtimeArgument) throw new Error("Missing renderer runtime configuration");
+const runtime = JSON.parse(
+  decodeURIComponent(runtimeArgument.slice(runtimePrefix.length)),
+) as RendererRuntime;
 
 const api = {
   config: {
@@ -99,13 +95,9 @@ const api = {
     onEvent: (callback: (event: unknown) => void) => subscribe("player:event", callback),
   },
   system: {
-    installType: getInstallType(),
+    installType: runtime.installType,
     platform: process.platform,
-    osInfo: {
-      type: os.type(),
-      arch: os.arch(),
-      release: os.release(),
-    },
+    osInfo: runtime.osInfo,
     toggleDevTools: () => ipcRenderer.invoke("system:toggleDevTools"),
     showInExplorer: (filePath: string) => ipcRenderer.invoke("system:showInExplorer", filePath),
     openLogsDir: () => ipcRenderer.invoke("system:openLogsDir"),
@@ -430,6 +422,8 @@ const api = {
       ipcRenderer.invoke("lastfm:love", artist, track, loved),
   },
   externalApi: {
+    getAccessKey: () => ipcRenderer.invoke("externalApi:getAccessKey"),
+    rotateAccessKey: () => ipcRenderer.invoke("externalApi:rotateAccessKey"),
     restart: () => ipcRenderer.invoke("externalApi:restart"),
     getStatus: () => ipcRenderer.invoke("externalApi:getStatus"),
     onStatus: (callback: (status: ExternalApiStatus) => void) => {
@@ -488,18 +482,5 @@ const api = {
   },
 };
 
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld("electron", electronAPI);
-    contextBridge.exposeInMainWorld("api", api);
-  } catch (error) {
-    console.error(error);
-  }
-} else {
-  const target = globalThis as typeof globalThis & {
-    electron: typeof electronAPI;
-    api: typeof api;
-  };
-  target.electron = electronAPI;
-  target.api = api;
-}
+contextBridge.exposeInMainWorld("electron", { process: { versions: process.versions } });
+contextBridge.exposeInMainWorld("api", api);

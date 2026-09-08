@@ -39,6 +39,8 @@ const props = withDefaults(defineProps<BackgroundRenderProps>(), {
 });
 
 const wrapperRef = ref<HTMLDivElement | null>(null);
+const visibility = useDocumentVisibility();
+const reducedMotion = usePreferredReducedMotion();
 
 // 外部渲染器实例引用
 const bgRenderRef = shallowRef<AbstractBaseRenderer>();
@@ -65,12 +67,16 @@ const updateRendererState = () => {
 const syncRendererMotion = () => {
   const renderer = bgRenderRef.value;
   if (!renderer) return;
-
-  if (props.playing) {
+  if (visibility.value !== "visible") {
+    renderer.pause();
+    return;
+  }
+  if (props.playing && reducedMotion.value !== "reduce") {
     renderer.setStaticMode(false);
     renderer.setFlowSpeed(props.flowSpeed);
     renderer.resume();
   } else {
+    renderer.setStaticMode(true);
     renderer.setFlowSpeed(0);
     renderer.resume();
   }
@@ -132,7 +138,12 @@ const stopFftCapture = () => {
  * 按播放状态与跳动开关同步 FFT 采集
  */
 const syncFftCapture = () => {
-  if (props.playing && props.enableBeat) {
+  if (
+    props.playing &&
+    props.enableBeat &&
+    visibility.value === "visible" &&
+    reducedMotion.value !== "reduce"
+  ) {
     startFftCapture();
   } else {
     stopFftCapture();
@@ -205,10 +216,13 @@ watch(
 
 watch(
   () => props.flowSpeed,
-  (val) => {
-    if (props.playing) bgRenderRef.value?.setFlowSpeed(val);
-  },
+  () => syncRendererMotion(),
 );
+
+watch([visibility, reducedMotion], () => {
+  syncRendererMotion();
+  syncFftCapture();
+});
 
 watch(
   () => props.renderScale,

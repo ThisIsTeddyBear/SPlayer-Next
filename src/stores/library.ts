@@ -194,12 +194,16 @@ export const useLibraryStore = defineStore("library", () => {
 
   const deleteTracks = async (paths: string[]): Promise<{ deleted: number; failed: number }> => {
     const res = await window.api.library.deleteTracks(paths);
-    if (res.success) {
-      const pathSet = new Set(paths);
+    if (res.success && res.data) {
+      const pathSet = new Set(res.data.deletedPaths);
       const deletedIds = new Set(
-        tracks.value.filter((t) => t.path && pathSet.has(t.path)).map((t) => t.id),
+        tracks.value
+          .filter(
+            (t) => (t.path && pathSet.has(t.path)) || (t.cueAudioPath && pathSet.has(t.cueAudioPath)),
+          )
+          .map((t) => t.id),
       );
-      const remaining = tracks.value.filter((t) => !t.path || !pathSet.has(t.path));
+      const remaining = tracks.value.filter((t) => !deletedIds.has(t.id));
       tracks.value = remaining;
       cacheTracks(remaining);
       if (deletedIds.size > 0 && likedOrderedIds.value.some((id) => deletedIds.has(id))) {

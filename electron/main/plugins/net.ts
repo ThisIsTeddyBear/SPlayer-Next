@@ -6,6 +6,7 @@
  */
 
 import { net } from "electron";
+import { readResponseBytes } from "@main/utils/responseBody";
 import type { HostRequestOptions, HostRequestResult } from "@shared/types/plugin";
 import {
   REQUEST_DEFAULT_TIMEOUT,
@@ -23,27 +24,37 @@ import {
  * @returns 脚本源码文本
  */
 export const fetchScript = async (url: string): Promise<string> => {
-  const parsed = new URL(url);
-  const isLoopback = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
-  if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && isLoopback)) {
-    throw new Error(`protocol not allowed: ${parsed.protocol}`);
+  let parsed = new URL(url);
+  const signal = AbortSignal.timeout(INSTALL_URL_TIMEOUT);
+  for (let redirects = 0; redirects <= 5; redirects++) {
+    const isLoopback = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+    if (
+      parsed.username ||
+      parsed.password ||
+      (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && isLoopback))
+    ) {
+      throw new Error("Plugin script URL must use HTTPS or loopback HTTP without credentials");
+    }
+    const resp = await net.fetch(parsed.href, { method: "GET", redirect: "manual", signal });
+    if ([301, 302, 303, 307, 308].includes(resp.status)) {
+      await resp.body?.cancel();
+      const location = resp.headers.get("location");
+      if (!location) throw new Error("Plugin script redirect has no location");
+      const next = new URL(location, parsed);
+      if (parsed.protocol === "https:" && next.protocol !== "https:") {
+        throw new Error("Plugin script redirect cannot downgrade HTTPS");
+      }
+      parsed = next;
+      continue;
+    }
+    if (!resp.ok) {
+      await resp.body?.cancel();
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    const buf = await readResponseBytes(resp, INSTALL_URL_MAX_SIZE);
+    return new TextDecoder("utf-8").decode(buf);
   }
-  const resp = await net.fetch(url, {
-    method: "GET",
-    redirect: "follow",
-    signal: AbortSignal.timeout(INSTALL_URL_TIMEOUT),
-  });
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  // Content-Length 预检（仅提示，不强信任）
-  const lenHeader = resp.headers.get("content-length");
-  if (lenHeader && Number(lenHeader) > INSTALL_URL_MAX_SIZE) {
-    throw new Error("PLUGIN_INSTALL_URL_TOO_LARGE");
-  }
-  const buf = await resp.arrayBuffer();
-  if (buf.byteLength > INSTALL_URL_MAX_SIZE) {
-    throw new Error("PLUGIN_INSTALL_URL_TOO_LARGE");
-  }
-  return new TextDecoder("utf-8").decode(buf);
+  throw new Error("Too many plugin script redirects");
 };
 
 /** 拉取插件市场索引 */
@@ -105,16 +116,16 @@ export const hostRequest = async (
     let responseBody: unknown;
     const type = opts.responseType ?? "text";
     if (type === "arraybuffer") {
-      responseBody = new Uint8Array(await resp.arrayBuffer());
+      responseBody = await readResponseBytes(resp, 16 * 1024 * 1024);
     } else if (type === "json") {
-      const text = await resp.text();
+      const text = new TextDecoder().decode(await readResponseBytes(resp, 16 * 1024 * 1024));
       try {
         responseBody = JSON.parse(text);
       } catch {
         responseBody = text;
       }
     } else {
-      responseBody = await resp.text();
+      responseBody = new TextDecoder().decode(await readResponseBytes(resp, 16 * 1024 * 1024));
     }
 
     return { status: resp.status, headers, body: responseBody };

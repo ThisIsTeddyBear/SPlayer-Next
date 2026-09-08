@@ -2,7 +2,7 @@
  * OpenCC 中文简繁转换 IPC
  */
 
-import { ipcMain } from "electron";
+import { ipcMain } from "./trusted";
 import { convertText, convertTexts } from "@main/services/opencc";
 import type { CjkTransformMode } from "@shared/types/opencc";
 

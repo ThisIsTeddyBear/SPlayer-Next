@@ -3,7 +3,6 @@ import { useCopyText } from "@/composables/useCopyText";
 import { toast } from "@/composables/useToast";
 import { useSettingsStore } from "@/stores/settings";
 import type { ExternalApiStatus } from "@shared/types/settings";
-import IconLucideCopy from "~icons/lucide/copy";
 
 defineOptions({ inheritAttrs: false });
 
@@ -18,6 +17,28 @@ const status = ref<ExternalApiStatus>({
   error: null,
 });
 const restarting = ref(false);
+const rotating = ref(false);
+
+const copyAccessKey = async (): Promise<void> => {
+  try {
+    await copy(await window.api.externalApi.getAccessKey());
+  } catch (error) {
+    toast.error(String(error));
+  }
+};
+
+const rotateAccessKey = async (): Promise<void> => {
+  if (rotating.value) return;
+  rotating.value = true;
+  try {
+    await window.api.externalApi.rotateAccessKey();
+    toast.success(t("settings.externalApi.keyRotated"));
+  } catch (error) {
+    toast.error(String(error));
+  } finally {
+    rotating.value = false;
+  }
+};
 
 const address = computed(() => {
   const host =
@@ -39,6 +60,8 @@ const restart = async (): Promise<void> => {
     } else if (result.error) {
       toast.error(result.error.message);
     }
+  } catch (error) {
+    toast.error(String(error));
   } finally {
     restarting.value = false;
   }
@@ -47,10 +70,14 @@ const restart = async (): Promise<void> => {
 let unsubscribe: (() => void) | undefined;
 
 onMounted(async () => {
-  status.value = await window.api.externalApi.getStatus();
   unsubscribe = window.api.externalApi.onStatus((value) => {
     status.value = value;
   });
+  try {
+    status.value = await window.api.externalApi.getStatus();
+  } catch (error) {
+    toast.error(String(error));
+  }
 });
 
 onBeforeUnmount(() => unsubscribe?.());
@@ -58,7 +85,7 @@ onBeforeUnmount(() => unsubscribe?.());
 
 <template>
   <div
-    class="flex items-center gap-3 rounded-xl bg-surface-panel border border-solid border-outline-variant/15 px-4 py-3"
+    class="flex flex-wrap items-center gap-3 rounded-xl bg-surface-panel border border-solid border-outline-variant/15 px-4 py-3"
   >
     <span
       class="size-2 shrink-0 rounded-full"
@@ -72,7 +99,13 @@ onBeforeUnmount(() => unsubscribe?.());
     >
       {{ address }}
     </div>
-    <SButton variant="ghost" circle size="small" @click="copy(address)">
+    <SButton
+      variant="ghost"
+      circle
+      size="small"
+      :aria-label="t('settings.externalApi.copyAddress')"
+      @click="copy(address)"
+    >
       <template #icon><IconLucideCopy /></template>
     </SButton>
     <SButton
@@ -85,5 +118,16 @@ onBeforeUnmount(() => unsubscribe?.());
     >
       {{ t("settings.externalApi.restart") }}
     </SButton>
+    <div class="flex w-full flex-wrap items-center gap-2">
+      <span class="flex-1 text-xs text-on-surface-variant">
+        {{ t("settings.externalApi.authHint") }}
+      </span>
+      <SButton size="small" variant="secondary" @click="copyAccessKey">
+        {{ t("settings.externalApi.copyKey") }}
+      </SButton>
+      <SButton size="small" variant="ghost" :loading="rotating" @click="rotateAccessKey">
+        {{ t("settings.externalApi.rotateKey") }}
+      </SButton>
+    </div>
   </div>
 </template>

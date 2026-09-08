@@ -40,6 +40,7 @@ const emit = defineEmits<{
   change: [value: number];
   dragStart: [value: number];
   dragEnd: [value: number];
+  dragCancel: [value: number];
 }>();
 
 const slots = defineSlots<{
@@ -75,9 +76,12 @@ const popoverContentRef = ref<HTMLElement>();
 const isDragging = ref(false);
 const isHovering = ref(false);
 const isThumbHovering = ref(false);
+const isFocused = ref(false);
 const dragValue = ref(props.modelValue);
 const popoverShift = ref(0);
 let popoverFrame = 0;
+let activePointer: number | undefined;
+let pointerStartValue = props.modelValue;
 
 watch(
   () => props.modelValue,
@@ -113,9 +117,12 @@ const centerFillStyle = computed(() => {
   return { start: `${50 - len}%`, length: `${len}%` };
 });
 
-const thumbVisible = computed(() => props.alwaysShowThumb || isHovering.value || isDragging.value);
+const thumbVisible = computed(
+  () => props.alwaysShowThumb || isHovering.value || isDragging.value || isFocused.value,
+);
 
-const toPercent = (value: number): number => ((value - props.min) / (props.max - props.min)) * 100;
+const toPercent = (value: number): number =>
+  props.max > props.min ? ((value - props.min) / (props.max - props.min)) * 100 : 0;
 
 const onMarkClick = (value: number): void => {
   if (props.disabled) return;
@@ -125,7 +132,7 @@ const onMarkClick = (value: number): void => {
 };
 
 const popoverVisible = computed(
-  () => props.showPopover && (isThumbHovering.value || isDragging.value),
+  () => props.showPopover && (isThumbHovering.value || isDragging.value || isFocused.value),
 );
 
 const updatePopoverShift = (): void => {
@@ -165,7 +172,7 @@ const stepDecimals = computed(() => {
 
 const calcValueFromEvent = (e: MouseEvent | TouchEvent): number => {
   const rect = trackRef.value?.getBoundingClientRect();
-  if (!rect) return props.min;
+  if (!rect || (props.vertical ? rect.height : rect.width) <= 0) return displayValue.value;
   const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
   const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
   const ratio = props.vertical
@@ -177,8 +184,19 @@ const calcValueFromEvent = (e: MouseEvent | TouchEvent): number => {
 };
 
 const onPointerDown = (e: PointerEvent): void => {
-  if (props.disabled) return;
+  if (
+    props.disabled ||
+    e.button !== 0 ||
+    isDragging.value ||
+    props.max <= props.min ||
+    props.step <= 0
+  ) {
+    return;
+  }
   e.preventDefault();
+  sliderRef.value?.focus();
+  activePointer = e.pointerId;
+  pointerStartValue = props.modelValue;
   (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   isDragging.value = true;
   const value = calcValueFromEvent(e);
@@ -188,23 +206,75 @@ const onPointerDown = (e: PointerEvent): void => {
 };
 
 const onPointerMove = (e: PointerEvent): void => {
-  if (!isDragging.value) return;
+  if (!isDragging.value || e.pointerId !== activePointer) return;
   const value = calcValueFromEvent(e);
   dragValue.value = value;
   emit("change", value);
 };
 
-const onPointerUp = (): void => {
-  if (!isDragging.value) return;
+const onPointerUp = (event: PointerEvent): void => {
+  if (!isDragging.value || event.pointerId !== activePointer) return;
   isDragging.value = false;
+  activePointer = undefined;
   emit("update:modelValue", dragValue.value);
   emit("dragEnd", dragValue.value);
 };
+
+const onPointerCancel = (event?: PointerEvent): void => {
+  if (event && event.pointerId !== activePointer) return;
+  if (!isDragging.value) return;
+  activePointer = undefined;
+  dragValue.value = pointerStartValue;
+  isDragging.value = false;
+  emit("change", pointerStartValue);
+  emit("update:modelValue", pointerStartValue);
+  emit("dragCancel", pointerStartValue);
+};
+
+const onKeydown = (event: KeyboardEvent): void => {
+  if (props.disabled || isDragging.value || props.max <= props.min || props.step <= 0) return;
+  const increments: Record<string, number> = {
+    ArrowRight: props.step,
+    ArrowUp: props.step,
+    ArrowLeft: -props.step,
+    ArrowDown: -props.step,
+    PageUp: props.step * 10,
+    PageDown: -props.step * 10,
+  };
+  if (!(event.key in increments) && event.key !== "Home" && event.key !== "End") return;
+  event.preventDefault();
+  event.stopPropagation();
+  const target =
+    event.key === "Home"
+      ? props.min
+      : event.key === "End"
+        ? props.max
+        : displayValue.value + increments[event.key];
+  const value = Math.max(props.min, Math.min(props.max, Number(target.toFixed(stepDecimals.value))));
+  emit("dragStart", displayValue.value);
+  emit("change", value);
+  emit("update:modelValue", value);
+  emit("dragEnd", value);
+};
+
+watch(
+  () => props.disabled,
+  (disabled) => {
+    if (disabled) onPointerCancel();
+  },
+);
 </script>
 
 <template>
   <div
     ref="sliderRef"
+    role="slider"
+    :tabindex="disabled ? -1 : 0"
+    :aria-valuemin="min"
+    :aria-valuemax="max"
+    :aria-valuenow="displayValue"
+    :aria-orientation="vertical ? 'vertical' : 'horizontal'"
+    :aria-disabled="disabled"
     class="s-slider relative select-none"
     :class="[
       disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer',
@@ -216,16 +286,20 @@ const onPointerUp = (): void => {
     }"
     @mouseenter="isHovering = true"
     @mouseleave="isHovering = false"
+    @focus="isFocused = true"
+    @blur="isFocused = false"
+    @keydown="onKeydown"
   >
     <div
       v-if="!vertical"
       ref="trackRef"
-      class="s-slider-hitbox relative flex items-center"
+      class="s-slider-hitbox relative flex items-center touch-none"
       :style="{ height: `${thumbSize}px` }"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
-      @pointercancel="onPointerUp"
+      @pointercancel="onPointerCancel"
+      @lostpointercapture="onPointerCancel"
     >
       <div
         class="s-slider-track absolute left-0 right-0 rounded-full"
@@ -279,7 +353,8 @@ const onPointerUp = (): void => {
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
-      @pointercancel="onPointerUp"
+      @pointercancel="onPointerCancel"
+      @lostpointercapture="onPointerCancel"
     >
       <div
         class="s-slider-track absolute top-0 bottom-0 rounded-full"

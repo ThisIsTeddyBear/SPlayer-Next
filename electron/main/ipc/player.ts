@@ -1,5 +1,6 @@
 import { extname } from "node:path";
-import { app, ipcMain, powerMonitor } from "electron";
+import { ipcMain } from "./trusted";
+import { app, powerMonitor } from "electron";
 import { sendToMain } from "@main/utils/broadcast";
 import { readFileAutoEncoding } from "@main/utils/encoding";
 import { wsBroadcast } from "@main/server/broadcast";
@@ -37,30 +38,16 @@ import { JsPlayerEvent } from "@splayer/audio-engine";
 
 type AudioEngineModule = typeof import("@splayer/audio-engine");
 
-interface CueRange {
-  startMs: number;
-  durationMs: number;
-}
-
-let activeCueRange: CueRange | null = null;
-
-const cueRangeFromTrack = (track: LoadOptions["meta"] | null | undefined): CueRange | null => {
-  const start = track?.cueStartMs;
-  const end = track?.cueEndMs;
-  if (start == null || end == null || end <= start) return null;
-  return { startMs: start, durationMs: end - start };
-};
-
-const toDisplayPositionMs = (positionMs: number): number => {
-  if (!activeCueRange) return positionMs;
-  return Math.max(0, Math.min(activeCueRange.durationMs, positionMs - activeCueRange.startMs));
-};
-
-const toDisplayDurationMs = (durationMs: number): number =>
-  activeCueRange?.durationMs ?? durationMs;
-
-const toEnginePositionMs = (positionMs: number): number =>
-  activeCueRange ? activeCueRange.startMs + positionMs : positionMs;
+import {
+  beginPlaybackLoad,
+  clearPlaybackTimeline,
+  getCueRange,
+  getPlaybackGeneration,
+  isCurrentPlaybackLoad,
+  toDisplayPositionMs,
+  toDisplayDurationMs,
+  toEnginePositionMs,
+} from "@main/services/playbackTimeline";
 
 const fail = (code: ErrorCode, error?: unknown) => {
   if (error) playerLog.error(`${code}:`, error);
@@ -180,8 +167,6 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
   });
 };
 
-let loadSeq = 0;
-
 export const registerPlayerIpc = (): void => {
   onPlayerCreated(registerNativeEvents);
   onPlayerCreated(startDeviceMonitoring);
@@ -189,10 +174,9 @@ export const registerPlayerIpc = (): void => {
     cancelPendingReinit();
     const autoPlay = options.autoPlay ?? true;
     const authoritative = options.meta ?? null;
-    const cueRange = cueRangeFromTrack(authoritative);
-    activeCueRange = cueRange;
+    const seq = beginPlaybackLoad(authoritative);
+    const cueRange = getCueRange();
     const isRemote = authoritative != null && authoritative.source !== "local";
-    const seq = ++loadSeq;
     try {
       const inst = getPlayer();
       const loadingEvent = {
@@ -245,10 +229,13 @@ export const registerPlayerIpc = (): void => {
         applyDisplay(source.split(/[/\\]/).pop() || source, "", "", undefined, 0);
       }
       const meta = await inst.load(source, cueRange ? false : autoPlay);
+      if (!isCurrentPlaybackLoad(seq)) return fail(ErrorCode.LOAD_SUPERSEDED);
       if (cueRange) {
         await inst.seek(cueRange.startMs / 1000);
+        if (!isCurrentPlaybackLoad(seq)) return fail(ErrorCode.LOAD_SUPERSEDED);
         if (autoPlay) await inst.play();
       }
+      if (!isCurrentPlaybackLoad(seq)) return fail(ErrorCode.LOAD_SUPERSEDED);
       const nativeDurationMs = toMs(meta.duration);
       const durationMs = toDisplayDurationMs(nativeDurationMs);
       const fallbackTitle = meta.title || source.split(/[/\\]/).pop() || source;
@@ -264,7 +251,7 @@ export const registerPlayerIpc = (): void => {
       if (coverFetchUrl) {
         void fetchBytes(coverFetchUrl).then((buf) => {
           if (!buf) return;
-          if (seq !== loadSeq) return;
+          if (!isCurrentPlaybackLoad(seq)) return;
           mediaService.setMetadata({
             title: displayTitle,
             artist: displayArtist,
@@ -303,7 +290,8 @@ export const registerPlayerIpc = (): void => {
       playerLog.debug(`Loaded successfully: ${displayTitle}`);
       return { success: true, data };
     } catch (error) {
-      if (seq === loadSeq) activeCueRange = null;
+      if (!isCurrentPlaybackLoad(seq)) return fail(ErrorCode.LOAD_SUPERSEDED);
+      clearPlaybackTimeline();
       const code = classifyLoadError(error, source);
       if (code === ErrorCode.FILE_DECODE_ERROR && source.startsWith(getSongCacheDir())) {
         void songCache.invalidate(source);
@@ -333,7 +321,7 @@ export const registerPlayerIpc = (): void => {
   ipcMain.handle("player:stop", () => {
     try {
       cancelPendingReinit();
-      activeCueRange = null;
+      clearPlaybackTimeline();
       getPlayer().stop();
       return { success: true };
     } catch (error) {
@@ -343,11 +331,13 @@ export const registerPlayerIpc = (): void => {
 
   ipcMain.handle("player:seek", async (_event, positionMs: number) => {
     try {
+      const generation = getPlaybackGeneration();
       const enginePositionMs = toEnginePositionMs(positionMs);
       const positionSecs = enginePositionMs / 1000;
       await getPlayer().seek(positionSecs);
+      if (!isCurrentPlaybackLoad(generation)) return fail(ErrorCode.LOAD_SUPERSEDED);
       mediaService.setTimeline({
-        currentMs: positionMs,
+        currentMs: toDisplayPositionMs(enginePositionMs),
         totalMs: toDisplayDurationMs(toMs(getPlayer().getDuration())),
         seeked: true,
       });

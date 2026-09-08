@@ -138,6 +138,7 @@ export interface ExternalApiSettings {
   wsEnabled: boolean;
   allowLan: boolean;
   port: number;
+  accessKey: string;
 }
 
 export interface McpSettings {

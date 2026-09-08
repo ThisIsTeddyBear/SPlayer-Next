@@ -11,12 +11,11 @@ import { isAppQuitting } from "@main/utils/lifecycle";
 import { broadcast } from "@main/utils/broadcast";
 import { isWin } from "@main/utils/config";
 import { CURRENT_AGREEMENT_VERSION } from "@shared/constants/agreement";
+import { getTrustedDocument } from "@main/utils/windowSecurity";
 
 /** 判断是否应用内部导航 */
 const isInternalNavigation = (url: string): boolean => {
-  if (url.startsWith("file://")) return true;
-  const devBase = process.env["ELECTRON_RENDERER_URL"];
-  return !!devBase && url.startsWith(devBase);
+  return Boolean(getTrustedDocument(url));
 };
 
 let mainWindow: BrowserWindow | null = null;
@@ -139,9 +138,11 @@ export const createMainWindow = (): BrowserWindow => {
   });
   // 外链协议白名单
   const openExternalSafe = (url: string): void => {
-    if (/^https?:$/i.test(new URL(url).protocol)) {
-      void shell.openExternal(url);
-    }
+    try {
+      if (/^https?:$/i.test(new URL(url).protocol)) {
+        void shell.openExternal(url).catch(() => {});
+      }
+    } catch {}
   };
   // 设置窗口打开处理程序
   mainWindow.webContents.setWindowOpenHandler((details) => {

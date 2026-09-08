@@ -2,7 +2,7 @@
  * 听歌识曲 IPC：启动 / 取消 / 提交渲染进程 PCM，事件经 recognition:event 广播。
  */
 
-import { ipcMain } from "electron";
+import { ipcMain } from "./trusted";
 import {
   startRecognition,
   cancelRecognition,

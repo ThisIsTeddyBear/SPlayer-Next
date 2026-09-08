@@ -7,6 +7,7 @@
 
 import { serverLog } from "@main/utils/logger";
 import type { WSContext } from "hono/ws";
+import { WebSocket } from "ws";
 
 /** 当前在线的 WS 客户端 */
 const wsClients = new Set<WSContext>();
@@ -37,6 +38,11 @@ export const wsBroadcast = (event: { type: string; data?: unknown }): void => {
   const payload = JSON.stringify({ kind: "event", ...event });
   for (const ws of wsClients) {
     try {
+      if (ws.raw instanceof WebSocket && ws.raw.bufferedAmount > 1024 * 1024) {
+        ws.raw.terminate();
+        removeWsClient(ws);
+        continue;
+      }
       ws.send(payload);
     } catch (err) {
       // 发送失败的多半已经断开但 onClose/onError 未触发；主动清理避免反复抛错

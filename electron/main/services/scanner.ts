@@ -21,6 +21,7 @@ import { getCueAudioPath, parseCueSheet, extractCuePath } from "./cue";
 import { readFileAutoEncoding } from "@main/utils/encoding";
 
 let scanning = false;
+let scanGeneration = 0;
 
 /** 路径比较键，Windows 下保持大小写不敏感 */
 const pathKey = (value: string): string => {
@@ -61,6 +62,7 @@ const syncCueTracks = async (
   cueFiles: string[],
   dirs: string[],
   unavailableDirs: string[] = [],
+  generation = scanGeneration,
 ): Promise<number> => {
   const allTracks = getAllTracks();
   // 真实音频文件
@@ -83,6 +85,7 @@ const syncCueTracks = async (
   const nextPaths = new Set<string>();
 
   for (const cuePath of cueFiles) {
+    if (generation !== scanGeneration) return 0;
     try {
       const cueStat = await fs.stat(cuePath);
       const existing = existingByCue.get(pathKey(cuePath));
@@ -135,6 +138,7 @@ const syncCueTracks = async (
     }
   }
 
+  if (generation !== scanGeneration) return 0;
   if (upserts.length > 0) upsertTracks(upserts);
   const stalePaths = getCueTrackPathsByDirs(dirs).filter((trackPath) => {
     if (nextPaths.has(trackPath)) return false;
@@ -148,12 +152,19 @@ const syncCueTracks = async (
 };
 
 /** 完成 Rust 扫描后的收尾同步 */
-const finishScan = async (dirs: string[], event: JsScanEvent): Promise<void> => {
+const finishScan = async (dirs: string[], event: JsScanEvent, generation: number): Promise<void> => {
+  if (generation !== scanGeneration) return;
   if (event.removedPaths && event.removedPaths.length > 0) {
     deleteTracksByPaths(event.removedPaths);
     libraryLog.info(`清理 ${event.removedPaths.length} 个已删除文件`);
   }
-  const cueCount = await syncCueTracks(event.cueFiles ?? [], dirs, event.unavailableDirs ?? []);
+  const cueCount = await syncCueTracks(
+    event.cueFiles ?? [],
+    dirs,
+    event.unavailableDirs ?? [],
+    generation,
+  );
+  if (generation !== scanGeneration) return;
   scanning = false;
   broadcast("library:scanProgress", {
     phase: "done",
@@ -182,55 +193,67 @@ export const startScan = (dirs: string[], incremental = true): void => {
   }
 
   scanning = true;
+  const generation = ++scanGeneration;
+  let finishing = false;
   libraryLog.info(`开始扫描 ${dirs.length} 个目录 (增量=${incremental})`);
 
   // 增量扫描时传入已有文件记录，Rust 端会比对 mtime/size 跳过未变化的文件
-  const incrementalData = incremental ? getFileRecords() : undefined;
+  try {
+    const incrementalData = incremental ? getFileRecords() : undefined;
 
-  const engine = getEngine();
-  engine.scanDirs(
-    dirs,
-    (event: JsScanEvent) => {
-      switch (event.eventType) {
-        case "progress": {
-          // 已取消则丢弃滞后批次，避免写回已删除目录的曲目
-          if (!scanning) break;
-          // 批量写入数据库
-          if (event.tracks && event.tracks.length > 0) {
-            upsertTracks(event.tracks.map(scannedToUpsert));
-          }
-          broadcast("library:scanProgress", {
-            phase: "scanning",
-            total: event.total,
-            scanned: event.scanned,
-            current: event.current,
-          });
-          break;
-        }
-        case "done": {
-          void finishScan(dirs, event).catch((error) => {
-            scanning = false;
-            libraryLog.error("扫描收尾失败:", error);
+    const engine = getEngine();
+    engine.scanDirs(
+      dirs,
+      (event: JsScanEvent) => {
+        if (generation !== scanGeneration || !scanning || finishing) return;
+        switch (event.eventType) {
+          case "progress": {
+            // 已取消则丢弃滞后批次，避免写回已删除目录的曲目
+            if (!scanning) break;
+            // 批量写入数据库
+            if (event.tracks && event.tracks.length > 0) {
+              upsertTracks(event.tracks.map(scannedToUpsert));
+            }
             broadcast("library:scanProgress", {
-              phase: "done",
+              phase: "scanning",
               total: event.total,
               scanned: event.scanned,
+              current: event.current,
             });
-          });
-          break;
+            break;
+          }
+          case "done": {
+            finishing = true;
+            void finishScan(dirs, event, generation).catch((error) => {
+              if (generation !== scanGeneration) return;
+              scanning = false;
+              libraryLog.error("扫描收尾失败:", error);
+              broadcast("library:scanProgress", {
+                phase: "done",
+                total: event.total,
+                scanned: event.scanned,
+              });
+            });
+            break;
+          }
         }
-      }
-    },
-    getCoverCacheDir(),
-    incrementalData,
-  );
+      },
+      getCoverCacheDir(),
+      incrementalData,
+    );
+  } catch (error) {
+    scanning = false;
+    scanGeneration++;
+    throw error;
+  }
 };
 
 /** 取消正在进行的扫描 */
 export const cancelScan = (): void => {
   if (!scanning) return;
+  scanGeneration++;
+  scanning = false;
   const engine = getEngine();
   engine.cancelScan();
-  scanning = false;
   libraryLog.info("已发送扫描取消信号");
 };

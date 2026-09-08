@@ -9,6 +9,14 @@ import { getPlayer } from "@main/services/engine";
 import { sendToMain } from "@main/utils/broadcast";
 import { toMs } from "@main/utils/time";
 import type { ShuffleMode, RepeatMode, Track } from "@shared/types/player";
+import { cancelPendingReinit } from "@main/services/device";
+import {
+  clearPlaybackTimeline,
+  getPlaybackGeneration,
+  isCurrentPlaybackLoad,
+  toDisplayPositionMs,
+  toEnginePositionMs,
+} from "./playbackTimeline";
 
 /**
  * 跳转（毫秒）
@@ -16,9 +24,15 @@ import type { ShuffleMode, RepeatMode, Track } from "@shared/types/player";
  * 返回的 Promise 透传引擎结果：WS/REST 等外部入口据此反馈失败；插件侧即发即忘，自行忽略即可。
  * @param positionMs - 目标位置（毫秒）
  */
-const seek = (positionMs: number): Promise<void> => {
-  sendToMain("player:event", { type: "seek", data: { position: positionMs } });
-  return getPlayer().seek(positionMs / 1000);
+const seek = async (positionMs: number): Promise<void> => {
+  const generation = getPlaybackGeneration();
+  const enginePosition = toEnginePositionMs(positionMs);
+  await getPlayer().seek(enginePosition / 1000);
+  if (!isCurrentPlaybackLoad(generation)) throw new Error("Track changed during seek");
+  sendToMain("player:event", {
+    type: "seek",
+    data: { position: toDisplayPositionMs(enginePosition) },
+  });
 };
 
 export const playerControl = {
@@ -27,7 +41,11 @@ export const playerControl = {
       .play()
       .catch(() => {}),
   pause: (): void => getPlayer().pause(),
-  stop: (): void => getPlayer().stop(),
+  stop: (): void => {
+    cancelPendingReinit();
+    clearPlaybackTimeline();
+    getPlayer().stop();
+  },
   next: (): void => sendToMain("player:event", { type: "next" }),
   prev: (): void => sendToMain("player:event", { type: "prev" }),
   setShuffle: (mode: ShuffleMode): void =>
@@ -40,8 +58,9 @@ export const playerControl = {
     sendToMain("player:event", { type: "addToQueue", data: { tracks, position } }),
   seek,
   setVolume: (volume: number): void => {
+    if (!Number.isFinite(volume) || volume < 0 || volume > 1) throw new Error("Invalid volume");
     getPlayer().setVolume(volume);
   },
   /** 当前播放进度（毫秒） */
-  getPosition: (): number => toMs(getPlayer().getPosition()),
+  getPosition: (): number => toDisplayPositionMs(toMs(getPlayer().getPosition())),
 };

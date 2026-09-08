@@ -62,6 +62,7 @@ export default defineConfig({
   preload: {
     build: {
       rollupOptions: {
+        output: { format: "cjs", entryFileNames: "[name].cjs" },
         input: {
           index: resolve(__dirname, "electron/preload/index.ts"),
         },
@@ -81,7 +82,7 @@ export default defineConfig({
       __COMMIT_DATE__: JSON.stringify(getGitDate()),
     },
     server: {
-      port: 14558,
+      port: 14560,
       watch: {
         ignored: ["**/native/**/target/**"],
       },

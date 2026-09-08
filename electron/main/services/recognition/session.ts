@@ -138,12 +138,13 @@ export const startRecognition = (config: RecognitionConfig): void => {
   if (wasPlaying) getPlayer().pause();
 
   activeSession = inst;
-  sessionToken++;
+  const token = ++sessionToken;
   emit({ phase: "capturing" });
   try {
     inst.start(
       { source: config.source, durationMs: config.durationMs },
       (event: JsCaptureEvent) => {
+        if (token !== sessionToken || activeSession !== inst) return;
         void handleCaptureEvent(event);
       },
     );

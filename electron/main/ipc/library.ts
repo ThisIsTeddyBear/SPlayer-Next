@@ -1,4 +1,5 @@
-import { ipcMain, dialog } from "electron";
+import { ipcMain } from "./trusted";
+import { dialog, shell } from "electron";
 import fs from "node:fs/promises";
 import { store } from "@main/store";
 import {
@@ -292,20 +293,36 @@ export const registerLibraryIpc = (): void => {
   // 删除曲目文件并从数据库移除
   ipcMain.handle("library:deleteTracks", async (_event, paths: string[]) => {
     try {
+      if (!Array.isArray(paths) || paths.some((item) => typeof item !== "string")) {
+        return { success: false, error: ErrorCode.UNKNOWN };
+      }
+      if (isScanning()) cancelScan();
+      const knownPaths = new Set(
+        getAllTracks()
+          .filter((track) => !track.cuePath)
+          .map((track) => track.path),
+      );
       const failed: string[] = [];
-      for (const filePath of paths) {
+      const deleted: string[] = [];
+      for (const filePath of new Set(paths)) {
         try {
-          await fs.unlink(filePath);
+          if (!knownPaths.has(filePath) || !(await fs.lstat(filePath)).isFile()) {
+            throw new Error("Only library audio files can be moved to trash");
+          }
+          await shell.trashItem(filePath);
+          deleted.push(filePath);
         } catch {
           failed.push(filePath);
         }
       }
-      const deleted = paths.filter((p) => !failed.includes(p));
       if (deleted.length > 0) {
         deleteTracksByPaths(deleted);
       }
       libraryLog.info(`Deleted ${deleted.length} files; ${failed.length} failed`);
-      return { success: true, data: { deleted: deleted.length, failed: failed.length } };
+      return {
+        success: true,
+        data: { deleted: deleted.length, failed: failed.length, deletedPaths: deleted },
+      };
     } catch (error) {
       libraryLog.error("Failed to delete files in bulk:", error);
       return { success: false, error: ErrorCode.UNKNOWN };

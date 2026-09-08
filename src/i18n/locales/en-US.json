@@ -460,6 +460,12 @@
     }
   },
   "player": {
+    "play": "Play",
+    "pause": "Pause",
+    "seek": "Playback position",
+    "volume": "Volume",
+    "dislike": "Dislike this track",
+    "exitHeartMode": "Exit Heart Mode",
     "prev": "Previous",
     "next": "Next",
     "heartMode": {
@@ -548,7 +554,7 @@
       "copyPath": "Copy File Path",
       "editTags": "Edit Metadata",
       "download": "Download Song",
-      "deleteFile": "Delete File",
+      "deleteFile": "Move File to Trash",
       "searchSame": "Search by Name",
       "more": "More",
       "copyTitle": "Copy Title",
@@ -566,9 +572,9 @@
     "delete": {
       "removeConfirmOne": "Remove \"{title}\" from {type}?",
       "removeConfirm": "Remove {count} songs from {type}?",
-      "fileTitle": "Delete File",
-      "fileConfirmOne": "Permanently delete \"{title}\" from disk? This cannot be undone",
-      "fileConfirm": "Permanently delete {count} files from disk? This cannot be undone"
+      "fileTitle": "Move to Trash",
+      "fileConfirmOne": "Move \"{title}\" to the system trash? You can restore the file there, then rescan the library.",
+      "fileConfirm": "Move {count} files to the system trash? You can restore the files there, then rescan the library."
     },
     "toast": {
       "addedToNext": "Added to play next"
@@ -1781,6 +1787,11 @@
       "description": "TCP port for the external API (1024–65535)"
     },
     "externalApi": {
+      "copyAddress": "Copy server address",
+      "copyKey": "Copy access token",
+      "rotateKey": "Revoke and replace token",
+      "keyRotated": "Token replaced. Reconnect clients using the new token.",
+      "authHint": "All clients need an access token. Replacing it disconnects existing clients. LAN traffic is unencrypted; use only trusted networks.",
       "restart": "Restart server",
       "restarted": "Server restarted",
       "portInUse": "Port {port} is already in use, pick another",

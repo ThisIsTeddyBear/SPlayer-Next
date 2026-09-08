@@ -54,7 +54,9 @@ watch(
   () => route.fullPath,
   (_newPath, oldPath) => {
     if (oldPath && mainContainerRef.value) {
+      mainScrollMap.delete(oldPath);
       mainScrollMap.set(oldPath, mainContainerRef.value.scrollTop);
+      if (mainScrollMap.size > 100) mainScrollMap.delete(mainScrollMap.keys().next().value!);
     }
   },
 );
@@ -115,6 +117,7 @@ const playerBarInnerClass = computed(() => {
   <div
     class="h-screen flex overflow-hidden bg-app text-on-surface transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.7,0,0.3,1)] origin-center"
     :class="isPlayerExpanded ? 'scale-95 opacity-0 pointer-events-none' : ''"
+    :inert="isPlayerExpanded"
   >
     <!-- 侧边栏 -->
     <aside
@@ -152,7 +155,7 @@ const playerBarInnerClass = computed(() => {
     leave-to-class="translate-y-full"
   >
     <div v-if="showPlayerBar" :class="playerBarWrapperClass">
-      <footer :class="playerBarInnerClass">
+      <footer :class="playerBarInnerClass" :inert="isPlayerExpanded">
         <PlayerBar />
       </footer>
     </div>

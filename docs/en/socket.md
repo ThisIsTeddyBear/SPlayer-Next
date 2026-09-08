@@ -3,7 +3,7 @@
 The WebSocket interface adds realtime bidirectional communication to the [HTTP API](/en/api): clients can send controls and receive playback events.
 
 ::: warning Disabled by default
-Enable **Settings → External API**, then enable WebSocket separately. It has the same security model as HTTP: loopback-only by default and no authentication.
+Enable **Settings → External API**, then enable WebSocket separately. Connections require the same access token as HTTP, even on loopback. LAN traffic is unencrypted; use only trusted networks.
 :::
 
 ## Connection
@@ -12,10 +12,15 @@ Enable **Settings → External API**, then enable WebSocket separately. It has t
 - **Default port:** `14558`, shared with HTTP
 
 ```javascript
-const ws = new WebSocket("ws://127.0.0.1:14558/ws");
+const token = "<copy your access token from Settings → External API>";
+const ws = new WebSocket("ws://127.0.0.1:14558/ws", ["splayer-api", `splayer-token.${token}`]);
 ```
 
 ## Server to client
+
+Browser clients send the token using the subprotocols shown above. Native clients may instead send `Authorization: Bearer <token>` in the upgrade request. The server never returns the token as its selected subprotocol. URL query tokens are not accepted.
+
+Replacing the access token, disabling WebSocket, or restarting the server disconnects existing clients. Reconnect using the current token. Limits: 32 clients, 16 KiB messages, 30 commands per second per client, and 8 pending commands per client. Slow consumers are disconnected once their buffered output exceeds 1 MiB.
 
 Every message has a `kind` field:
 
@@ -49,7 +54,8 @@ Invalid JSON or an unknown `op` receives an error message.
 ## Example
 
 ```javascript
-const ws = new WebSocket("ws://127.0.0.1:14558/ws");
+const token = "<copy your access token from Settings → External API>";
+const ws = new WebSocket("ws://127.0.0.1:14558/ws", ["splayer-api", `splayer-token.${token}`]);
 
 ws.onopen = () => {
   ws.send(JSON.stringify({ op: "pause" }));

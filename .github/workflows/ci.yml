@@ -5,9 +5,13 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
 
@@ -30,3 +34,12 @@ jobs:
         run: pnpm typecheck
         env:
           SKIP_NATIVE_BUILD: true
+
+      - name: Regression tests
+        run: pnpm test
+
+      - name: Build application JavaScript and renderer
+        run: pnpm exec electron-vite build
+
+      - name: Sandboxed preload smoke test
+        run: xvfb-run --auto-servernum pnpm test:preload --no-sandbox

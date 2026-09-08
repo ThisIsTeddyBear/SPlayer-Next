@@ -548,6 +548,7 @@ const toggleLyric = (): void => {
                 {{ timeDisplay[0] }}
               </span>
               <SSlider
+                :aria-label="t('player.seek')"
                 :model-value="position"
                 :min="0"
                 :max="duration"

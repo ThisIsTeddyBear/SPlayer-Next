@@ -100,6 +100,8 @@ const onMoreMenuSelect = (key: string): void => {
       <div class="flex flex-col items-center w-7" @wheel.prevent="onVolumeWheel">
         <div class="h-30">
           <SSlider
+            :aria-label="t('player.volume')"
+            :aria-valuetext="`${volumePercent}%`"
             :model-value="status.volume"
             :min="0"
             :max="1"

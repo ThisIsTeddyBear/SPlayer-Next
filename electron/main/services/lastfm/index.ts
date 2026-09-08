@@ -115,8 +115,8 @@ export const connect = async (): Promise<LastfmConnectResult> => {
       if (cancelFlag) return { connected: false, reason: "canceled" };
       try {
         const result = await client.getSession(token);
-        session = { username: result.name, sessionKey: result.key };
         credentials.save(result.name, result.key);
+        session = { username: result.name, sessionKey: result.key };
         lastfmLog.info(`已连接 Last.fm: ${result.name}`);
         return { connected: true, username: result.name };
       } catch (err) {

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { safeStorage } from "electron";
+import { encryptSecret as encryptApiKey } from "@main/utils/secretStorage";
 import { writeFileSync as atomicWriteSync } from "atomically";
 import { configDir } from "@main/utils/paths";
 import { ipcLog } from "@main/utils/logger";
@@ -51,13 +51,6 @@ const writePersisted = (state: PersistedAiModelState): void => {
     ipcLog.error("写入 AI 模型配置失败:", error);
     throw new Error("AI 模型配置保存失败");
   }
-};
-
-const encryptApiKey = (apiKey: string): string => {
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error("系统安全存储不可用，无法保存 API Key");
-  }
-  return safeStorage.encryptString(apiKey).toString("base64");
 };
 
 const toPublicState = (state: PersistedAiModelState): AiModelState => ({

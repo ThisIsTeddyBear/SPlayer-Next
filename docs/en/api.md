@@ -3,7 +3,7 @@
 SPlayer-Next provides an optional local HTTP API for inspecting and controlling playback. Use the [WebSocket API](/en/socket) for realtime events and [MCP](/en/mcp) for AI applications.
 
 ::: warning Disabled by default
-Enable it under **Settings → External API**. The server binds to `127.0.0.1` by default and has **no authentication**. Enable LAN access only on a trusted network.
+Enable it under **Settings → External API**. The server binds to `127.0.0.1` by default. Every `/api/*` request requires an access token, including loopback requests. LAN traffic uses unencrypted HTTP; enable it only on a trusted network, never directly on the internet.
 :::
 
 MCP has its own switch, port, and lifecycle and does not depend on this API.
@@ -16,6 +16,12 @@ MCP has its own switch, port, and lifecycle and does not depend on this API.
 - **Time unit:** milliseconds
 - **Successful controls:** `{ "ok": true }`
 - **Invalid input:** HTTP `400` with `{ "error": "<reason>" }`
+- **Authentication:** `Authorization: Bearer <access-token>`; missing or invalid tokens return `401`
+- **Maximum request body:** 16 KiB; larger requests return `413`
+
+Copy the token from **Settings → External API → Copy access token**. Replacing the token invalidates the old token and disconnects existing WebSocket clients. Tokens in URL query parameters are not accepted. This is a compatibility change for older unauthenticated integrations.
+
+All examples below require the authorization header. For CUE tracks, status and seek positions are relative to the selected track, not the containing audio file.
 
 ## Endpoints
 
@@ -135,17 +141,20 @@ POST /api/volume
 ## Examples
 
 ```bash
-curl http://127.0.0.1:14558/api/status
+SPLAYER_API_TOKEN='<copy your token from Settings → External API>'
+curl -H "Authorization: Bearer $SPLAYER_API_TOKEN" http://127.0.0.1:14558/api/status
 
-curl -X POST http://127.0.0.1:14558/api/play
-curl -X POST http://127.0.0.1:14558/api/pause
-curl -X POST http://127.0.0.1:14558/api/next
+curl -H "Authorization: Bearer $SPLAYER_API_TOKEN" -X POST http://127.0.0.1:14558/api/play
+curl -H "Authorization: Bearer $SPLAYER_API_TOKEN" -X POST http://127.0.0.1:14558/api/pause
+curl -H "Authorization: Bearer $SPLAYER_API_TOKEN" -X POST http://127.0.0.1:14558/api/next
 
 curl -X POST http://127.0.0.1:14558/api/seek \
+  -H "Authorization: Bearer $SPLAYER_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "positionMs": 60000 }'
 
 curl -X POST http://127.0.0.1:14558/api/volume \
+  -H "Authorization: Bearer $SPLAYER_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{ "volume": 0.5 }'
 ```

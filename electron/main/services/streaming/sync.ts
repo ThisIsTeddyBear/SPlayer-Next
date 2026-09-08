@@ -8,8 +8,9 @@ import { streamingLog } from "@main/utils/logger";
 import { sendToMain } from "@main/utils/broadcast";
 import type { StreamingAdapter } from "./adapters/types";
 import { invalidateStreamingSession, resolveStreamingAdapter } from "./adapters/resolve";
+import { streamPages } from "./pages";
+
 const FIRST_SONG_BATCH_SIZE = 100;
-const SONG_BATCH_SIZE = 500;
 const runningServers = new Set<string>();
 const cancelledServers = new Set<string>();
 const syncedServers = new Set<string>();
@@ -35,15 +36,16 @@ const syncServer = async (
 ): Promise<boolean> => {
   const generation = Date.now();
   let songCount = 0;
+  let albumCount = 0;
   let firstBatch = true;
+  const cancelled = () => cancelledServers.has(config.id) || !isDbOpen();
   try {
-    let limit = FIRST_SONG_BATCH_SIZE;
-    while (true) {
-      const songs = await adapter.listSongs(config, {
-        offset: songCount,
-        limit,
-      });
-      if (cancelledServers.has(config.id)) return false;
+    for await (const songs of streamPages(
+      (offset, limit) => adapter.listSongs(config, { offset, limit }),
+      (track) => track.originalId,
+      cancelled,
+      FIRST_SONG_BATCH_SIZE,
+    )) {
       upsertTracks(
         songs.map((track) => ({
           serverId: config.id,
@@ -57,20 +59,22 @@ const syncServer = async (
         firstBatch = false;
         notifyLibraryUpdated(config.id);
       }
-      if (songs.length < limit) break;
-      limit = SONG_BATCH_SIZE;
     }
-
-    const albums = await adapter.listAlbums(config, { offset: 0, limit: 500 });
-    if (cancelledServers.has(config.id)) return false;
-    upsertAlbums(
-      albums.flatMap((album) =>
-        album.id ? [{ serverId: config.id, remoteId: album.id, album, generation }] : [],
-      ),
-    );
+    if (cancelled()) return false;
+    for await (const albums of streamPages(
+      (offset, limit) => adapter.listAlbums(config, { offset, limit }),
+      (album) => album.id,
+      cancelled,
+    )) {
+      upsertAlbums(
+        albums.map((album) => ({ serverId: config.id, remoteId: album.id!, album, generation })),
+      );
+      albumCount += albums.length;
+    }
+    if (cancelled()) return false;
 
     const artists = await adapter.listArtists(config);
-    if (cancelledServers.has(config.id)) return false;
+    if (cancelled()) return false;
     upsertArtists(
       artists.flatMap((artist) =>
         artist.id ? [{ serverId: config.id, remoteId: artist.id, artist, generation }] : [],
@@ -78,7 +82,7 @@ const syncServer = async (
     );
 
     const playlists = await adapter.listPlaylists(config);
-    if (cancelledServers.has(config.id)) return false;
+    if (cancelled()) return false;
     upsertPlaylists(
       playlists.flatMap((playlist) =>
         playlist.id ? [{ serverId: config.id, remoteId: playlist.id, playlist, generation }] : [],
@@ -91,7 +95,7 @@ const syncServer = async (
     deleteStalePlaylists(config.id, generation);
     notifyLibraryUpdated(config.id);
     streamingLog.info(
-      `${config.type} library sync complete [${config.name}]: ${songCount} songs, ${albums.length} albums, ${artists.length} artists, ${playlists.length} playlists`,
+      `${config.type} library sync complete [${config.name}]: ${songCount} songs, ${albumCount} albums, ${artists.length} artists, ${playlists.length} playlists`,
     );
     return true;
   } catch (error) {

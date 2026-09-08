@@ -6,7 +6,8 @@
  * 进度/状态由服务通过 broadcast 推送。
  */
 
-import { ipcMain, dialog } from "electron";
+import { ipcMain } from "./trusted";
+import { dialog } from "electron";
 import { store } from "@main/store";
 import { getDownloadDir } from "@main/utils/config";
 import * as downloadManager from "@main/services/downloadManager";

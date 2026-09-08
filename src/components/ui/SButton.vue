@@ -2,6 +2,7 @@
 import { vRipple } from "@/directives/ripple";
 
 export interface SButtonProps {
+  attrType?: "button" | "submit" | "reset";
   /** 按钮类型 */
   type?: "default" | "primary" | "cover" | "info" | "success" | "warning" | "error";
   /** 按钮变体 */
@@ -31,6 +32,7 @@ export interface SButtonProps {
 }
 
 const props = withDefaults(defineProps<SButtonProps>(), {
+  attrType: "button",
   type: "default",
   variant: "filled",
   size: "medium",
@@ -212,7 +214,9 @@ const variantClass = computed(() => {
 <template>
   <button
     v-ripple="enableRipple"
+    :type="attrType"
     :disabled="isDisabled"
+    :aria-busy="loading || undefined"
     class="s-button inline-flex items-center gap-1.5 font-sans select-none outline-none cursor-pointer transition-[color,background-color,border-color,opacity,transform] duration-200 disabled:cursor-not-allowed disabled:op-50"
     :class="[
       block && 'w-full',
@@ -246,5 +250,16 @@ const variantClass = computed(() => {
 
 :where(.s-button.has-border) {
   border: 1px solid;
+}
+
+.s-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .s-button {
+    transition: none;
+  }
 }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { marked } from "marked";
+import { renderSafeMarkdown } from "@/utils/markdown";
 import { useUpdateStore } from "@/stores/update";
 import { APP_VERSION, IS_APPX } from "@/utils/config";
 import { formatFileSize } from "@/utils/format";
@@ -10,7 +10,7 @@ const update = useUpdateStore();
 /** release notes 渲染为 HTML */
 const notesHtml = computed(() =>
   update.meta?.releaseNotes
-    ? (marked.parse(update.meta.releaseNotes, { async: false }) as string)
+    ? renderSafeMarkdown(update.meta.releaseNotes)
     : "",
 );
 

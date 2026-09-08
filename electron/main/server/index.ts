@@ -5,6 +5,7 @@
 import type { Server } from "node:http";
 import os from "node:os";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { serve, upgradeWebSocket } from "@hono/node-server";
 import { WebSocketServer } from "ws";
 import { store } from "@main/store";
@@ -14,6 +15,7 @@ import type { ExternalApiStatus } from "@shared/types/settings";
 import { externalControlGate, wsGate } from "./gate";
 import { buildRoutes } from "./routes";
 import { wsHandlers } from "./ws";
+import { getAccessKey } from "./accessKey";
 
 let runningServer: Server | null = null;
 let runningWss: WebSocketServer | null = null;
@@ -21,6 +23,14 @@ let runningPort: number | null = null;
 let runningHost: string | null = null;
 let runningAllowLan = false;
 let lastError: { code: string; message: string } | null = null;
+let lifecycle: Promise<unknown> = Promise.resolve();
+
+/** 串行处理监听状态变更，避免快速切换开关或连续重启争抢端口。 */
+const schedule = <T>(operation: () => Promise<T>): Promise<T> => {
+  const result = lifecycle.then(operation, operation);
+  lifecycle = result.catch(() => undefined);
+  return result;
+};
 
 /**
  * 取局域网展示地址，绑定 0.0.0.0 时作为展示给用户的局域网入口
@@ -53,7 +63,7 @@ export const getServerStatus = (): ExternalApiStatus => ({
 const publishStatus = (): void => broadcast("externalApi:status", getServerStatus());
 
 /** 启动外部 API 服务 */
-export const startServer = (): Promise<ExternalApiStatus> => {
+const start = (): Promise<ExternalApiStatus> => {
   return new Promise((resolve) => {
     if (runningServer) {
       resolve(getServerStatus());
@@ -66,11 +76,13 @@ export const startServer = (): Promise<ExternalApiStatus> => {
     }
 
     const port = store.get("externalApi.port");
-    // 默认仅本机可访问；服务自身无鉴权，开放局域网需用户显式开启
+    getAccessKey();
+    // 默认仅本机可访问，局域网访问同样要求令牌。
     const hostname = store.get("externalApi.allowLan") ? "0.0.0.0" : "127.0.0.1";
 
     const app = new Hono();
     app.use("/api/*", externalControlGate);
+    app.use("/api/*", bodyLimit({ maxSize: 16 * 1024 }));
     app.route("/api", buildRoutes());
     app.get(
       "/ws",
@@ -80,7 +92,11 @@ export const startServer = (): Promise<ExternalApiStatus> => {
     );
     app.get("/", (c) => c.text("SPlayer Next external API"));
 
-    const wss = new WebSocketServer({ noServer: true });
+    const wss = new WebSocketServer({
+      noServer: true,
+      maxPayload: 16 * 1024,
+      handleProtocols: (protocols) => (protocols.has("splayer-api") ? "splayer-api" : false),
+    });
     let settled = false;
 
     const server = serve({
@@ -89,6 +105,9 @@ export const startServer = (): Promise<ExternalApiStatus> => {
       hostname,
       websocket: { server: wss },
     }) as Server;
+    server.maxConnections = 64;
+    server.headersTimeout = 10000;
+    server.requestTimeout = 15000;
 
     // error / listening 互斥：先到先 settle
     server.once("error", (err: NodeJS.ErrnoException) => {
@@ -129,7 +148,7 @@ export const startServer = (): Promise<ExternalApiStatus> => {
 };
 
 /** 停止外部 API 服务 */
-export const stopServer = (): Promise<void> => {
+const stop = (): Promise<void> => {
   if (!runningServer) return Promise.resolve();
   const server = runningServer;
   const wss = runningWss;
@@ -140,18 +159,28 @@ export const stopServer = (): Promise<void> => {
   runningAllowLan = false;
   publishStatus();
   const serverClosed = new Promise<void>((resolve) => {
+    for (const client of wss?.clients ?? []) client.terminate();
     wss?.close();
     server.close((err) => {
       if (err) serverLog.warn("外部 API 关闭异常:", err);
       else serverLog.info("外部 API 已关闭");
       resolve();
     });
+    server.closeAllConnections();
   });
   return serverClosed;
 };
 
 /** 配置变更后重启服务 */
-export const restartServer = async (): Promise<ExternalApiStatus> => {
-  await stopServer();
-  return startServer();
+export const startServer = (): Promise<ExternalApiStatus> => schedule(start);
+export const stopServer = (): Promise<void> => schedule(stop);
+export const restartServer = (): Promise<ExternalApiStatus> =>
+  schedule(async () => {
+    await stop();
+    return start();
+  });
+
+/** 令牌轮换及关闭 WS 功能后立即撤销已建立的连接。 */
+export const disconnectExternalClients = (): void => {
+  for (const client of runningWss?.clients ?? []) client.terminate();
 };

@@ -1,6 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { safeStorage } from "electron";
+import {
+  encryptSecret as encryptPassword,
+  decryptSecret as decryptPassword,
+} from "@main/utils/secretStorage";
 import { writeFileSync as atomicWriteSync } from "atomically";
 import { streamingLog } from "@main/utils/logger";
 import { configDir } from "@main/utils/paths";
@@ -35,40 +38,29 @@ const getState = (): PersistedState => {
   if (state) return state;
   try {
     const parsed = JSON.parse(fs.readFileSync(STORAGE_FILE, "utf-8")) as PersistedState;
-    state = Array.isArray(parsed?.servers)
-      ? { servers: parsed.servers, activeServerId: parsed.activeServerId ?? null }
-      : { servers: [], activeServerId: null };
-  } catch {
+    if (!Array.isArray(parsed?.servers)) throw new Error("Invalid streaming configuration");
+    state = { servers: parsed.servers, activeServerId: parsed.activeServerId ?? null };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      streamingLog.error("Failed to read streaming configuration; original file preserved", error);
+      throw new Error(
+        "Streaming configuration cannot be read. Restore its backup before saving changes.",
+      );
+    }
     state = { servers: [], activeServerId: null };
   }
   return state;
 };
 
 const save = (): void => {
-  const dir = path.dirname(STORAGE_FILE);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  atomicWriteSync(STORAGE_FILE, JSON.stringify(getState(), null, 2));
-};
-
-/**
- */
-const encryptPassword = (password: string): string => {
-  if (!password) return "";
-  if (!safeStorage.isEncryptionAvailable()) {
-    streamingLog.warn("System secure storage is unavailable; streaming passwords will be stored as base64");
-    return Buffer.from(password, "utf-8").toString("base64");
+  try {
+    const dir = path.dirname(STORAGE_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    atomicWriteSync(STORAGE_FILE, JSON.stringify(getState(), null, 2));
+  } catch (error) {
+    state = undefined;
+    throw error;
   }
-  return safeStorage.encryptString(password).toString("base64");
-};
-
-/**
- */
-const decryptPassword = (encrypted: string): string => {
-  if (!encrypted) return "";
-  const buffer = Buffer.from(encrypted, "base64");
-  return safeStorage.isEncryptionAvailable()
-    ? safeStorage.decryptString(buffer)
-    : buffer.toString("utf-8");
 };
 
 /**
@@ -132,11 +124,14 @@ export const updateStreamingServer = (
 ): StreamingServerConfig => {
   const server = getState().servers.find((item) => item.id === serverId);
   if (!server) throw new Error("Streaming server was not found");
+  const encryptedPassword = input.password
+    ? encryptPassword(input.password)
+    : server.encryptedPassword;
   server.name = input.name.trim();
   server.type = input.type;
   server.url = input.url.trim().replace(/\/+$/, "");
   server.username = input.username;
-  if (input.password) server.encryptedPassword = encryptPassword(input.password);
+  server.encryptedPassword = encryptedPassword;
   server.lastConnected = undefined;
   save();
   return toServerConfig(server);
