@@ -47,6 +47,7 @@ const { snapToNearestLyric } = useProgressLyric();
 const lyricRef = ref<InstanceType<typeof Lyrics> | InstanceType<typeof AMLLLyrics>>();
 const lyricMounted = ref(false);
 const initialLyricTimeMs = ref(0);
+const fetchLyricsOpen = ref(false);
 
 /** 加载中的歌曲使用队列当前项兜底，避免全屏播放器出现空白。 */
 const displayTrack = computed(() => media.track ?? status.currentTrack);
@@ -393,13 +394,23 @@ const toggleLyric = (): void => {
               </Lyrics>
               <div
                 v-else-if="lyricMounted"
-                class="w-full h-full flex items-center justify-center text-cover/30"
+                class="w-full h-full flex flex-col items-center justify-center gap-3 text-cover/45"
               >
-                {{ $t("player.noLyrics") }}
+                <span>{{ $t("player.noLyrics") }}</span>
+                <SButton
+                  type="cover"
+                  variant="secondary"
+                  :disabled="!hasTrack"
+                  @click="fetchLyricsOpen = true"
+                >
+                  <template #icon><IconLucideCloudDownload /></template>
+                  {{ $t("player.fetchLyrics.action") }}
+                </SButton>
               </div>
             </div>
             <!-- 歌词侧边工具栏 -->
             <LyricActions :immersive="immersive" />
+            <FetchLyricsDialog v-model:open="fetchLyricsOpen" />
           </div>
           <!-- 播放队列 -->
           <div
