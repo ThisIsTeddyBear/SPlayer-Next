@@ -21,89 +21,11 @@ import { startScan, cancelScan, isScanning, scannedToUpsert } from "@main/servic
 import { getEngine } from "@main/services/engine";
 import { fetchBytes } from "@main/utils/fetchBytes";
 import { getCoverCacheDir } from "@main/utils/config";
-import { readFileAutoEncoding } from "@main/utils/encoding";
 import { libraryLog } from "@main/utils/logger";
 import { prefetchArtistImages } from "@main/services/artistImages";
-import { romanizeLines } from "@main/ipc/romanization";
 import { ErrorCode } from "@shared/types/errors";
-import type { Track } from "@shared/types/player";
 import type { JsTagWriteRequest } from "@splayer/audio-engine";
 import type { TagEditRequest, TagWriteOutcome } from "@shared/types/tagEditor";
-
-const lyricExtensions = [".ttml", ".json", ".lys", ".qrc", ".krc", ".yrc", ".lrc", ".ass", ".srt"];
-
-const normalizeLyricText = (value: string): string =>
-  value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[\u2018\u2019']/g, "")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLocaleLowerCase();
-
-const stripMarkup = (value: string): string =>
-  value
-    .replace(/<\/(?:p|div|br|li|tr|h[1-6])\s*>/gi, "\n")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&(?:amp|lt|gt|quot|apos);/gi, (entity) => {
-      const entities: Record<string, string> = {
-        "&amp;": "&",
-        "&lt;": "<",
-        "&gt;": ">",
-        "&quot;": '"',
-        "&apos;": "'",
-      };
-      return entities[entity.toLowerCase()] ?? entity;
-    });
-
-/** 从歌词文件中提取可搜索的逐行文本 */
-const lyricLines = (content: string): string[] => {
-  try {
-    const json = JSON.parse(content) as {
-      lyrics?: Array<{ text?: unknown; romanLyric?: unknown }>;
-    };
-    if (Array.isArray(json.lyrics)) {
-      return json.lyrics.flatMap((line) =>
-        [line.text, line.romanLyric].filter((value): value is string => typeof value === "string"),
-      );
-    }
-  } catch {
-    // 非 JSON 歌词继续按文本处理。
-  }
-  return stripMarkup(content)
-    .replace(/\[[\d:.]+\]/g, "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-};
-
-const hasNativeScript = (value: string): boolean => /[^\u0020-\u024f\u2000-\u206f]/u.test(value);
-const isLatinQuery = (value: string): boolean => /^[\p{Script=Latin}\p{N}\s]+$/u.test(value);
-
-/** 查找歌曲同名侧载歌词，并支持按罗马音匹配原生文字歌词 */
-const containsLyric = async (trackPath: string, query: string): Promise<boolean> => {
-  const extension = path.extname(trackPath);
-  if (!extension) return false;
-  const basePath = trackPath.slice(0, -extension.length);
-  for (const lyricExtension of lyricExtensions) {
-    try {
-      const content = await readFileAutoEncoding(`${basePath}${lyricExtension}`);
-      const lines = lyricLines(content);
-      if (normalizeLyricText(lines.join(" ")).includes(query)) return true;
-      if (!isLatinQuery(query)) continue;
-      const nativeLines = lines.filter(hasNativeScript);
-      if (nativeLines.length === 0) continue;
-      const romanized = await romanizeLines(nativeLines);
-      if (Object.values(romanized).some((line) => normalizeLyricText(line).includes(query))) {
-        return true;
-      }
-    } catch (_error) {
-      continue;
-    }
-  }
-  return false;
-};
 
 /** 注册音乐库相关 IPC */
 export const registerLibraryIpc = (): void => {
@@ -201,34 +123,6 @@ export const registerLibraryIpc = (): void => {
     try {
       return { success: true, data: searchTracks(query) };
     } catch (_error) {
-      return { success: false, error: ErrorCode.UNKNOWN };
-    }
-  });
-
-  // 搜索本地侧载歌词；歌曲数量通常较大，分批读取避免一次性占满文件句柄。
-  ipcMain.handle("library:searchLyrics", async (_event, query: string) => {
-    try {
-      const normalizedQuery = normalizeLyricText(query);
-      if (!normalizedQuery) return { success: true, data: [] };
-      const all = getAllTracks();
-      const containerPaths = new Set(
-        all.flatMap((track) => (track.cueAudioPath ? [track.cueAudioPath] : [])),
-      );
-      const tracks = all.filter((track) => track.path && !containerPaths.has(track.path));
-      const data: Track[] = [];
-      const batchSize = 12;
-      for (let index = 0; index < tracks.length; index += batchSize) {
-        const batch = tracks.slice(index, index + batchSize);
-        const matches = await Promise.all(
-          batch.map(async (track) =>
-            track.path && (await containsLyric(track.path, normalizedQuery)) ? track : null,
-          ),
-        );
-        data.push(...matches.filter((track): track is NonNullable<typeof track> => track !== null));
-      }
-      return { success: true, data };
-    } catch (error) {
-      libraryLog.error("Failed to search local lyrics:", error);
       return { success: false, error: ErrorCode.UNKNOWN };
     }
   });

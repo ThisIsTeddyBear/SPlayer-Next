@@ -395,13 +395,11 @@
     "emptyKeyword": "Type a keyword to start searching",
     "noResults": "No matching results",
     "noResultsHint": "Try another keyword or switch the source",
-    "lyricsUnavailable": "No local lyric text matched this search.",
     "errorTitle": "Search failed",
     "tabs": {
       "songs": "Songs",
       "albums": "Albums",
-      "artists": "Artists",
-      "lyrics": "Lyrics"
+      "artists": "Artists"
     }
   },
   "streaming": {
@@ -488,23 +486,6 @@
     },
     "lyricCredit": "Lyrics by",
     "noLyrics": "No lyrics available",
-    "fetchLyrics": {
-      "action": "Fetch or replace lyrics",
-      "title": "Fetch Lyrics",
-      "description": "Select a synced lyric. Saving replaces every existing sidecar lyric for this song with the selected lyric file.",
-      "searching": "Searching lyric providers…",
-      "localOnly": "Lyrics can only be saved beside a local music file.",
-      "noMatches": "No synced lyric matches found.",
-      "searchFailed": "Could not search for lyrics.",
-      "saveFailed": "Could not save the lyric file.",
-      "saved": "Lyrics saved beside the song.",
-      "replace": "Replace Lyrics",
-      "timing": {
-        "word": "Word / syllable",
-        "line": "Line synced",
-        "unsynced": "Unsynced"
-      }
-    },
     "bitPerfectActive": "Bit-perfect active",
     "copyLyric": {
       "title": "Copy Lyrics",

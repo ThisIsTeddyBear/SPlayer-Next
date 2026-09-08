@@ -13,9 +13,9 @@ const route = useRoute();
 const router = useRouter();
 const libraryStore = useLibraryStore();
 
-type TabKey = "songs" | "albums" | "artists" | "lyrics";
+type TabKey = "songs" | "albums" | "artists";
 
-const TAB_KEYS: readonly TabKey[] = ["songs", "albums", "artists", "lyrics"];
+const TAB_KEYS: readonly TabKey[] = ["songs", "albums", "artists"];
 
 const PAGE_SIZE = 50;
 
@@ -29,7 +29,6 @@ const tabs = computed(() => [
   { key: "songs", label: t("search.tabs.songs") },
   { key: "albums", label: t("search.tabs.albums") },
   { key: "artists", label: t("search.tabs.artists") },
-  { key: "lyrics", label: t("search.tabs.lyrics") },
 ]);
 
 interface TabState<T> {
@@ -54,34 +53,69 @@ const states = reactive({
   songs: createState<Track>(),
   albums: createState<CoverItem>(),
   artists: createState<CoverItem>(),
-  lyrics: createState<Track>(),
 });
 
 const error = ref("");
 
-/** 派发到 apis 层的统一调用 */
-const normalize = (value: string): string => value.trim().toLocaleLowerCase();
+/** 统一搜索文本，忽略大小写、重音和标点。 */
+const normalize = (value: string): string =>
+  value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+
+const isSubsequence = (query: string, value: string): boolean => {
+  let index = 0;
+  for (const char of value) {
+    if (char === query[index]) index += 1;
+    if (index === query.length) return true;
+  }
+  return false;
+};
+
+/** 返回匹配质量，用于将完整匹配排在模糊匹配之前。 */
+const matchScore = (values: Array<string | undefined>, query: string): number => {
+  const text = normalize(values.filter((value): value is string => !!value).join(" "));
+  if (!text) return 0;
+  if (text.includes(query)) return 3;
+
+  const words = text.split(" ");
+  const tokens = query.split(" ").filter(Boolean);
+  if (tokens.length === 0) return 0;
+  if (tokens.every((token) => words.some((word) => word.includes(token)))) return 2;
+
+  const compactText = text.replace(/\s/g, "");
+  return tokens.every((token) => isSubsequence(token, compactText)) ? 1 : 0;
+};
 
 const matches = (values: Array<string | undefined>, query: string): boolean =>
-  values.some((value) => normalize(value ?? "").includes(query));
+  matchScore(values, query) > 0;
 
 const localResults = (tab: TabKey): Array<Track | CoverItem> => {
   const query = normalize(keyword.value);
   if (!query) return [];
   const tracks = libraryStore.tracks;
   if (tab === "songs") {
-    return tracks.filter((track) =>
-      matches(
-        [
-          track.title,
-          track.comment,
-          track.album?.name,
-          track.album?.artist,
-          ...track.artists.map((artist) => artist.name),
-        ],
-        query,
-      ),
-    );
+    return tracks
+      .map((track) => ({
+        track,
+        score: matchScore(
+          [
+            track.title,
+            track.comment,
+            track.path,
+            track.album?.name,
+            track.album?.artist,
+            ...track.artists.map((artist) => artist.name),
+          ],
+          query,
+        ),
+      }))
+      .filter(({ score }) => score > 0)
+      .sort((left, right) => right.score - left.score)
+      .map(({ track }) => track);
   }
   if (tab === "albums") {
     const albums = new Map<string, CoverItem>();
@@ -140,10 +174,7 @@ const fetchTab = async (tab: TabKey, append: boolean): Promise<void> => {
   }
   error.value = "";
   try {
-    const response =
-      tab === "lyrics" ? await window.api.library.searchLyrics(keyword.value) : undefined;
-    if (response && !response.success) throw new Error(response.error);
-    const all = response?.data ?? localResults(tab);
+    const all = localResults(tab);
     const offset = append ? state.items.length : 0;
     const items = all.slice(offset, offset + PAGE_SIZE).map((item) => markRaw(item));
     if (append) (state.items as Array<Track | CoverItem>).push(...items);
@@ -290,9 +321,7 @@ const isEmptyResult = computed(() => {
       <div class="text-center text-on-surface-variant/60">
         <IconLucideSearchX class="size-14 mx-auto mb-4 opacity-30" />
         <div class="text-sm mb-1">{{ t("search.noResults") }}</div>
-        <div class="text-xs opacity-70">
-          {{ activeTab === "lyrics" ? t("search.lyricsUnavailable") : t("search.noResultsHint") }}
-        </div>
+        <div class="text-xs opacity-70">{{ t("search.noResultsHint") }}</div>
       </div>
     </div>
     <!-- 各 tab 内容 -->
@@ -329,15 +358,6 @@ const isEmptyResult = computed(() => {
         :loading-more="states.artists.loadingMore"
         @click="(item) => navigateToArtist(item.title)"
         @reach-bottom="onReachBottom('artists')"
-      />
-      <SongList
-        v-else
-        :items="states.lyrics.items"
-        source="local"
-        :show-size="false"
-        :has-more="states.lyrics.hasMore"
-        :loading-more="states.lyrics.loadingMore"
-        @reach-bottom="onReachBottom('lyrics')"
       />
     </div>
   </div>

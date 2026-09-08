@@ -27,7 +27,6 @@ const hasLyric = computed(() => media.parsedLyric.length > 0);
 
 /** 复制歌词弹窗是否打开 */
 const copyDialogOpen = ref(false);
-const fetchDialogOpen = ref(false);
 
 /** 当前曲目偏移（ms） */
 const songOffset = computed(() => status.lyricOffsetMs);
@@ -84,17 +83,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", cancelLyricSyncPick)
       @click="copyDialogOpen = true"
     >
       <template #icon><IconLucideCopy /></template>
-    </SButton>
-    <SButton
-      type="cover"
-      variant="ghost"
-      circle
-      :size="40"
-      :disabled="!hasTrack"
-      :title="t('player.fetchLyrics.action')"
-      @click="fetchDialogOpen = true"
-    >
-      <template #icon><IconLucideCloudDownload /></template>
     </SButton>
     <SButton
       type="cover"
@@ -199,6 +187,5 @@ onBeforeUnmount(() => window.removeEventListener("keydown", cancelLyricSyncPick)
       <template #icon><IconLucideSettings2 /></template>
     </SButton>
     <CopyLyricsDialog v-model:open="copyDialogOpen" />
-    <FetchLyricsDialog v-model:open="fetchDialogOpen" />
   </div>
 </template>

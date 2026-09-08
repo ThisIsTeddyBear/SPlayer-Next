@@ -148,7 +148,6 @@ const api = {
       ipcRenderer.invoke("library:getArtistTracks", artistName),
     getTracksByIds: (ids: string[]) => ipcRenderer.invoke("library:getTracksByIds", ids),
     searchTracks: (query: string) => ipcRenderer.invoke("library:searchTracks", query),
-    searchLyrics: (query: string) => ipcRenderer.invoke("library:searchLyrics", query),
     getTrackCount: () => ipcRenderer.invoke("library:getTrackCount"),
     getRandomTrack: () => ipcRenderer.invoke("library:getRandomTrack"),
     getRandomTracks: (limit: number) => ipcRenderer.invoke("library:getRandomTracks", limit),
@@ -289,9 +288,6 @@ const api = {
       ipcRenderer.invoke("lyrics:fetchTTMLOverlay", track, platform),
     matchLocalTTML: (track: unknown) => ipcRenderer.invoke("lyrics:matchLocalTTML", track),
     pickLyricRepoDir: () => ipcRenderer.invoke("lyrics:pickLyricRepoDir"),
-    searchLocalCandidates: (track: unknown) => ipcRenderer.invoke("lyrics:searchLocalCandidates", track),
-    saveLocalCandidate: (track: unknown, content: string, format: string) =>
-      ipcRenderer.invoke("lyrics:saveLocalCandidate", track, content, format),
   },
   opencc: {
     convert: (text: string, config: CjkTransformMode): Promise<string> =>
