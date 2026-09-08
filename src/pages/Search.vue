@@ -62,32 +62,67 @@ const normalize = (value: string): string =>
   value
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[\u0027\u2018\u2019\u02bc]/g, "")
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 
-const isSubsequence = (query: string, value: string): boolean => {
-  let index = 0;
-  for (const char of value) {
-    if (char === query[index]) index += 1;
-    if (index === query.length) return true;
+/** 计算短词的编辑距离，仅在前缀匹配失败时用于容错。 */
+const editDistance = (left: string, right: string): number => {
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      current.push(
+        Math.min(
+          current[rightIndex - 1] + 1,
+          previous[rightIndex] + 1,
+          previous[rightIndex - 1] + Number(left[leftIndex - 1] !== right[rightIndex - 1]),
+        ),
+      );
+    }
+    previous = current;
   }
-  return false;
+  return previous[right.length];
 };
 
-/** 返回匹配质量，用于将完整匹配排在模糊匹配之前。 */
-const matchScore = (values: Array<string | undefined>, query: string): number => {
-  const text = normalize(values.filter((value): value is string => !!value).join(" "));
-  if (!text) return 0;
-  if (text.includes(query)) return 3;
+/** 计算单词匹配质量，避免跨单词字符匹配造成无关结果。 */
+const wordScore = (query: string, word: string): number => {
+  if (word === query) return 100;
+  if (word.startsWith(query) || (query.length >= 4 && query.startsWith(word))) return 80;
+  if (
+    query.length >= 4 &&
+    word.length >= 4 &&
+    query[0] === word[0] &&
+    Math.abs(query.length - word.length) <= 2 &&
+    editDistance(query, word) <= (query.length >= 8 ? 2 : 1)
+  ) {
+    return 55;
+  }
+  return 0;
+};
 
-  const words = text.split(" ");
+/** 返回匹配质量，用于将完整标题和词级匹配排在模糊匹配之前。 */
+const matchScore = (values: Array<string | undefined>, query: string): number => {
   const tokens = query.split(" ").filter(Boolean);
   if (tokens.length === 0) return 0;
-  if (tokens.every((token) => words.some((word) => word.includes(token)))) return 2;
 
-  const compactText = text.replace(/\s/g, "");
-  return tokens.every((token) => isSubsequence(token, compactText)) ? 1 : 0;
+  let score = 0;
+  for (const token of tokens) {
+    let best = 0;
+    for (const [index, value] of values.entries()) {
+      const text = normalize(value ?? "");
+      if (!text) continue;
+      const fieldWeight = index === 0 ? 4 : 1;
+      if (text.includes(query)) best = Math.max(best, 1_000 * fieldWeight);
+      for (const word of text.split(" ")) {
+        best = Math.max(best, wordScore(token, word) * fieldWeight);
+      }
+    }
+    if (best === 0) return 0;
+    score += best;
+  }
+  return score;
 };
 
 const matches = (values: Array<string | undefined>, query: string): boolean =>
