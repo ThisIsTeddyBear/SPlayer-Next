@@ -33,11 +33,13 @@ const pathKey = (value: string): string => {
  * id 由文件路径哈希生成，标签编辑回灌与扫描共用此规则
  */
 export const scannedToUpsert = (track: JsScannedTrack): UpsertTrack => {
+  const isrc = (track as JsScannedTrack & { isrc?: string }).isrc;
   const id = createHash("sha256").update(track.path).digest("hex").slice(0, 16);
   return {
     id,
     path: track.path,
     title: track.title || track.path.split(/[/\\]/).pop() || track.path,
+    isrc,
     track: track.track,
     artists: parseArtists(track.artist ?? ""),
     album: parseAlbum(track.album ?? ""),
@@ -107,6 +109,7 @@ const syncCueTracks = async (
           cueStartMs: cueTrack.cueStartMs,
           cueEndMs: cueTrack.cueEndMs,
           title: cueTrack.title,
+          isrc: audio.isrc,
           track: cueTrack.track,
           artists: cueTrack.artists,
           album: cueTrack.album,

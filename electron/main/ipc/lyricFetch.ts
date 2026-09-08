@@ -1,19 +1,16 @@
 import { ipcMain } from "electron";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { rename, rm, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
 import { fetchWithProxy } from "@main/utils/proxy";
 import { libraryLog } from "@main/utils/logger";
 import { ErrorCode } from "@shared/types/errors";
-import type { FetchedLyricCandidate } from "@shared/types/lyrics";
+import type { FetchedLyricCandidate, LyricFormat } from "@shared/types/lyrics";
 import type { Track } from "@shared/types/player";
 
 const LRCLIB_SEARCH_URL = "https://lrclib.net/api/search";
 const LYRICSPLUS_URL = "https://lyricsplus.prjktla.my.id/v2/lyrics/get";
 const BINIMUM_URL = "https://lyrics-api.binimum.org/";
-const UNISON_URL = "https://unison.boidu.dev/lyrics";
-const YOUTUBE_SEARCH_URL = "https://www.youtube.com/results";
-const unisonKeyId = createHash("sha256").update(randomUUID()).digest("hex");
 const LYRIC_EXTENSIONS = [
   ".ttml",
   ".json",
@@ -25,6 +22,17 @@ const LYRIC_EXTENSIONS = [
   ".ass",
   ".srt",
 ];
+const SAVABLE_FORMATS = new Set<LyricFormat>([
+  "ttml",
+  "json",
+  "lys",
+  "yrc",
+  "qrc",
+  "krc",
+  "lrc",
+  "ass",
+  "srt",
+]);
 
 type LrcLibResult = {
   id?: unknown;
@@ -42,6 +50,24 @@ const normalize = (value: string): string =>
     .toLocaleLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
+
+const lyricTiming = (content: string, format: LyricFormat): "word" | "line" | "unsynced" => {
+  if (format === "ttml") return /<span\b[^>]*\bbegin=/i.test(content) ? "word" : "line";
+  if (["qrc", "krc", "yrc", "lys"].includes(format)) return "word";
+  if (format === "json") return /"words"\s*:/i.test(content) ? "word" : "line";
+  return /<\d{1,3}:\d{2}|\[\d{1,3}:\d{2}/.test(content) ? "line" : "unsynced";
+};
+
+const detectFormat = (content: string): LyricFormat | null => {
+  const text = content.trimStart();
+  if (/^\{\s*"type"\s*:\s*"Word"\b/.test(text)) return "json";
+  if (/LyricContent=|<QrcInfos|<Lyric_/i.test(text) || /\[\d+,\d+\][^\n]+\(\d+,\d+\)/.test(text)) return "qrc";
+  if (/\[\d+,\d+\]\(\d+,\d+,\d+\)/.test(text)) return "yrc";
+  if (/^\[\d\][^\]]+\(\d+,\d+\)/m.test(text)) return "lys";
+  if (/<tt[\s>]/i.test(text)) return "ttml";
+  if (/\[\d{1,3}:\d{2}/.test(text)) return "lrc";
+  return null;
+};
 
 const score = (track: Track, result: FetchedLyricCandidate): number => {
   const title = normalize(track.title);
@@ -73,6 +99,7 @@ const toCandidate = (value: LrcLibResult): FetchedLyricCandidate | null => {
     id: value.id,
     provider: "LRCLIB",
     format: "lrc",
+    timing: lyricTiming(value.syncedLyrics, "lrc"),
     title: value.trackName,
     artist: value.artistName,
     album: typeof value.albumName === "string" ? value.albumName : undefined,
@@ -88,8 +115,10 @@ const lyricCandidate = (
   artist: string,
   content: string,
 ): FetchedLyricCandidate | null => {
-  const format = /<tt[\s>]/i.test(content) ? "ttml" : /\[\d{1,3}:\d{2}/.test(content) ? "lrc" : null;
-  return format && content.trim() ? { id, provider, format, title, artist, content } : null;
+  const format = detectFormat(content);
+  return format && content.trim()
+    ? { id, provider, format, timing: lyricTiming(content, format), title, artist, content }
+    : null;
 };
 
 const stringsIn = (value: unknown, output: string[] = []): string[] => {
@@ -100,29 +129,39 @@ const stringsIn = (value: unknown, output: string[] = []): string[] => {
 };
 
 const fetchLyricsPlus = async (track: Track, artist: string): Promise<FetchedLyricCandidate[]> => {
+  const metadata = track as Track & { isrc?: string };
   const url = new URL(LYRICSPLUS_URL);
-  url.search = new URLSearchParams({
+  const params: Record<string, string> = {
     title: track.title,
     artist,
     source: "apple,lyricsplus,musixmatch,spotify,qq,deezer,musixmatch-word",
-  }).toString();
+  };
+  if (track.album?.name) params.album = track.album.name;
+  if (track.duration > 0) params.duration = String(track.duration / 1000);
+  if (metadata.isrc) params.isrc = metadata.isrc;
+  url.search = new URLSearchParams(params).toString();
   const response = await fetchWithProxy(url.toString(), { signal: AbortSignal.timeout(15_000) });
   if (!response.ok) return [];
   const text = await response.text();
   let values = [text];
   try {
-    values = stringsIn(JSON.parse(text));
+    values = [text, ...stringsIn(JSON.parse(text))];
   } catch {
     // 原始歌词响应无需额外解析。
   }
-  const content = values.find((value) => /<tt[\s>]/i.test(value) || /\[\d{1,3}:\d{2}/.test(value));
-  const candidate = content ? lyricCandidate(-1, "LyricsPlus", track.title, artist, content) : null;
-  return candidate ? [candidate] : [];
+  return values
+    .map((content, index) => lyricCandidate(-1 - index, "LyricsPlus", track.title, artist, content))
+    .filter((item): item is FetchedLyricCandidate => item !== null);
 };
 
 const fetchBinimum = async (track: Track, artist: string): Promise<FetchedLyricCandidate[]> => {
+  const metadata = track as Track & { isrc?: string };
   const url = new URL(BINIMUM_URL);
-  url.search = new URLSearchParams({ track: track.title, artist }).toString();
+  const params: Record<string, string> = { track: track.title, artist };
+  if (track.album?.name) params.album = track.album.name;
+  if (track.duration > 0) params.duration = String(Math.round(track.duration / 1000));
+  if (metadata.isrc) params.isrc = metadata.isrc;
+  url.search = new URLSearchParams(params).toString();
   const response = await fetchWithProxy(url.toString(), { signal: AbortSignal.timeout(15_000) });
   if (!response.ok) return [];
   const payload = (await response.json()) as { results?: Array<Record<string, unknown>> };
@@ -150,27 +189,6 @@ const fetchBinimum = async (track: Track, artist: string): Promise<FetchedLyricC
   return output.filter((item): item is FetchedLyricCandidate => item !== null);
 };
 
-const fetchUnison = async (track: Track, artist: string): Promise<FetchedLyricCandidate[]> => {
-  const searchUrl = new URL(YOUTUBE_SEARCH_URL);
-  searchUrl.search = new URLSearchParams({ search_query: `${track.title} ${artist}` }).toString();
-  const search = await fetchWithProxy(searchUrl.toString(), { signal: AbortSignal.timeout(15_000) });
-  if (!search.ok) return [];
-  const videoId = /"videoId":"([\w-]{11})"/.exec(await search.text())?.[1];
-  if (!videoId) return [];
-  const url = new URL(UNISON_URL);
-  url.search = new URLSearchParams({ v: videoId, song: track.title, artist }).toString();
-  const response = await fetchWithProxy(url.toString(), {
-    headers: { "x-key-id": unisonKeyId },
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!response.ok) return [];
-  const payload = (await response.json()) as { data?: { lyrics?: unknown } };
-  const content = payload.data?.lyrics;
-  const candidate =
-    typeof content === "string" ? lyricCandidate(-200, "Unison", track.title, artist, content) : null;
-  return candidate ? [candidate] : [];
-};
-
 const trackPath = (track: unknown): string | null => {
   if (!track || typeof track !== "object") return null;
   const value = track as Partial<Track>;
@@ -194,16 +212,14 @@ export const registerLyricFetchIpc = (): void => {
       if (!response.ok) throw new Error(`LRCLIB search returned HTTP ${response.status}`);
       const payload = (await response.json()) as unknown;
       if (!Array.isArray(payload)) throw new Error("LRCLIB returned an invalid response");
-      const [lyricsPlus, binimum, unison] = await Promise.all([
+      const [lyricsPlus, binimum] = await Promise.all([
         fetchLyricsPlus(track, artist).catch(() => []),
         fetchBinimum(track, artist).catch(() => []),
-        fetchUnison(track, artist).catch(() => []),
       ]);
       const data = [
         ...payload.map((item) => toCandidate(item as LrcLibResult)),
         ...lyricsPlus,
         ...binimum,
-        ...unison,
       ]
         .filter((item): item is FetchedLyricCandidate => item !== null)
         .sort((left, right) => score(track, right) - score(track, left))
@@ -223,7 +239,7 @@ export const registerLyricFetchIpc = (): void => {
       !audioPath ||
       typeof content !== "string" ||
       !content.trim() ||
-      (format !== "lrc" && format !== "ttml")
+      (typeof format !== "string" || !SAVABLE_FORMATS.has(format as LyricFormat))
     ) {
       return { success: false, error: ErrorCode.FILE_NOT_FOUND };
     }

@@ -13,6 +13,7 @@ interface TrackRow {
   cue_start_ms: number | null;
   cue_end_ms: number | null;
   title: string;
+  isrc: string | null;
   track?: number;
   artists: string;
   album: string | null;
@@ -51,6 +52,7 @@ const rowToTrack = (row: TrackRow): Track => {
     cueStartMs: row.cue_start_ms ?? undefined,
     cueEndMs: row.cue_end_ms ?? undefined,
     title: row.title,
+    isrc: row.isrc ?? undefined,
     track: row.track ?? undefined,
     artists: JSON.parse(row.artists) as Artist[],
     album: row.album ? (JSON.parse(row.album) as Album) : undefined,
@@ -128,6 +130,7 @@ export interface UpsertTrack {
   cueStartMs?: number;
   cueEndMs?: number;
   title: string;
+  isrc?: string;
   track?: number;
   artists: Artist[];
   album?: Album;
@@ -149,9 +152,9 @@ export const upsertTracks = (tracks: UpsertTrack[]): void => {
   const d = getDb();
   const stmt = d.prepare(`
     INSERT OR REPLACE INTO tracks
-      (id, path, cue_path, cue_audio_path, cue_start_ms, cue_end_ms, title, track, artists, album, duration, cover, codec, sample_rate, bit_rate, channels, bits_per_sample, file_size, file_mtime, file_ctime, scanned_at)
+      (id, path, cue_path, cue_audio_path, cue_start_ms, cue_end_ms, title, isrc, track, artists, album, duration, cover, codec, sample_rate, bit_rate, channels, bits_per_sample, file_size, file_mtime, file_ctime, scanned_at)
     VALUES
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const now = Date.now();
   const tx = d.transaction(() => {
@@ -164,6 +167,7 @@ export const upsertTracks = (tracks: UpsertTrack[]): void => {
         t.cueStartMs ?? null,
         t.cueEndMs ?? null,
         t.title,
+        t.isrc ?? null,
         t.track ?? null,
         JSON.stringify(t.artists),
         t.album ? JSON.stringify(t.album) : null,

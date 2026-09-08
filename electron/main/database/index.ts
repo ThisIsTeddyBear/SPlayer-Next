@@ -40,6 +40,7 @@ export const initDatabase = (): void => {
       cue_start_ms INTEGER,
       cue_end_ms INTEGER,
       title TEXT NOT NULL,
+      isrc TEXT,
       track INTEGER,
       artists TEXT NOT NULL DEFAULT '[]',
       album TEXT,

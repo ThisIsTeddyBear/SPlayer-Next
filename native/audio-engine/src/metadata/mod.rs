@@ -60,6 +60,7 @@ pub struct Tags {
     pub album: Option<String>,
     pub track: Option<u16>,
     pub comment: Option<String>,
+    pub isrc: Option<String>,
 }
 
 /// 把 ffmpeg_audio 的 SourceAudioInfo 转成内部 StreamInfo
@@ -81,12 +82,16 @@ pub fn extract_tags(dict: &HashMap<String, String>) -> Tags {
     let album = dict_get(dict, "album").map(ToString::to_string);
     let track = dict_get(dict, "track").and_then(|s| s.parse().ok());
     let comment = dict_get(dict, "comment").map(ToString::to_string);
+    let isrc = dict_get(dict, "isrc")
+        .or_else(|| dict_get(dict, "tsrc"))
+        .map(ToString::to_string);
     Tags {
         title,
         artist,
         album,
         track,
         comment,
+        isrc,
     }
 }
 

@@ -84,6 +84,7 @@ export interface FetchedLyricCandidate {
   id: number;
   provider: string;
   format: LyricFormat;
+  timing: "word" | "line" | "unsynced";
   title: string;
   artist: string;
   album?: string;

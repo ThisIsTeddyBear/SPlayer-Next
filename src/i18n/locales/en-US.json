@@ -492,12 +492,18 @@
       "action": "Fetch or replace lyrics",
       "title": "Fetch Lyrics",
       "description": "Select a synced lyric. Saving replaces every existing sidecar lyric for this song with the selected lyric file.",
+      "searching": "Searching lyric providers…",
       "localOnly": "Lyrics can only be saved beside a local music file.",
       "noMatches": "No synced lyric matches found.",
       "searchFailed": "Could not search for lyrics.",
       "saveFailed": "Could not save the lyric file.",
       "saved": "Lyrics saved beside the song.",
-      "replace": "Replace Lyrics"
+      "replace": "Replace Lyrics",
+      "timing": {
+        "word": "Word / syllable",
+        "line": "Line synced",
+        "unsynced": "Unsynced"
+      }
     },
     "bitPerfectActive": "Bit-perfect active",
     "copyLyric": {

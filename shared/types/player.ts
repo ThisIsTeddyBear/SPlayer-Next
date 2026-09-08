@@ -68,6 +68,7 @@ export interface Track {
   serverId?: string;
   originalId?: string;
   title: string;
+  isrc?: string;
   comment?: string;
   artists: Artist[];
   album?: Album;
