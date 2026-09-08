@@ -9,6 +9,7 @@
     "electron/preload/*.d.ts",
     "shared/**/*"
   ],
+  "exclude": ["src/**/*.test.ts", "windows/**/*.test.ts"],
   "compilerOptions": {
     "tsBuildInfoFile": "node_modules/.cache/tsconfig.web.tsbuildinfo",
     "paths": {
