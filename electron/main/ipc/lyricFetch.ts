@@ -51,6 +51,22 @@ const normalize = (value: string): string =>
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 
+const similarity = (left: string, right: string): number => {
+  const a = normalize(left);
+  const b = normalize(right);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.includes(b) || b.includes(a)) return 0.93;
+  const tokens = new Set(a.split(" "));
+  const overlap = b.split(" ").filter((token) => tokens.has(token)).length;
+  return overlap / Math.max(tokens.size, new Set(b.split(" ")).size);
+};
+
+const durationSeconds = (value: unknown): number | undefined => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  return value > 10_000 ? value / 1000 : value;
+};
+
 const lyricTiming = (content: string, format: LyricFormat): "word" | "line" | "unsynced" => {
   if (format === "ttml") return /<span\b[^>]*\bbegin=/i.test(content) ? "word" : "line";
   if (["qrc", "krc", "yrc", "lys"].includes(format)) return "word";
@@ -165,28 +181,52 @@ const fetchBinimum = async (track: Track, artist: string): Promise<FetchedLyricC
   const response = await fetchWithProxy(url.toString(), { signal: AbortSignal.timeout(15_000) });
   if (!response.ok) return [];
   const payload = (await response.json()) as { results?: Array<Record<string, unknown>> };
-  const records = Array.isArray(payload.results) ? payload.results : [];
-  const output = await Promise.all(
-    records.slice(0, 3).map(async (record, index) => {
-      const lyricUrl = record.lyricsUrl;
-      if (
-        typeof lyricUrl !== "string" ||
-        !lyricUrl.startsWith("https://lyrics-storage.binimum.org/")
-      ) {
-        return null;
+  const records = Array.isArray(payload.results) ? payload.results.slice(0, 12) : [];
+  const ranked = records
+    .map((record, index) => {
+      const titleScore = similarity(track.title, String(record.track_name ?? ""));
+      const artistScore = similarity(artist, String(record.artist_name ?? ""));
+      let score = titleScore * 5 + artistScore * 3.5;
+      if (track.album?.name && typeof record.album_name === "string") {
+        score += similarity(track.album.name, record.album_name);
       }
-      const lyricResponse = await fetchWithProxy(lyricUrl, { signal: AbortSignal.timeout(15_000) });
-      if (!lyricResponse.ok) return null;
-      return lyricCandidate(
-        -100 - index,
-        "BiniLyrics",
-        String(record.track_name ?? track.title),
-        String(record.artist_name ?? artist),
-        await lyricResponse.text(),
-      );
-    }),
+      const duration = durationSeconds(record.duration);
+      if (duration && track.duration > 0) {
+        const gap = Math.abs(track.duration / 1000 - duration);
+        score += gap <= 1 ? 4 : gap <= 2 ? 3.92 : gap <= 4 ? 3.52 : gap <= 8 ? 2.8 : 0;
+        if (gap > 30) score -= 6;
+      }
+      if (metadata.isrc && typeof record.isrc === "string") {
+        score += normalize(metadata.isrc) === normalize(record.isrc) ? 20 : -10;
+      }
+      if (titleScore < 0.5) score -= 5;
+      if (artistScore < 0.35) score -= 3;
+      return { record, index, score };
+    })
+    .sort((left, right) => right.score - left.score);
+  const best = ranked[0];
+  if (!best || best.score < (metadata.isrc && best.record.isrc ? 5 : 7)) {
+    libraryLog.info(`Binimum found ${records.length} candidates but none matched ${artist} - ${track.title}`);
+    return [];
+  }
+  const lyricUrl = best.record.lyricsUrl;
+  if (typeof lyricUrl !== "string") return [];
+  const parsedUrl = new URL(lyricUrl);
+  if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== "lyrics-storage.binimum.org") {
+    libraryLog.warn(`Binimum rejected an untrusted lyric host: ${parsedUrl.hostname}`);
+    return [];
+  }
+  const lyricResponse = await fetchWithProxy(lyricUrl, { signal: AbortSignal.timeout(15_000) });
+  if (!lyricResponse.ok) throw new Error(`Binimum lyric download returned HTTP ${lyricResponse.status}`);
+  const candidate = lyricCandidate(
+    -100 - best.index,
+    "BiniLyrics",
+    String(best.record.track_name ?? track.title),
+    String(best.record.artist_name ?? artist),
+    await lyricResponse.text(),
   );
-  return output.filter((item): item is FetchedLyricCandidate => item !== null);
+  if (candidate) libraryLog.info(`Binimum selected candidate #${best.index + 1} score=${best.score.toFixed(1)}`);
+  return candidate ? [candidate] : [];
 };
 
 const trackPath = (track: unknown): string | null => {
@@ -213,9 +253,18 @@ export const registerLyricFetchIpc = (): void => {
       const payload = (await response.json()) as unknown;
       if (!Array.isArray(payload)) throw new Error("LRCLIB returned an invalid response");
       const [lyricsPlus, binimum] = await Promise.all([
-        fetchLyricsPlus(track, artist).catch(() => []),
-        fetchBinimum(track, artist).catch(() => []),
+        fetchLyricsPlus(track, artist).catch((error) => {
+          libraryLog.warn("LyricsPlus lyric search failed:", error);
+          return [];
+        }),
+        fetchBinimum(track, artist).catch((error) => {
+          libraryLog.warn("Binimum lyric search failed:", error);
+          return [];
+        }),
       ]);
+      libraryLog.info(
+        `Lyric search results for ${artist} - ${track.title}: LRCLIB=${payload.length}, LyricsPlus=${lyricsPlus.length}, Binimum=${binimum.length}`,
+      );
       const data = [
         ...payload.map((item) => toCandidate(item as LrcLibResult)),
         ...lyricsPlus,
