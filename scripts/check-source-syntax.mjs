@@ -7,6 +7,8 @@ let checked = 0;
 const failures = [];
 
 /** 无需项目依赖的语法检查，不替代 TypeScript 类型检查或 Vue 模板编译。 */
+// Node 脚本不能使用 TypeScript 返回类型。
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 const check = (filename) => {
   try {
     let source = fs.readFileSync(filename, "utf8");
@@ -50,6 +52,8 @@ const check = (filename) => {
   }
 };
 
+// Node 脚本不能使用 TypeScript 返回类型。
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 const walk = (directory) => {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const filename = path.join(directory, entry.name);

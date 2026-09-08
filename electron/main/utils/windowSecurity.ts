@@ -26,6 +26,7 @@ export const secureWindow = (window: BrowserWindow): void => {
       getTrustedDocument(details.requestingUrl) === "index.html";
     const audio =
       permission === "media" &&
+      "mediaTypes" in details &&
       details.mediaTypes?.length === 1 &&
       details.mediaTypes[0] === "audio";
     const clipboard =
