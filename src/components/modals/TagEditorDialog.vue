@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import type { Track } from "@shared/types/player";
-import { ALL_PLATFORMS, PLATFORM_SHORT_NAME, type Platform } from "@shared/types/platform";
-import type { TrackTags, TagEditRequest } from "@shared/types/tagEditor";
-import { useStatusStore } from "@/stores/status";
-import { searchAlbums, searchSongs } from "@/apis/search";
-import { rankTagCandidates, type RankedTagCandidate } from "@/utils/tagMatch";
+import type {
+  MetadataCandidate,
+  MetadataProvider,
+  TrackTags,
+  TagEditRequest,
+} from "@shared/types/tagEditor";
 import * as player from "@/core/player";
 import { toast } from "@/composables/useToast";
 import { handleError } from "@/utils/errors";
 import { formatFileSize } from "@/utils/format";
 import { formatTime } from "@/utils/time";
 import IconWandSparkles from "~icons/lucide/wand-sparkles";
+
 const props = defineProps<{ open: boolean; track: Track | null }>();
 const emit = defineEmits<{ "update:open": [value: boolean] }>();
 
@@ -20,6 +22,7 @@ const { t } = useI18n();
 const fileName = computed(
   () => (props.track?.cueAudioPath ?? props.track?.path)?.split(/[/\\]/).pop() ?? "",
 );
+
 /** 格式 · 大小 摘要行 */
 const fileMeta = computed(() => {
   const parts: string[] = [];
@@ -34,6 +37,7 @@ const fileMeta = computed(() => {
 const original = shallowRef<TrackTags | null>(null);
 const loading = ref(false);
 const saving = ref(false);
+
 /** 表单状态 */
 const form = reactive({
   title: "",
@@ -50,9 +54,6 @@ const form = reactive({
 /** 新封面 */
 const newCoverPath = ref<string | null>(null);
 const newCoverPreview = ref<string | null>(null);
-
-/** 专辑艺术家异步查询序号，避免快速切换候选时旧请求覆盖新结果 */
-let albumArtistLookupSeq = 0;
 
 /**
  * 重置表单为指定标签的值
@@ -73,8 +74,8 @@ const resetForm = (tags: TrackTags | null): void => {
   newCoverPreview.value = null;
   candidates.value = [];
   candidatesVisible.value = false;
-  albumArtistLookupSeq += 1;
 };
+
 /** 打开时读取文件标签回填 */
 watch(
   () => props.open,
@@ -94,6 +95,7 @@ watch(
     resetForm(result.data);
   },
 );
+
 /** 选择新封面 */
 const pickCover = async (): Promise<void> => {
   const result = await window.api.library.pickCoverImage();
@@ -105,103 +107,76 @@ const pickCover = async (): Promise<void> => {
 
 /** 在线封面 URL */
 const newCoverUrl = ref<string | null>(null);
+
 /** 在线匹配平台，初始值跟随搜索页偏好，命名与搜索页同源 */
-const matchPlatform = ref<Platform>(useStatusStore().searchPlatform);
-const platformOptions = ALL_PLATFORMS.map((key) => ({
-  value: key,
-  label: PLATFORM_SHORT_NAME[key],
-}));
+const matchProvider = ref<MetadataProvider>("netease");
+const providerOptions: { value: MetadataProvider; label: string }[] = [
+  { value: "netease", label: "NCM" },
+  { value: "qqmusic", label: "QM" },
+  { value: "kugou", label: "KG" },
+  { value: "spotify", label: "Spotify" },
+];
 
 const matching = ref(false);
-const candidates = shallowRef<RankedTagCandidate[]>([]);
+const candidates = shallowRef<MetadataCandidate[]>([]);
 const candidatesVisible = ref(false);
-/** 用表单当前的标题 + 艺术家联网搜索候选 */
+
+/** 用表单当前的标题和艺术家搜索本地候选 */
 const handleOnlineMatch = async (): Promise<void> => {
   const keyword = `${form.title.trim()} ${form.artist.trim()}`.trim();
   if (!keyword || matching.value) return;
   matching.value = true;
   try {
-    const result = await searchSongs(matchPlatform.value, keyword, 0, 10);
-    const ranked = rankTagCandidates(result.items, {
+    const result = await window.api.library.searchMetadata({
+      provider: matchProvider.value,
       title: form.title,
       artist: form.artist,
-      album: form.album,
-      durationMs: props.track?.duration,
     });
-    candidates.value = ranked;
-    candidatesVisible.value = ranked.length > 0;
-    if (ranked.length === 0) toast.info(t("tagEditor.noMatches"));
+    if (!result.success || !result.data) throw new Error(result.error);
+    candidates.value = result.data;
+    candidatesVisible.value = result.data.length > 0;
+    if (result.data.length === 0) toast.info(t("tagEditor.noMatches"));
   } catch {
     toast.error(t("errors.NETWORK_ERROR"));
   } finally {
     matching.value = false;
   }
 };
-/** 选中候选后拉取该平台歌词 */
-const fillLyricFromCandidate = async (track: Track): Promise<void> => {
-  // 特殊 ID 处理
-  const lookupId = matchPlatform.value === "qqmusic" ? (track.extId ?? track.id) : track.id;
-  try {
-    const resp = await window.api.lyrics.matchById(matchPlatform.value, lookupId);
-    if (resp.ok && resp.data?.content) form.lyrics = resp.data.content;
-  } catch {
-    // 拉取失败保留现有歌词，不打断匹配流程
-  }
-};
 
-/**
- * 选中候选后通过对应平台的专辑搜索补全 Album Artist。
- *
- * 单曲搜索结果当前不会稳定携带 album.artist，但三个平台的专辑搜索结果都会返回
- * 专辑艺术家（CoverItem.subtitle）。优先按专辑 ID 精确匹配；无 ID 时仅接受名称完全一致。
- * 查询不到或平台未返回时保留文件中原有 Album Artist。
- */
-const fillAlbumArtistFromCandidate = async (track: Track): Promise<void> => {
-  const album = track.album;
-  if (!album?.name) return;
-
-  // 如果单曲结果未来直接提供了专辑艺术家，优先立即使用。
-  const inlineAlbumArtist = album.artist?.trim();
-  if (inlineAlbumArtist) form.albumArtist = inlineAlbumArtist;
-
-  const seq = ++albumArtistLookupSeq;
-  const platform = matchPlatform.value;
-  const albumId = album.id ? String(album.id) : "";
-  const albumName = album.name.trim();
-
-  try {
-    const result = await searchAlbums(platform, albumName, 0, 20);
-    if (seq !== albumArtistLookupSeq) return;
-
-    const exact = albumId
-      ? result.items.find((item) => String(item.id) === albumId)
-      : result.items.find(
-          (item) => item.title.trim().toLocaleLowerCase() === albumName.toLocaleLowerCase(),
-        );
-
-    const albumArtist = exact?.subtitle?.trim();
-    if (albumArtist) form.albumArtist = albumArtist;
-  } catch {
-    // 专辑信息拉取失败时保留现有 Album Artist，不影响其他元数据与歌词匹配。
-  }
+const applyRemoteCover = (coverUrl: string | undefined): void => {
+  if (!coverUrl || !/^https?:\/\//i.test(coverUrl)) return;
+  newCoverUrl.value = coverUrl;
+  newCoverPath.value = null;
+  newCoverPreview.value = coverUrl;
 };
 
 /** 回填候选到表单 */
-const applyCandidate = (candidate: RankedTagCandidate): void => {
-  const online = candidate.track;
-  form.title = online.title;
-  form.artist = online.artists.map((artist) => artist.name).join("/");
-  if (online.album?.name) form.album = online.album.name;
-  const coverUrl = online.coverOriginal ?? online.cover;
-  if (coverUrl && /^https?:\/\//i.test(coverUrl)) {
-    newCoverUrl.value = coverUrl;
-    newCoverPath.value = null;
-    newCoverPreview.value = coverUrl;
-  }
+const applyCandidate = async (candidate: MetadataCandidate): Promise<void> => {
+  form.title = candidate.title;
+  form.artist = candidate.artist;
+  if (candidate.album) form.album = candidate.album;
+  if (candidate.albumArtist) form.albumArtist = candidate.albumArtist;
+  if (candidate.year !== undefined) form.year = candidate.year;
+  applyRemoteCover(candidate.coverUrl);
+
   candidatesVisible.value = false;
-  void fillAlbumArtistFromCandidate(online);
-  void fillLyricFromCandidate(online);
+
+  const detail = await window.api.library.getMetadataDetail(candidate.provider, candidate.id);
+  if (!detail.success || !detail.data) return;
+
+  const data = detail.data;
+  if (data.title !== undefined) form.title = data.title;
+  if (data.artist !== undefined) form.artist = data.artist;
+  if (data.album !== undefined) form.album = data.album;
+  if (data.albumArtist !== undefined) form.albumArtist = data.albumArtist;
+  if (data.genre !== undefined) form.genre = data.genre;
+  if (data.year !== undefined) form.year = data.year;
+  if (data.trackNumber !== undefined) form.trackNumber = data.trackNumber;
+  if (data.discNumber !== undefined) form.discNumber = data.discNumber;
+  if (data.lyrics !== undefined) form.lyrics = data.lyrics;
+  applyRemoteCover(data.coverUrl);
 };
+
 /** 文本字段 diff */
 const diffText = (origValue: string | undefined, current: string): string | undefined => {
   return (origValue ?? "") === current ? undefined : current;
@@ -212,11 +187,13 @@ const diffNumber = (origValue: number | undefined, current: number | null): numb
   const next = current ?? 0;
   return (origValue ?? 0) === next ? undefined : next;
 };
+
 /** 保存标签 */
 const handleSave = async (): Promise<void> => {
   const track = props.track;
   const tags = original.value;
   if (!track?.path || !tags || saving.value) return;
+
   // 构造编辑请求，仅包含变更的字段
   const edit: TagEditRequest = {
     path: track.path,
@@ -232,6 +209,7 @@ const handleSave = async (): Promise<void> => {
     coverPath: newCoverPath.value ?? undefined,
     coverUrl: newCoverUrl.value ?? undefined,
   };
+
   // 如果没有任何变更，直接关闭对话框
   const changed = Object.entries(edit).some(
     ([key, value]) => key !== "path" && value !== undefined,
@@ -240,10 +218,12 @@ const handleSave = async (): Promise<void> => {
     emit("update:open", false);
     return;
   }
+
   // 批量写入标签
   saving.value = true;
   const outcomes = await player.saveTrackTags([edit]);
   saving.value = false;
+
   const outcome = outcomes?.[0];
   if (outcome?.success) {
     toast.success(t("tagEditor.saveSuccess"));
@@ -253,6 +233,7 @@ const handleSave = async (): Promise<void> => {
   }
 };
 </script>
+
 <template>
   <SDialog
     :open="open"
@@ -280,12 +261,13 @@ const handleSave = async (): Promise<void> => {
           </SButton>
         </div>
       </div>
+
       <!-- 在线匹配 -->
       <SCard size="small" variant="primary">
         <div class="flex items-center gap-2">
           <span class="flex-1 text-sm text-on-surface">{{ t("tagEditor.matchHint") }}</span>
-          <div class="w-24 shrink-0">
-            <SSelect v-model="matchPlatform" :options="platformOptions" />
+          <div class="w-30 shrink-0">
+            <SSelect v-model="matchProvider" :options="providerOptions" />
           </div>
           <SButton
             type="primary"
@@ -299,67 +281,78 @@ const handleSave = async (): Promise<void> => {
             {{ t("tagEditor.onlineMatch") }}
           </SButton>
         </div>
+
         <!-- 候选列表在同一卡片内展开 -->
         <div v-if="candidatesVisible" class="mt-2.5 flex flex-col gap-0.5 max-h-56 overflow-y-auto">
           <div
             v-for="candidate in candidates"
-            :key="candidate.track.id"
+            :key="`${candidate.provider}:${candidate.id}`"
             role="button"
             tabindex="0"
             :class="[
               'flex items-center gap-2.5 p-1.5 rounded-md cursor-pointer transition-colors hover:bg-on-surface/8',
-              candidate.durationFar && 'opacity-45',
+              track?.duration &&
+                candidate.durationMs &&
+                Math.abs(track.duration - candidate.durationMs) > 20000 &&
+                'opacity-45',
             ]"
             @click="applyCandidate(candidate)"
             @keydown.enter="applyCandidate(candidate)"
           >
             <SImg
-              :src="candidate.track.cover"
+              :src="candidate.coverUrl"
               class="size-10 shrink-0 rounded-md overflow-hidden"
             />
             <div class="flex flex-col min-w-0 flex-1">
-              <span class="text-sm truncate">{{ candidate.track.title }}</span>
+              <span class="text-sm truncate">{{ candidate.title }}</span>
               <span class="text-xs text-on-surface-variant/70 truncate">
-                {{ candidate.track.artists.map((artist) => artist.name).join(" / ") }}
-                <template v-if="candidate.track.album?.name">
-                  · {{ candidate.track.album.name }}
+                {{ candidate.artist }}
+                <template v-if="candidate.album">
+                  · {{ candidate.album }}
                 </template>
               </span>
             </div>
             <span class="text-xs text-on-surface-variant/70 tabular-nums shrink-0">
-              {{ formatTime(candidate.track.duration) }}
+              {{ candidate.durationMs ? formatTime(candidate.durationMs) : "" }}
             </span>
           </div>
         </div>
       </SCard>
+
       <!-- 文本标签 -->
       <div class="grid grid-cols-2 gap-3">
         <label class="flex flex-col gap-1 col-span-2">
           <span class="text-xs text-on-surface-variant">{{ t("tagEditor.fields.title") }}</span>
           <SInput v-model="form.title" />
         </label>
+
         <label class="flex flex-col gap-1">
           <span class="text-xs text-on-surface-variant">{{ t("tagEditor.fields.artist") }}</span>
           <SInput v-model="form.artist" />
         </label>
+
         <label class="flex flex-col gap-1">
           <span class="text-xs text-on-surface-variant">
             {{ t("tagEditor.fields.albumArtist") }}
           </span>
           <SInput v-model="form.albumArtist" />
         </label>
+
         <label class="flex flex-col gap-1">
           <span class="text-xs text-on-surface-variant">{{ t("tagEditor.fields.album") }}</span>
           <SInput v-model="form.album" />
         </label>
+
         <label class="flex flex-col gap-1">
           <span class="text-xs text-on-surface-variant">{{ t("tagEditor.fields.genre") }}</span>
           <SInput v-model="form.genre" />
         </label>
+
         <label class="flex flex-col gap-1">
           <span class="text-xs text-on-surface-variant">{{ t("tagEditor.fields.year") }}</span>
           <SNumberInput v-model="form.year" :min="0" :max="9999" />
         </label>
+
         <div class="grid grid-cols-2 gap-3">
           <label class="flex flex-col gap-1">
             <span class="text-xs text-on-surface-variant">
@@ -367,6 +360,7 @@ const handleSave = async (): Promise<void> => {
             </span>
             <SNumberInput v-model="form.trackNumber" :min="0" :max="9999" />
           </label>
+
           <label class="flex flex-col gap-1">
             <span class="text-xs text-on-surface-variant">
               {{ t("tagEditor.fields.discNumber") }}
@@ -375,6 +369,7 @@ const handleSave = async (): Promise<void> => {
           </label>
         </div>
       </div>
+
       <!-- 内嵌歌词 -->
       <label class="flex flex-col gap-1">
         <span class="text-xs text-on-surface-variant">{{ t("tagEditor.fields.lyrics") }}</span>
@@ -387,6 +382,7 @@ const handleSave = async (): Promise<void> => {
         />
       </label>
     </div>
+
     <template #footer>
       <SButton variant="secondary" :disabled="saving" @click="emit('update:open', false)">
         {{ t("common.cancel") }}

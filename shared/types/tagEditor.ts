@@ -1,6 +1,6 @@
 import type { Track } from "./player";
 
-export type MetadataProvider = "netease" | "qqmusic" | "kugou";
+export type MetadataProvider = "netease" | "qqmusic" | "kugou" | "spotify";
 
 export interface MetadataSearchQuery {
   provider: MetadataProvider;
@@ -21,6 +21,15 @@ export interface MetadataCandidate {
 }
 
 export interface MetadataCandidateDetail {
+  title?: string;
+  artist?: string;
+  album?: string;
+  albumArtist?: string;
+  genre?: string;
+  year?: number;
+  trackNumber?: number;
+  discNumber?: number;
+  coverUrl?: string;
   lyrics?: string;
 }
 
