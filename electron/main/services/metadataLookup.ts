@@ -262,15 +262,17 @@ interface SpotifyAlbumResponse {
   errors?: unknown[];
 }
 
+interface SpotifyTokenResponse {
+  accessToken?: string;
+  accessTokenExpirationTimestampMs?: number;
+}
+
 interface SpotifyEmbedState {
   props?: {
     pageProps?: {
       state?: {
         settings?: {
-          session?: {
-            accessToken?: string;
-            accessTokenExpirationTimestampMs?: number;
-          };
+          session?: SpotifyTokenResponse;
         };
       };
     };
@@ -280,42 +282,83 @@ interface SpotifyEmbedState {
 let spotifyAccessToken = "";
 let spotifyTokenExpiresAt = 0;
 
+const cacheSpotifyToken = (token: SpotifyTokenResponse): string | null => {
+  const accessToken = token.accessToken?.trim();
+  if (!accessToken) return null;
+
+  spotifyAccessToken = accessToken;
+  spotifyTokenExpiresAt =
+    token.accessTokenExpirationTimestampMs ?? Date.now() + 5 * 60_000;
+
+  return spotifyAccessToken;
+};
+
+const requestSpotifyWebToken = async (): Promise<string | null> => {
+  try {
+    const response = await fetchWithProxy(
+      "https://open.spotify.com/get_access_token?reason=transport&productType=web_player",
+      {
+        headers: {
+          Accept: "application/json",
+          Referer: "https://open.spotify.com/",
+          "User-Agent": BROWSER_USER_AGENT,
+        },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      },
+    );
+
+    if (!response.ok) return null;
+    return cacheSpotifyToken((await response.json()) as SpotifyTokenResponse);
+  } catch {
+    return null;
+  }
+};
+
+const requestSpotifyEmbedToken = async (): Promise<string | null> => {
+  try {
+    const response = await fetchWithProxy(
+      `https://open.spotify.com/embed/track/${SPOTIFY_TOKEN_TRACK_ID}`,
+      {
+        headers: {
+          Accept: "text/html,application/xhtml+xml",
+          Referer: "https://open.spotify.com/",
+          "User-Agent": BROWSER_USER_AGENT,
+        },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      },
+    );
+
+    if (!response.ok) return null;
+
+    const html = await response.text();
+    const nextData = html.match(
+      /<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i,
+    )?.[1];
+
+    if (!nextData) return null;
+
+    const state = JSON.parse(nextData) as SpotifyEmbedState;
+    return cacheSpotifyToken(state.props?.pageProps?.state?.settings?.session ?? {});
+  } catch {
+    return null;
+  }
+};
+
 const getSpotifyAnonymousToken = async (): Promise<string> => {
   if (spotifyAccessToken && spotifyTokenExpiresAt > Date.now() + 30_000) {
     return spotifyAccessToken;
   }
 
-  const response = await fetchWithProxy(
-    `https://open.spotify.com/embed/track/${SPOTIFY_TOKEN_TRACK_ID}`,
-    {
-      headers: {
-        Accept: "text/html,application/xhtml+xml",
-        "User-Agent": BROWSER_USER_AGENT,
-      },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    },
-  );
+  // Primary path: this is the same anonymous web-player token endpoint used by
+  // current no-login Spotify metadata clients.
+  const webToken = await requestSpotifyWebToken();
+  if (webToken) return webToken;
 
-  if (!response.ok) {
-    throw new Error(`Spotify embed token request failed: HTTP ${response.status}`);
-  }
+  // Fallback: recover the anonymous session token from a public embed page.
+  const embedToken = await requestSpotifyEmbedToken();
+  if (embedToken) return embedToken;
 
-  const html = await response.text();
-  const nextData = html.match(
-    /<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i,
-  )?.[1];
-
-  if (!nextData) throw new Error("Spotify embed page did not contain __NEXT_DATA__");
-
-  const state = JSON.parse(nextData) as SpotifyEmbedState;
-  const session = state.props?.pageProps?.state?.settings?.session;
-  if (!session?.accessToken) throw new Error("Spotify embed page did not contain an access token");
-
-  spotifyAccessToken = session.accessToken;
-  spotifyTokenExpiresAt =
-    session.accessTokenExpirationTimestampMs ?? Date.now() + 5 * 60_000;
-
-  return spotifyAccessToken;
+  throw new Error("Unable to obtain an anonymous Spotify web-player token");
 };
 
 const spotifyGraphqlUrl = (
