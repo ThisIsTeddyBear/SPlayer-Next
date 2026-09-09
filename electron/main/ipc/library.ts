@@ -221,16 +221,28 @@ export const registerLibraryIpc = (): void => {
   ipcMain.handle("library:writeTags", async (_event, edits: TagEditRequest[]) => {
     try {
       const requests: JsTagWriteRequest[] = [];
+      const coverCache = new Map<string, Buffer | undefined>();
       // 实际带封面写入的路径集合
       const replacedCovers = new Set<string>();
       for (const edit of edits) {
         const { coverPath, coverUrl, ...fields } = edit;
         let cover: Buffer | undefined;
-        if (coverPath) {
-          cover = await fs.readFile(coverPath);
-        } else if (coverUrl) {
-          cover = (await fetchBytes(coverUrl, { requireImage: true })) ?? undefined;
-          if (!cover) libraryLog.warn(`Cover download failed; writing text only: ${coverUrl}`);
+        const coverSource = coverPath
+          ? `path:${coverPath}`
+          : coverUrl
+            ? `url:${coverUrl}`
+            : undefined;
+        if (coverSource) {
+          if (!coverCache.has(coverSource)) {
+            const loaded = coverPath
+              ? await fs.readFile(coverPath)
+              : ((await fetchBytes(coverUrl!, { requireImage: true })) ?? undefined);
+            coverCache.set(coverSource, loaded);
+            if (!loaded && coverUrl) {
+              libraryLog.warn(`Cover download failed; writing text only: ${coverUrl}`);
+            }
+          }
+          cover = coverCache.get(coverSource);
         }
         if (cover) replacedCovers.add(edit.path);
         requests.push({ ...fields, cover });

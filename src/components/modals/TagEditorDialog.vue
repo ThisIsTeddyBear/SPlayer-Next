@@ -8,6 +8,7 @@ import type {
 } from "@shared/types/tagEditor";
 import * as player from "@/core/player";
 import { toast } from "@/composables/useToast";
+import { dialog } from "@/composables/useDialog";
 import { useSettingsStore } from "@/stores/settings";
 import { handleError } from "@/utils/errors";
 import { formatFileSize } from "@/utils/format";
@@ -59,6 +60,18 @@ const newCoverPath = ref<string | null>(null);
 const newCoverUrl = ref<string | null>(null);
 const newCoverPreview = ref<string | null>(null);
 const matchedCoverUrl = ref<string | null>(null);
+const hasReplacementCover = computed(() => !!newCoverPath.value || !!newCoverUrl.value);
+const canApplyCoverToAlbum = computed(() => {
+  const track = props.track;
+  return (
+    !!track?.path &&
+    track.source === "local" &&
+    !track.cuePath &&
+    !!track.album?.name &&
+    hasReplacementCover.value &&
+    !saving.value
+  );
+});
 const replaceCoverFromMatch = computed({
   get: () => settings.player.replaceCoverFromOnlineMatch,
   set: (value: boolean) => {
@@ -115,6 +128,44 @@ const pickCover = async (): Promise<void> => {
   newCoverPath.value = result.data.path;
   newCoverUrl.value = null;
   newCoverPreview.value = result.data.dataUrl;
+};
+
+/** 将已选封面应用到同专辑的所有本地文件 */
+const applyCoverToAlbum = async (): Promise<void> => {
+  const track = props.track;
+  if (!canApplyCoverToAlbum.value || !track?.album?.name) return;
+
+  const result = await window.api.library.getAlbumTracks(track.album.name);
+  const albumTracks = (result.success ? result.data : undefined)?.filter(
+    (item) => item.source === "local" && !!item.path && !item.cuePath,
+  );
+  if (!albumTracks?.length) return;
+
+  const confirmed = await dialog.confirm({
+    title: t("tagEditor.applyCoverToAlbumTitle"),
+    content: t("tagEditor.applyCoverToAlbumConfirm", {
+      album: track.album.name,
+      count: albumTracks.length,
+    }),
+    type: "warning",
+  });
+  if (!confirmed) return;
+
+  const coverEdit = newCoverPath.value
+    ? { coverPath: newCoverPath.value }
+    : { coverUrl: newCoverUrl.value ?? undefined };
+  saving.value = true;
+  const outcomes = await player.saveTrackTags(
+    albumTracks.map((item) => ({ path: item.path!, ...coverEdit })),
+  );
+  saving.value = false;
+
+  const updated = outcomes?.filter((outcome) => outcome.success).length ?? 0;
+  if (updated === albumTracks.length) {
+    toast.success(t("tagEditor.applyCoverToAlbumSuccess", { count: updated }));
+  } else {
+    toast.error(t("tagEditor.applyCoverToAlbumFailed", { updated, count: albumTracks.length }));
+  }
 };
 
 /** 在线匹配平台，初始值跟随搜索页偏好，命名与搜索页同源 */
@@ -289,9 +340,19 @@ const handleSave = async (): Promise<void> => {
             </span>
             <span v-if="fileMeta" class="text-xs text-on-surface-variant/70">{{ fileMeta }}</span>
           </div>
-          <SButton variant="secondary" size="small" class="w-fit" @click="pickCover">
-            {{ t("tagEditor.replaceCover") }}
-          </SButton>
+          <div class="flex gap-2">
+            <SButton variant="secondary" size="small" class="w-fit" @click="pickCover">
+              {{ t("tagEditor.replaceCover") }}
+            </SButton>
+            <SButton
+              variant="secondary"
+              size="small"
+              :disabled="!canApplyCoverToAlbum"
+              @click="applyCoverToAlbum"
+            >
+              {{ t("tagEditor.applyCoverToAlbum") }}
+            </SButton>
+          </div>
         </div>
       </div>
 
@@ -340,17 +401,12 @@ const handleSave = async (): Promise<void> => {
             @click="applyCandidate(candidate)"
             @keydown.enter="applyCandidate(candidate)"
           >
-            <SImg
-              :src="candidate.coverUrl"
-              class="size-10 shrink-0 rounded-md overflow-hidden"
-            />
+            <SImg :src="candidate.coverUrl" class="size-10 shrink-0 rounded-md overflow-hidden" />
             <div class="flex flex-col min-w-0 flex-1">
               <span class="text-sm truncate">{{ candidate.title }}</span>
               <span class="text-xs text-on-surface-variant/70 truncate">
                 {{ candidate.artist }}
-                <template v-if="candidate.album">
-                  · {{ candidate.album }}
-                </template>
+                <template v-if="candidate.album">· {{ candidate.album }}</template>
               </span>
             </div>
             <span class="text-xs text-on-surface-variant/70 tabular-nums shrink-0">

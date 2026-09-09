@@ -2259,6 +2259,11 @@
   "tagEditor": {
     "title": "Edit Metadata",
     "replaceCover": "Replace Cover",
+    "applyCoverToAlbum": "Apply to Album",
+    "applyCoverToAlbumTitle": "Apply cover to album?",
+    "applyCoverToAlbumConfirm": "Replace album art for {count} local tracks in \"{album}\"? Text metadata will not be changed.",
+    "applyCoverToAlbumSuccess": "Cover updated for {count} tracks",
+    "applyCoverToAlbumFailed": "Cover updated for {updated} of {count} tracks",
     "replaceCoverFromMatch": "Replace album art from online match",
     "onlineMatch": "Auto Match Tags",
     "matchHint": "Don't want to fill tags manually?",
