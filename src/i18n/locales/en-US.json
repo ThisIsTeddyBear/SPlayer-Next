@@ -2259,6 +2259,7 @@
   "tagEditor": {
     "title": "Edit Metadata",
     "replaceCover": "Replace Cover",
+    "replaceCoverFromMatch": "Replace album art from online match",
     "onlineMatch": "Auto Match Tags",
     "matchHint": "Don't want to fill tags manually?",
     "noMatches": "No matches found",

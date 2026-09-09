@@ -127,6 +127,7 @@ export const useSettingsStore = defineStore(
       reverseSpectrum: false,
       songLevel: "hq",
       allowTrialPlay: false,
+      replaceCoverFromOnlineMatch: false,
       timeFormat: "current-total",
       showProgressTooltip: true,
       showProgressLyric: false,

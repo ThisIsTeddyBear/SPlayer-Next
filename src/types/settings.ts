@@ -149,6 +149,7 @@ export interface PlayerSettings {
   reverseSpectrum: boolean;
   songLevel: QualityLevel;
   allowTrialPlay: boolean;
+  replaceCoverFromOnlineMatch: boolean;
   timeFormat: TimeFormat;
   showProgressTooltip: boolean;
   showProgressLyric: boolean;

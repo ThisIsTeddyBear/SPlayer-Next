@@ -17,6 +17,7 @@ const props = defineProps<{ open: boolean; track: Track | null }>();
 const emit = defineEmits<{ "update:open": [value: boolean] }>();
 
 const { t } = useI18n();
+const settings = useSettingsStore();
 
 /** 文件名 */
 const fileName = computed(
@@ -53,7 +54,16 @@ const form = reactive({
 
 /** 新封面 */
 const newCoverPath = ref<string | null>(null);
+/** 在线封面 URL */
+const newCoverUrl = ref<string | null>(null);
 const newCoverPreview = ref<string | null>(null);
+const matchedCoverUrl = ref<string | null>(null);
+const replaceCoverFromMatch = computed({
+  get: () => settings.player.replaceCoverFromOnlineMatch,
+  set: (value: boolean) => {
+    settings.player.replaceCoverFromOnlineMatch = value;
+  },
+});
 
 /**
  * 重置表单为指定标签的值
@@ -72,6 +82,7 @@ const resetForm = (tags: TrackTags | null): void => {
   newCoverPath.value = null;
   newCoverUrl.value = null;
   newCoverPreview.value = null;
+  matchedCoverUrl.value = null;
   candidates.value = [];
   candidatesVisible.value = false;
 };
@@ -104,9 +115,6 @@ const pickCover = async (): Promise<void> => {
   newCoverUrl.value = null;
   newCoverPreview.value = result.data.dataUrl;
 };
-
-/** 在线封面 URL */
-const newCoverUrl = ref<string | null>(null);
 
 /** 在线匹配平台，初始值跟随搜索页偏好，命名与搜索页同源 */
 const matchProvider = ref<MetadataProvider>("netease");
@@ -150,6 +158,30 @@ const applyRemoteCover = (coverUrl: string | undefined): void => {
   newCoverPreview.value = coverUrl;
 };
 
+/**
+ * 记录在线匹配的封面，只有用户明确选择时才写入文件
+ * @param coverUrl - 在线封面地址
+ */
+const setMatchedCover = (coverUrl: string | undefined): void => {
+  if (!coverUrl || !/^https?:\/\//i.test(coverUrl)) return;
+  matchedCoverUrl.value = coverUrl;
+  if (replaceCoverFromMatch.value) applyRemoteCover(coverUrl);
+};
+
+/**
+ * 切换是否使用在线匹配的封面
+ * @param replace - 是否替换封面
+ */
+const setReplaceCoverFromMatch = (replace: boolean): void => {
+  replaceCoverFromMatch.value = replace;
+  if (replace) {
+    applyRemoteCover(matchedCoverUrl.value ?? undefined);
+  } else if (newCoverUrl.value) {
+    newCoverUrl.value = null;
+    newCoverPreview.value = null;
+  }
+};
+
 /** 回填候选到表单 */
 const applyCandidate = async (candidate: MetadataCandidate): Promise<void> => {
   form.title = candidate.title;
@@ -157,7 +189,7 @@ const applyCandidate = async (candidate: MetadataCandidate): Promise<void> => {
   if (candidate.album) form.album = candidate.album;
   if (candidate.albumArtist) form.albumArtist = candidate.albumArtist;
   if (candidate.year !== undefined) form.year = candidate.year;
-  applyRemoteCover(candidate.coverUrl);
+  setMatchedCover(candidate.coverUrl);
 
   candidatesVisible.value = false;
 
@@ -174,7 +206,7 @@ const applyCandidate = async (candidate: MetadataCandidate): Promise<void> => {
   if (data.trackNumber !== undefined) form.trackNumber = data.trackNumber;
   if (data.discNumber !== undefined) form.discNumber = data.discNumber;
   if (data.lyrics !== undefined) form.lyrics = data.lyrics;
-  applyRemoteCover(data.coverUrl);
+  setMatchedCover(data.coverUrl);
 };
 
 /** 文本字段 diff */
@@ -281,6 +313,14 @@ const handleSave = async (): Promise<void> => {
             {{ t("tagEditor.onlineMatch") }}
           </SButton>
         </div>
+
+        <SCheckbox
+          class="mt-2"
+          :checked="replaceCoverFromMatch"
+          @update:checked="setReplaceCoverFromMatch"
+        >
+          {{ t("tagEditor.replaceCoverFromMatch") }}
+        </SCheckbox>
 
         <!-- 候选列表在同一卡片内展开 -->
         <div v-if="candidatesVisible" class="mt-2.5 flex flex-col gap-0.5 max-h-56 overflow-y-auto">
