@@ -23,9 +23,11 @@ import { fetchBytes } from "@main/utils/fetchBytes";
 import { getCoverCacheDir } from "@main/utils/config";
 import { libraryLog } from "@main/utils/logger";
 import { prefetchArtistImages } from "@main/services/artistImages";
+import { getMetadataDetail, searchMetadata } from "@main/services/metadataLookup";
 import { ErrorCode } from "@shared/types/errors";
 import type { JsTagWriteRequest } from "@splayer/audio-engine";
 import type { TagEditRequest, TagWriteOutcome } from "@shared/types/tagEditor";
+import type { MetadataProvider, MetadataSearchQuery } from "@shared/types/tagEditor";
 
 /** 注册音乐库相关 IPC */
 export const registerLibraryIpc = (): void => {
@@ -289,6 +291,27 @@ export const registerLibraryIpc = (): void => {
       return { success: false, error: ErrorCode.TAG_WRITE_FAILED };
     }
   });
+
+  ipcMain.handle("library:searchMetadata", async (_event, query: MetadataSearchQuery) => {
+    try {
+      return { success: true, data: await searchMetadata(query) };
+    } catch (error) {
+      libraryLog.warn("Metadata search failed:", error);
+      return { success: false, error: ErrorCode.UNKNOWN };
+    }
+  });
+
+  ipcMain.handle(
+    "library:getMetadataDetail",
+    async (_event, provider: MetadataProvider, id: string) => {
+      try {
+        return { success: true, data: await getMetadataDetail(provider, id) };
+      } catch (error) {
+        libraryLog.warn("Metadata detail lookup failed:", error);
+        return { success: false, error: ErrorCode.UNKNOWN };
+      }
+    },
+  );
 
   // 删除曲目文件并从数据库移除
   ipcMain.handle("library:deleteTracks", async (_event, paths: string[]) => {

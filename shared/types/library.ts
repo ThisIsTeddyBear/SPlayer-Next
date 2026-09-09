@@ -1,5 +1,12 @@
 import type { IpcResponse, Track } from "./player";
-import type { TrackTags, TagEditRequest, TagWriteOutcome } from "./tagEditor";
+import type {
+  MetadataCandidate,
+  MetadataCandidateDetail,
+  MetadataSearchQuery,
+  TrackTags,
+  TagEditRequest,
+  TagWriteOutcome,
+} from "./tagEditor";
 
 /** 专辑聚合项 */
 export interface AlbumSummary {
@@ -83,6 +90,11 @@ export interface LibraryApi {
   writeTags: (edits: TagEditRequest[]) => Promise<IpcResponse<TagWriteOutcome[]>>;
   /** 弹出文件选择器，选择封面图片（返回路径与预览 dataUrl） */
   pickCoverImage: () => Promise<IpcResponse<{ path: string; dataUrl: string }>>;
+  searchMetadata: (query: MetadataSearchQuery) => Promise<IpcResponse<MetadataCandidate[]>>;
+  getMetadataDetail: (
+    provider: MetadataSearchQuery["provider"],
+    id: string,
+  ) => Promise<IpcResponse<MetadataCandidateDetail>>;
   /** 订阅扫描进度事件 */
   onScanProgress: (callback: (progress: ScanProgress) => void) => () => void;
 }

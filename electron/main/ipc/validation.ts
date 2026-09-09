@@ -58,4 +58,24 @@ export const validateIpcArgs = (channel: string, args: unknown[]): void => {
       throw new Error("Playback options must be an object");
     }
   }
+  if (channel === "library:searchMetadata") {
+    const query = value as { provider?: unknown; title?: unknown; artist?: unknown } | null;
+    if (
+      !query ||
+      typeof query !== "object" ||
+      !["netease", "musicbrainz"].includes(String(query.provider)) ||
+      typeof query.title !== "string" ||
+      typeof query.artist !== "string" ||
+      query.title.length > 500 ||
+      query.artist.length > 500
+    ) throw new Error("Invalid metadata search query");
+  }
+  if (channel === "library:getMetadataDetail") {
+    if (
+      !["netease", "musicbrainz"].includes(String(value)) ||
+      typeof args[1] !== "string" ||
+      !args[1] ||
+      args[1].length > 100
+    ) throw new Error("Invalid metadata detail request");
+  }
 };

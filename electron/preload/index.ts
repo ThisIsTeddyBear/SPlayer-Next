@@ -13,7 +13,11 @@ import type { LoadOptions, TrackSource } from "@shared/types/player";
 import type { StreamingServerInput } from "@shared/types/streaming";
 import type { RecognitionConfig, RecognitionEvent } from "@shared/types/recognition";
 import type { PlayEventInput, FavoriteEventInput } from "@shared/types/stats";
-import type { TagEditRequest } from "@shared/types/tagEditor";
+import type {
+  MetadataProvider,
+  MetadataSearchQuery,
+  TagEditRequest,
+} from "@shared/types/tagEditor";
 import type { UpdateEvent } from "@shared/types/update";
 import type { AiModelSaveInput } from "@shared/types/ai";
 import type { DesktopLyricUnlockButtonBounds } from "@shared/types/window";
@@ -151,6 +155,10 @@ const api = {
     readTags: (path: string) => ipcRenderer.invoke("library:readTags", path),
     writeTags: (edits: TagEditRequest[]) => ipcRenderer.invoke("library:writeTags", edits),
     pickCoverImage: () => ipcRenderer.invoke("library:pickCoverImage"),
+    searchMetadata: (query: MetadataSearchQuery) =>
+      ipcRenderer.invoke("library:searchMetadata", query),
+    getMetadataDetail: (provider: MetadataProvider, id: string) =>
+      ipcRenderer.invoke("library:getMetadataDetail", provider, id),
     onScanProgress: (callback: (progress: unknown) => void) =>
       subscribe("library:scanProgress", callback),
   },

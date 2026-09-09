@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import type { Track } from "@shared/types/player";
-import type { TrackTags, TagEditRequest } from "@shared/types/tagEditor";
-import { useLibraryStore } from "@/stores/library";
-import { rankTagCandidates, type RankedTagCandidate } from "@/utils/tagMatch";
+import type {
+  MetadataCandidate,
+  MetadataProvider,
+  TrackTags,
+  TagEditRequest,
+} from "@shared/types/tagEditor";
 import * as player from "@/core/player";
 import { toast } from "@/composables/useToast";
 import { handleError } from "@/utils/errors";
@@ -106,10 +109,14 @@ const pickCover = async (): Promise<void> => {
 const newCoverUrl = ref<string | null>(null);
 
 /** 在线匹配平台，初始值跟随搜索页偏好，命名与搜索页同源 */
-const libraryStore = useLibraryStore();
+const matchProvider = ref<MetadataProvider>("netease");
+const providerOptions: { value: MetadataProvider; label: string }[] = [
+  { value: "netease", label: "NCM" },
+  { value: "musicbrainz", label: "MusicBrainz" },
+];
 
 const matching = ref(false);
-const candidates = shallowRef<RankedTagCandidate[]>([]);
+const candidates = shallowRef<MetadataCandidate[]>([]);
 const candidatesVisible = ref(false);
 
 /** 用表单当前的标题和艺术家搜索本地候选 */
@@ -118,16 +125,15 @@ const handleOnlineMatch = async (): Promise<void> => {
   if (!keyword || matching.value) return;
   matching.value = true;
   try {
-    if (!libraryStore.initialized) await libraryStore.load();
-    const ranked = rankTagCandidates(libraryStore.tracks, {
+    const result = await window.api.library.searchMetadata({
+      provider: matchProvider.value,
       title: form.title,
       artist: form.artist,
-      album: form.album,
-      durationMs: props.track?.duration,
     });
-    candidates.value = ranked;
-    candidatesVisible.value = ranked.length > 0;
-    if (ranked.length === 0) toast.info(t("tagEditor.noMatches"));
+    if (!result.success || !result.data) throw new Error(result.error);
+    candidates.value = result.data;
+    candidatesVisible.value = result.data.length > 0;
+    if (result.data.length === 0) toast.info(t("tagEditor.noMatches"));
   } catch {
     toast.error(t("errors.NETWORK_ERROR"));
   } finally {
@@ -136,18 +142,21 @@ const handleOnlineMatch = async (): Promise<void> => {
 };
 
 /** 回填候选到表单 */
-const applyCandidate = (candidate: RankedTagCandidate): void => {
-  const online = candidate.track;
-  form.title = online.title;
-  form.artist = online.artists.map((artist) => artist.name).join("/");
-  if (online.album?.name) form.album = online.album.name;
-  const coverUrl = online.coverOriginal ?? online.cover;
+const applyCandidate = async (candidate: MetadataCandidate): Promise<void> => {
+  form.title = candidate.title;
+  form.artist = candidate.artist;
+  if (candidate.album) form.album = candidate.album;
+  if (candidate.albumArtist) form.albumArtist = candidate.albumArtist;
+  if (candidate.year) form.year = candidate.year;
+  const coverUrl = candidate.coverUrl;
   if (coverUrl && /^https?:\/\//i.test(coverUrl)) {
     newCoverUrl.value = coverUrl;
     newCoverPath.value = null;
     newCoverPreview.value = coverUrl;
   }
   candidatesVisible.value = false;
+  const detail = await window.api.library.getMetadataDetail(candidate.provider, candidate.id);
+  if (detail.success && detail.data?.lyrics) form.lyrics = detail.data.lyrics;
 };
 
 /** 文本字段 diff */
@@ -234,6 +243,9 @@ const handleSave = async (): Promise<void> => {
       <SCard size="small" variant="primary">
         <div class="flex items-center gap-2">
           <span class="flex-1 text-sm text-on-surface">{{ t("tagEditor.matchHint") }}</span>
+          <div class="w-30 shrink-0">
+            <SSelect v-model="matchProvider" :options="providerOptions" />
+          </div>
           <SButton
             type="primary"
             size="small"
@@ -250,31 +262,34 @@ const handleSave = async (): Promise<void> => {
         <div v-if="candidatesVisible" class="mt-2.5 flex flex-col gap-0.5 max-h-56 overflow-y-auto">
           <div
             v-for="candidate in candidates"
-            :key="candidate.track.id"
+            :key="`${candidate.provider}:${candidate.id}`"
             role="button"
             tabindex="0"
             :class="[
               'flex items-center gap-2.5 p-1.5 rounded-md cursor-pointer transition-colors hover:bg-on-surface/8',
-              candidate.durationFar && 'opacity-45',
+              track?.duration &&
+                candidate.durationMs &&
+                Math.abs(track.duration - candidate.durationMs) > 20000 &&
+                'opacity-45',
             ]"
             @click="applyCandidate(candidate)"
             @keydown.enter="applyCandidate(candidate)"
           >
             <SImg
-              :src="candidate.track.cover"
+              :src="candidate.coverUrl"
               class="size-10 shrink-0 rounded-md overflow-hidden"
             />
             <div class="flex flex-col min-w-0 flex-1">
-              <span class="text-sm truncate">{{ candidate.track.title }}</span>
+              <span class="text-sm truncate">{{ candidate.title }}</span>
               <span class="text-xs text-on-surface-variant/70 truncate">
-                {{ candidate.track.artists.map((artist) => artist.name).join(" / ") }}
-                <template v-if="candidate.track.album?.name">
-                  · {{ candidate.track.album.name }}
+                {{ candidate.artist }}
+                <template v-if="candidate.album">
+                  · {{ candidate.album }}
                 </template>
               </span>
             </div>
             <span class="text-xs text-on-surface-variant/70 tabular-nums shrink-0">
-              {{ formatTime(candidate.track.duration) }}
+              {{ candidate.durationMs ? formatTime(candidate.durationMs) : "" }}
             </span>
           </div>
         </div>

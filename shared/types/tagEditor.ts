@@ -1,5 +1,30 @@
 import type { Track } from "./player";
 
+export type MetadataProvider = "netease" | "musicbrainz";
+
+export interface MetadataSearchQuery {
+  provider: MetadataProvider;
+  title: string;
+  artist: string;
+}
+
+export interface MetadataCandidate {
+  provider: MetadataProvider;
+  id: string;
+  title: string;
+  artist: string;
+  album?: string;
+  albumArtist?: string;
+  year?: number;
+  durationMs?: number;
+  coverUrl?: string;
+  score?: number;
+}
+
+export interface MetadataCandidateDetail {
+  lyrics?: string;
+}
+
 /** 本地文件可编辑标签 */
 export interface TrackTags {
   title?: string;

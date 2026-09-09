@@ -2259,8 +2259,8 @@
   "tagEditor": {
     "title": "Edit Metadata",
     "replaceCover": "Replace Cover",
-    "onlineMatch": "Match Library Tags",
-    "matchHint": "Use metadata from a matching track in your library.",
+    "onlineMatch": "Auto Match Tags",
+    "matchHint": "Don't want to fill tags manually?",
     "noMatches": "No matches found",
     "lyricsPlaceholder": "Plain text lyrics, written to the file tag as-is",
     "saveSuccess": "Metadata saved",
