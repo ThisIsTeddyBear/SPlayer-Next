@@ -8,6 +8,7 @@ import type {
 } from "@shared/types/tagEditor";
 import * as player from "@/core/player";
 import { toast } from "@/composables/useToast";
+import { useSettingsStore } from "@/stores/settings";
 import { handleError } from "@/utils/errors";
 import { formatFileSize } from "@/utils/format";
 import { formatTime } from "@/utils/time";
