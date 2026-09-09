@@ -63,7 +63,7 @@ export const validateIpcArgs = (channel: string, args: unknown[]): void => {
     if (
       !query ||
       typeof query !== "object" ||
-      !["netease", "musicbrainz"].includes(String(query.provider)) ||
+      !["netease", "qqmusic", "kugou"].includes(String(query.provider)) ||
       typeof query.title !== "string" ||
       typeof query.artist !== "string" ||
       query.title.length > 500 ||
@@ -72,7 +72,7 @@ export const validateIpcArgs = (channel: string, args: unknown[]): void => {
   }
   if (channel === "library:getMetadataDetail") {
     if (
-      !["netease", "musicbrainz"].includes(String(value)) ||
+      !["netease", "qqmusic", "kugou"].includes(String(value)) ||
       typeof args[1] !== "string" ||
       !args[1] ||
       args[1].length > 100

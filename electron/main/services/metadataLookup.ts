@@ -7,16 +7,6 @@ import type {
 
 const USER_AGENT = "SPlayer-Next/1.2 (https://github.com/SPlayer-Dev/SPlayer-Next)";
 const TIMEOUT_MS = 10_000;
-const MUSICBRAINZ_INTERVAL_MS = 1_100;
-
-let nextMusicBrainzRequestAt = 0;
-
-const waitForMusicBrainz = async (): Promise<void> => {
-  const now = Date.now();
-  const waitMs = Math.max(0, nextMusicBrainzRequestAt - now);
-  nextMusicBrainzRequestAt = Math.max(now, nextMusicBrainzRequestAt) + MUSICBRAINZ_INTERVAL_MS;
-  if (waitMs > 0) await new Promise<void>((resolve) => setTimeout(resolve, waitMs));
-};
 
 const requestJson = async <T>(url: string): Promise<T> => {
   const response = await fetchWithProxy(url, {
@@ -57,63 +47,11 @@ const searchNetease = async (keyword: string): Promise<MetadataCandidate[]> => {
   }));
 };
 
-interface MusicBrainzRecording {
-  id: string;
-  title: string;
-  length?: number;
-  score?: number;
-  "artist-credit"?: { name?: string }[];
-  releases?: {
-    id?: string;
-    title?: string;
-    date?: string;
-    "artist-credit"?: { name?: string }[];
-  }[];
-}
-
-const searchMusicBrainz = async (title: string, artist: string): Promise<MetadataCandidate[]> => {
-  const params = new URLSearchParams({
-    query: `${title} ${artist}`.trim(),
-    fmt: "json",
-    limit: "10",
-  });
-  await waitForMusicBrainz();
-  const body = await requestJson<{ recordings?: MusicBrainzRecording[] }>(
-    `https://musicbrainz.org/ws/2/recording/?${params.toString()}`,
-  );
-  return (body.recordings ?? []).map((recording) => {
-    const release = recording.releases?.find((item) => item.id && item.title);
-    return {
-      provider: "musicbrainz",
-      id: recording.id,
-      title: recording.title,
-      artist: (recording["artist-credit"] ?? [])
-        .map((credit) => credit.name)
-        .filter(Boolean)
-        .join(" / "),
-      album: release?.title,
-      albumArtist:
-        (release?.["artist-credit"] ?? [])
-          .map((credit) => credit.name)
-          .filter(Boolean)
-          .join(" / ") || undefined,
-      year: release?.date ? Number(release.date.slice(0, 4)) || undefined : undefined,
-      durationMs: recording.length,
-      coverUrl: release?.id
-        ? `https://coverartarchive.org/release/${release.id}/front-500`
-        : undefined,
-      score: recording.score,
-    };
-  });
-};
-
 export const searchMetadata = async (query: MetadataSearchQuery): Promise<MetadataCandidate[]> => {
   const title = query.title.trim();
   const artist = query.artist.trim();
   if (!title && !artist) return [];
-  return query.provider === "netease"
-    ? searchNetease(`${title} ${artist}`.trim())
-    : searchMusicBrainz(title, artist);
+  return searchNetease(`${title} ${artist}`.trim());
 };
 
 export const getMetadataDetail = async (

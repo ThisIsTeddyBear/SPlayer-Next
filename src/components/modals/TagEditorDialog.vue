@@ -112,7 +112,8 @@ const newCoverUrl = ref<string | null>(null);
 const matchProvider = ref<MetadataProvider>("netease");
 const providerOptions: { value: MetadataProvider; label: string }[] = [
   { value: "netease", label: "NCM" },
-  { value: "musicbrainz", label: "MusicBrainz" },
+  { value: "qqmusic", label: "QM" },
+  { value: "kugou", label: "KG" },
 ];
 
 const matching = ref(false);

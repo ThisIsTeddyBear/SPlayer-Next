@@ -1,6 +1,6 @@
 import type { Track } from "./player";
 
-export type MetadataProvider = "netease" | "musicbrainz";
+export type MetadataProvider = "netease" | "qqmusic" | "kugou";
 
 export interface MetadataSearchQuery {
   provider: MetadataProvider;
@@ -18,7 +18,6 @@ export interface MetadataCandidate {
   year?: number;
   durationMs?: number;
   coverUrl?: string;
-  score?: number;
 }
 
 export interface MetadataCandidateDetail {
