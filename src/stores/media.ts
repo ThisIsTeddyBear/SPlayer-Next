@@ -10,7 +10,6 @@ import { applyLyricExclude } from "@/utils/lyric/lyricStripper";
 import { normalizeLyricLines } from "@/utils/lyric/normalize";
 import { applyProfanityUncensor } from "@/utils/preset/profanity";
 import { applyLyricCjkTransform } from "@/utils/lyric/cjkTransform";
-
 export const useMediaStore = defineStore("media", () => {
   watchLyricPreference();
 
@@ -29,7 +28,6 @@ export const useMediaStore = defineStore("media", () => {
   const lyricIndex = ref(-1);
 
   const lyricFormat = computed((): LyricFormat | null => activeLyric.value?.format ?? null);
-
   const parsedLyric = shallowRef<LyricLine[]>([]);
 
   const romanizationVisible = ref(true);
@@ -38,7 +36,6 @@ export const useMediaStore = defineStore("media", () => {
   const lyricSyncPicking = ref(false);
 
   const lyricAuthors = ref<string[]>([]);
-
   const syncToMain = (): void => {
     try {
       const payload = {
@@ -51,7 +48,6 @@ export const useMediaStore = defineStore("media", () => {
       console.error("[media] syncToMain failed", error);
     }
   };
-
   /**
    */
   const setTrack = (newTrack: Track, newDetail?: TrackDetail): void => {
@@ -64,7 +60,6 @@ export const useMediaStore = defineStore("media", () => {
   const setPlaybackContext = (context?: PlaybackContext): void => {
     playbackContext.value = context;
   };
-
   /**
    */
   const enrichTrack = (info: MediaInfo, newDetail?: TrackDetail): void => {
@@ -89,7 +84,6 @@ export const useMediaStore = defineStore("media", () => {
     };
     if (newDetail) detail.value = newDetail;
   };
-
   /**
    */
   const patchCover = (url: string): void => {
@@ -102,7 +96,15 @@ export const useMediaStore = defineStore("media", () => {
     };
   };
 
+  let lyricGeneration = 0;
+  let transformToken = 0;
+  let cjkTransformPromise: Promise<void> = Promise.resolve();
+
   const resetLyricState = (): void => {
+    ++lyricGeneration;
+    ++transformToken;
+    cjkTransformPromise = Promise.resolve();
+
     activeLyric.value = null;
     lyricContent.value = null;
     parsedLyric.value = [];
@@ -114,8 +116,6 @@ export const useMediaStore = defineStore("media", () => {
     syncToMain();
   };
 
-  let transformToken = 0;
-
   watch(
     () => [useSettingsStore().lyric.cjkTransform, useSettingsStore().preset.uncensorProfanity],
     () => {
@@ -124,10 +124,13 @@ export const useMediaStore = defineStore("media", () => {
       }
     },
   );
-
   /**
    */
   const setLyric = (source: LyricData, input: LyricInput | null): void => {
+    ++lyricGeneration;
+    const cjkToken = ++transformToken;
+    cjkTransformPromise = Promise.resolve();
+
     let nextLines: LyricLine[] = [];
     const settings = useSettingsStore();
     if (source && input) {
@@ -161,53 +164,73 @@ export const useMediaStore = defineStore("media", () => {
 
     const cjkMode = settings.lyric.cjkTransform;
     if (hasContent && cjkMode && cjkMode !== "none") {
-      const token = ++transformToken;
-      applyLyricCjkTransform(nextLines, cjkMode).then((transformed) => {
-        if (token !== transformToken) return;
-        parsedLyric.value = transformed;
-        syncToMain();
-      });
+      cjkTransformPromise = applyLyricCjkTransform(nextLines, cjkMode)
+        .then((transformed) => {
+          if (cjkToken !== transformToken) return;
+
+          parsedLyric.value = transformed;
+          syncToMain();
+        })
+        .catch((error) => {
+          console.error("[media] CJK transform failed", error);
+        });
     }
   };
+
+  const hasNonLatinLetter = (value: string): boolean =>
+    [...value].some((char) => /\p{L}/u.test(char) && !/\p{Script=Latin}/u.test(char));
 
   const canRomanize = computed(() =>
     parsedLyric.value.some(
       (line) =>
         Boolean(line.romanLyric) ||
-        /[^\u0020-\u024f\u2000-\u206f]/u.test(line.words.map((word) => word.word).join("")),
+        hasNonLatinLetter(line.words.map((word) => word.word).join("")),
     ),
   );
 
   const toggleRomanization = async (): Promise<void> => {
     if (!canRomanize.value) return;
+
     romanizationVisible.value = !romanizationVisible.value;
     if (!romanizationVisible.value || romanizationLoading.value) return;
-    const lines = parsedLyric.value;
-    const missing = [
-      ...new Set(
-        lines
-          .filter((line) => !line.romanLyric)
-          .map((line) => line.words.map((word) => word.word).join(""))
-          .filter((text) => /[^\u0020-\u024f\u2000-\u206f]/u.test(text)),
-      ),
-    ];
-    if (!missing.length) return;
+
+    const generation = lyricGeneration;
     romanizationLoading.value = true;
+
     try {
+      await cjkTransformPromise;
+
+      if (generation !== lyricGeneration || !romanizationVisible.value) return;
+
+      const missing = [
+        ...new Set(
+          parsedLyric.value
+            .filter((line) => !line.romanLyric)
+            .map((line) => line.words.map((word) => word.word).join(""))
+            .filter(hasNonLatinLetter),
+        ),
+      ];
+
+      if (!missing.length) return;
+
       const readings = await window.api.lyrics.romanize(missing);
-      if (parsedLyric.value !== lines) return;
-      parsedLyric.value = lines.map((line) => {
+
+      if (generation !== lyricGeneration || !romanizationVisible.value) return;
+
+      parsedLyric.value = parsedLyric.value.map((line) => {
         if (line.romanLyric) return line;
+
         const text = line.words.map((word) => word.word).join("");
         const romanLyric = readings[text];
+
         return romanLyric ? { ...line, romanLyric } : line;
       });
+
       syncToMain();
     } finally {
       romanizationLoading.value = false;
     }
   };
-
   /**
    */
   const updateLyricIndex = (time: number): void => {
@@ -215,6 +238,10 @@ export const useMediaStore = defineStore("media", () => {
   };
 
   const clear = (): void => {
+    ++lyricGeneration;
+    ++transformToken;
+    cjkTransformPromise = Promise.resolve();
+
     track.value = null;
     playbackContext.value = undefined;
     detail.value = null;
@@ -229,7 +256,6 @@ export const useMediaStore = defineStore("media", () => {
     lyricIndex.value = -1;
     syncToMain();
   };
-
   return {
     track,
     playbackContext,
