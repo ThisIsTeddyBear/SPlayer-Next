@@ -1,6 +1,7 @@
 import type { MediaInfo, PlaybackContext, Track, TrackDetail } from "@shared/types/player";
 import type { LyricData, LyricFormat, LyricInput, LyricLine } from "@shared/types/lyrics";
 import { findLyricIndex } from "@shared/utils/lyric";
+import { needsRomanization } from "@shared/utils/romanization";
 import { useSettingsStore } from "@/stores/settings";
 import { watchLyricPreference } from "@/services/lyric/loader";
 import { parseLyric } from "@/utils/lyric/parse";
@@ -10,7 +11,12 @@ import { applyLyricExclude } from "@/utils/lyric/lyricStripper";
 import { normalizeLyricLines } from "@/utils/lyric/normalize";
 import { applyProfanityUncensor } from "@/utils/preset/profanity";
 import { applyLyricCjkTransform } from "@/utils/lyric/cjkTransform";
-import { hasNonLatinLetter } from "@shared/utils/romanization";
+import {
+  applyGeneratedRomanization,
+  collectMissingRomanization,
+  getLyricLineText,
+} from "@/utils/lyric/romanization";
+
 export const useMediaStore = defineStore("media", () => {
   watchLyricPreference();
 
@@ -97,54 +103,65 @@ export const useMediaStore = defineStore("media", () => {
     };
   };
 
-  let lyricGeneration = 0;
   let transformToken = 0;
   let cjkTransformPromise: Promise<void> = Promise.resolve();
+  let romanizationRequestId = 0;
 
   /**
    * 为缺少提供方音译的当前歌词补全罗马音
-   * @param generation - 当前歌词代次
+   * @param lines - 发起请求时的歌词
+   * @param requestId - 当前请求编号
    */
-  const fillMissingRomanization = async (generation: number): Promise<void> => {
+  const fillMissingRomanization = async (lines: LyricLine[], requestId: number): Promise<void> => {
     await cjkTransformPromise;
 
-    if (generation !== lyricGeneration || !romanizationVisible.value || romanizationLoading.value) {
+    if (
+      requestId !== romanizationRequestId ||
+      parsedLyric.value !== lines ||
+      !romanizationVisible.value
+    ) {
       return;
     }
 
-    const missing = [
-      ...new Set(
-        parsedLyric.value
-          .filter((line) => !line.romanLyric)
-          .map((line) => line.words.map((word) => word.word).join(""))
-          .filter(hasNonLatinLetter),
-      ),
-    ];
+    const missing = collectMissingRomanization(lines);
     if (!missing.length) return;
 
     romanizationLoading.value = true;
     try {
       const readings = await window.api.lyrics.romanize(missing);
-      if (generation !== lyricGeneration || !romanizationVisible.value) return;
+      if (
+        requestId !== romanizationRequestId ||
+        parsedLyric.value !== lines ||
+        !romanizationVisible.value
+      ) {
+        return;
+      }
 
-      parsedLyric.value = parsedLyric.value.map((line) => {
-        if (line.romanLyric) return line;
-
-        const text = line.words.map((word) => word.word).join("");
-        const romanLyric = readings[text];
-        return romanLyric ? { ...line, romanLyric } : line;
-      });
-      syncToMain();
+      const enriched = applyGeneratedRomanization(lines, readings);
+      if (enriched !== lines) {
+        parsedLyric.value = enriched;
+        syncToMain();
+      }
     } catch (error) {
       console.warn("[media] lyric romanization failed", error);
     } finally {
-      if (generation === lyricGeneration) romanizationLoading.value = false;
+      if (requestId === romanizationRequestId) romanizationLoading.value = false;
     }
   };
 
+  watch(
+    [parsedLyric, romanizationVisible],
+    ([lines, visible]) => {
+      const requestId = ++romanizationRequestId;
+      romanizationLoading.value = false;
+      if (visible && lines.length) void fillMissingRomanization(lines, requestId);
+    },
+    { flush: "post" },
+  );
+
   const resetLyricState = (): void => {
-    ++lyricGeneration;
     ++transformToken;
+    ++romanizationRequestId;
     cjkTransformPromise = Promise.resolve();
 
     activeLyric.value = null;
@@ -169,8 +186,8 @@ export const useMediaStore = defineStore("media", () => {
   /**
    */
   const setLyric = (source: LyricData, input: LyricInput | null): void => {
-    ++lyricGeneration;
     const cjkToken = ++transformToken;
+    ++romanizationRequestId;
     cjkTransformPromise = Promise.resolve();
     romanizationLoading.value = false;
 
@@ -218,28 +235,19 @@ export const useMediaStore = defineStore("media", () => {
           console.error("[media] CJK transform failed", error);
         });
     }
-
-    if (hasContent && romanizationVisible.value) {
-      void fillMissingRomanization(lyricGeneration);
-    }
   };
 
   const canRomanize = computed(() =>
     parsedLyric.value.some(
       (line) =>
-        Boolean(line.romanLyric) ||
-        hasNonLatinLetter(line.words.map((word) => word.word).join("")),
+        Boolean(line.romanLyric) || needsRomanization(getLyricLineText(line)),
     ),
   );
 
-  const toggleRomanization = async (): Promise<void> => {
+  const toggleRomanization = (): void => {
     if (!canRomanize.value) return;
 
     romanizationVisible.value = !romanizationVisible.value;
-    if (!romanizationVisible.value || romanizationLoading.value) return;
-
-    const generation = lyricGeneration;
-    await fillMissingRomanization(generation);
   };
   /**
    */
@@ -248,8 +256,8 @@ export const useMediaStore = defineStore("media", () => {
   };
 
   const clear = (): void => {
-    ++lyricGeneration;
     ++transformToken;
+    ++romanizationRequestId;
     cjkTransformPromise = Promise.resolve();
 
     track.value = null;

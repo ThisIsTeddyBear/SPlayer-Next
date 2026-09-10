@@ -1,126 +1,57 @@
 import { ipcMain } from "./trusted";
 import { fetchWithProxy } from "@main/utils/proxy";
 import { systemLog } from "@main/utils/logger";
-import { extractGoogleRomanization, hasNonLatinLetter } from "@shared/utils/romanization";
+import {
+  extractGoogleRomanization,
+  needsRomanization,
+} from "@shared/utils/romanization";
 
-const TIMEOUT_MS = 4_000;
-const RETRIES = 2;
-const CONCURRENCY = 3;
+const TIMEOUT_MS = 6_000;
+const RETRIES = 3;
+const CONCURRENCY = 4;
 const MAX_LINE_LENGTH = 1_500;
 const CACHE_LIMIT = 1_800;
-const FAILURE_CACHE_MS = 15_000;
-const PROVIDER_COOLDOWN_MS = 30_000;
 
 const cache = new Map<string, string>();
-const failureCache = new Map<string, number>();
 
-let providerBlockedUntil = 0;
-
-const rememberFailure = (text: string): void => {
-  failureCache.set(text, Date.now());
-  while (failureCache.size > CACHE_LIMIT) {
-    failureCache.delete(failureCache.keys().next().value!);
-  }
+const storeReading = (text: string, reading: string): void => {
+  cache.delete(text);
+  cache.set(text, reading);
+  while (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value!);
 };
 
-const isRecentlyFailed = (text: string): boolean => {
-  const failedAt = failureCache.get(text);
-  if (!failedAt) return false;
-
-  if (Date.now() - failedAt < FAILURE_CACHE_MS) return true;
-
-  failureCache.delete(text);
-  return false;
-};
-
-const blockProvider = (reason: string, cooldownMs = PROVIDER_COOLDOWN_MS): void => {
-  providerBlockedUntil = Math.max(providerBlockedUntil, Date.now() + cooldownMs);
-  systemLog.warn(`[romanization] Google fallback temporarily disabled: ${reason}`);
-};
-
-const romanizeLine = async (text: string): Promise<string | undefined> => {
+const romanizeText = async (text: string): Promise<string | undefined> => {
   const cached = cache.get(text);
   if (cached) return cached;
 
-  if (Date.now() < providerBlockedUntil || isRecentlyFailed(text)) {
-    return undefined;
-  }
-
   const url = new URL("https://translate.googleapis.com/translate_a/single");
-  const params = new URLSearchParams({
+  url.search = new URLSearchParams({
     client: "gtx",
     sl: "auto",
     tl: "en",
+    dt: "rm",
     q: text,
-  });
-  params.append("dt", "rm");
-  url.search = params.toString();
+  }).toString();
 
   for (let attempt = 0; attempt < RETRIES; attempt++) {
     try {
-      const response = await fetchWithProxy(url.toString(), {
-        headers: {
-          Accept: "application/json",
-        },
+      const response = await fetchWithProxy(url, {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      if (response.status === 403 || response.status === 429) {
-        const retryAfter = Number(response.headers.get("retry-after"));
-        const cooldownMs =
-          Number.isFinite(retryAfter) && retryAfter > 0
-            ? Math.min(retryAfter * 1_000, 5 * 60_000)
-            : PROVIDER_COOLDOWN_MS;
+      const reading = extractGoogleRomanization((await response.json()) as unknown);
+      if (!reading) return undefined;
 
-        rememberFailure(text);
-        blockProvider(`HTTP ${response.status}`, cooldownMs);
-        return undefined;
-      }
-
-      if (!response.ok) {
-        if (response.status >= 400 && response.status < 500) {
-          rememberFailure(text);
-          systemLog.warn(`[romanization] Google request rejected: HTTP ${response.status}`);
-          return undefined;
-        }
-
-        throw new Error(`Google romanization HTTP ${response.status}`);
-      }
-
-      let payload: unknown;
-      try {
-        payload = (await response.json()) as unknown;
-      } catch (error) {
-        rememberFailure(text);
-        blockProvider("non-JSON response");
-        systemLog.warn("[romanization] Google returned invalid JSON", error);
-        return undefined;
-      }
-
-      const reading = extractGoogleRomanization(payload);
-      if (!reading) {
-        rememberFailure(text);
-        systemLog.warn("[romanization] Google response contained no usable romanization");
-        return undefined;
-      }
-
-      cache.set(text, reading);
-      failureCache.delete(text);
-
-      while (cache.size > CACHE_LIMIT) {
-        cache.delete(cache.keys().next().value!);
-      }
-
+      storeReading(text, reading);
       return reading;
     } catch (error) {
-      if (attempt + 1 >= RETRIES) {
-        rememberFailure(text);
-        blockProvider("network error or timeout", 15_000);
+      if (attempt + 1 === RETRIES) {
         systemLog.warn("[romanization] Google request failed", error);
         return undefined;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt));
+      await new Promise((resolve) => setTimeout(resolve, 1_000 * 2 ** attempt));
     }
   }
 
@@ -132,42 +63,35 @@ const romanizeLine = async (text: string): Promise<string | undefined> => {
  * @param input - 原文歌词行
  * @returns 按原文索引的罗马音结果
  */
-export const romanizeLines = async (input: string[]): Promise<Record<string, string>> => {
-  const lines = [
-    ...new Set(
-      input.filter(
-        (line): line is string =>
-          typeof line === "string" &&
-          line.length <= MAX_LINE_LENGTH &&
-          hasNonLatinLetter(line),
-      ),
-    ),
-  ];
-
+export const romanizeLines = async (input: unknown): Promise<Record<string, string>> => {
+  const lines = Array.isArray(input)
+    ? [
+        ...new Set(
+          input.filter(
+            (line): line is string =>
+              typeof line === "string" &&
+              line.length <= MAX_LINE_LENGTH &&
+              needsRomanization(line),
+          ),
+        ),
+      ]
+    : [];
   const results: Record<string, string> = {};
   let cursor = 0;
 
   const worker = async (): Promise<void> => {
     while (cursor < lines.length) {
-      if (Date.now() < providerBlockedUntil) return;
-
-      const line = lines[cursor++];
-      const reading = await romanizeLine(line);
-      if (reading) results[line] = reading;
+      const text = lines[cursor++];
+      const reading = await romanizeText(text);
+      if (reading) results[text] = reading;
     }
   };
 
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, lines.length) }, worker));
-
   return results;
 };
 
-/** 注册按需 Google 罗马音转换 IPC */
+/** 注册 Google 罗马音转换 IPC */
 export const registerRomanizationIpc = (): void => {
-  ipcMain.handle(
-    "lyrics:romanize",
-    async (_event, input: unknown): Promise<Record<string, string>> => {
-      return romanizeLines(Array.isArray(input) ? input : []);
-    },
-  );
+  ipcMain.handle("lyrics:romanize", (_event, input: unknown) => romanizeLines(input));
 };
