@@ -16,14 +16,19 @@ import { formatTime } from "@/utils/time";
 import IconWandSparkles from "~icons/lucide/wand-sparkles";
 
 const props = defineProps<{ open: boolean; track: Track | null }>();
-const emit = defineEmits<{ "update:open": [value: boolean] }>();
+const emit = defineEmits<{
+  "update:open": [value: boolean];
+  saved: [updated: Track[]];
+}>();
 
 const { t } = useI18n();
 const settings = useSettingsStore();
 
 /** 文件名 */
 const fileName = computed(
-  () => (props.track?.cueAudioPath ?? props.track?.path)?.split(/[/\\]/).pop() ?? "",
+  () =>
+    (props.track?.cueAudioPath ?? props.track?.path)?.split(/[/\\]/).pop() ??
+    "",
 );
 
 /** 格式 · 大小 摘要行 */
@@ -60,7 +65,9 @@ const newCoverPath = ref<string | null>(null);
 const newCoverUrl = ref<string | null>(null);
 const newCoverPreview = ref<string | null>(null);
 const matchedCoverUrl = ref<string | null>(null);
-const hasReplacementCover = computed(() => !!newCoverPath.value || !!newCoverUrl.value);
+const hasReplacementCover = computed(
+  () => !!newCoverPath.value || !!newCoverUrl.value,
+);
 const canApplyCoverToAlbum = computed(() => {
   const track = props.track;
   return (
@@ -124,7 +131,10 @@ watch(
 /** 选择新封面 */
 const pickCover = async (): Promise<void> => {
   const result = await window.api.library.pickCoverImage();
-  if (!result.success || !result.data) return;
+  if (!result.success || !result.data) {
+    if (result.error) handleError(result.error);
+    return;
+  }
   newCoverPath.value = result.data.path;
   newCoverUrl.value = null;
   newCoverPreview.value = result.data.dataUrl;
@@ -161,20 +171,28 @@ const applyCoverToAlbum = async (): Promise<void> => {
   saving.value = false;
 
   const updated = outcomes?.filter((outcome) => outcome.success).length ?? 0;
+  const updatedTracks =
+    outcomes?.filter((o) => o.success && o.track).map((o) => o.track!) ?? [];
   if (updated === albumTracks.length) {
     toast.success(t("tagEditor.applyCoverToAlbumSuccess", { count: updated }));
+    emit("saved", updatedTracks);
+    emit("update:open", false);
   } else {
-    toast.error(t("tagEditor.applyCoverToAlbumFailed", { updated, count: albumTracks.length }));
+    if (updated > 0) emit("saved", updatedTracks);
+    toast.error(
+      t("tagEditor.applyCoverToAlbumFailed", {
+        updated,
+        count: albumTracks.length,
+      }),
+    );
   }
 };
 
 /** 在线匹配平台，初始值跟随搜索页偏好，命名与搜索页同源 */
-const matchProvider = ref<MetadataProvider>("netease");
+const matchProvider = ref<MetadataProvider>("spotify");
 const providerOptions: { value: MetadataProvider; label: string }[] = [
-  { value: "netease", label: "NCM" },
-  { value: "qqmusic", label: "QM" },
-  { value: "kugou", label: "KG" },
   { value: "spotify", label: "Spotify" },
+  { value: "netease", label: "NCM" },
 ];
 
 const matching = ref(false);
@@ -245,7 +263,10 @@ const applyCandidate = async (candidate: MetadataCandidate): Promise<void> => {
 
   candidatesVisible.value = false;
 
-  const detail = await window.api.library.getMetadataDetail(candidate.provider, candidate.id);
+  const detail = await window.api.library.getMetadataDetail(
+    candidate.provider,
+    candidate.id,
+  );
   if (!detail.success || !detail.data) return;
 
   const data = detail.data;
@@ -262,12 +283,18 @@ const applyCandidate = async (candidate: MetadataCandidate): Promise<void> => {
 };
 
 /** 文本字段 diff */
-const diffText = (origValue: string | undefined, current: string): string | undefined => {
+const diffText = (
+  origValue: string | undefined,
+  current: string,
+): string | undefined => {
   return (origValue ?? "") === current ? undefined : current;
 };
 
 /** 数字字段 diff */
-const diffNumber = (origValue: number | undefined, current: number | null): number | undefined => {
+const diffNumber = (
+  origValue: number | undefined,
+  current: number | null,
+): number | undefined => {
   const next = current ?? 0;
   return (origValue ?? 0) === next ? undefined : next;
 };
@@ -311,6 +338,10 @@ const handleSave = async (): Promise<void> => {
   const outcome = outcomes?.[0];
   if (outcome?.success) {
     toast.success(t("tagEditor.saveSuccess"));
+    const updated = outcomes
+      .filter((o) => o.success && o.track)
+      .map((o) => o.track!);
+    emit("saved", updated);
     emit("update:open", false);
   } else if (outcome?.error) {
     toast.error(`${t("tagEditor.saveFailed")}: ${outcome.error}`);
@@ -334,14 +365,26 @@ const handleSave = async (): Promise<void> => {
         />
         <div class="flex flex-col justify-between min-w-0 py-0.5">
           <div class="flex flex-col gap-0.5 min-w-0">
-            <span class="text-sm font-medium truncate" :title="fileName">{{ fileName }}</span>
-            <span class="text-xs text-on-surface-variant/70 truncate" :title="track?.path">
+            <span class="text-sm font-medium truncate" :title="fileName">{{
+              fileName
+            }}</span>
+            <span
+              class="text-xs text-on-surface-variant/70 truncate"
+              :title="track?.path"
+            >
               {{ track?.path }}
             </span>
-            <span v-if="fileMeta" class="text-xs text-on-surface-variant/70">{{ fileMeta }}</span>
+            <span v-if="fileMeta" class="text-xs text-on-surface-variant/70">{{
+              fileMeta
+            }}</span>
           </div>
           <div class="flex gap-2">
-            <SButton variant="secondary" size="small" class="w-fit" @click="pickCover">
+            <SButton
+              variant="secondary"
+              size="small"
+              class="w-fit"
+              @click="pickCover"
+            >
               {{ t("tagEditor.replaceCover") }}
             </SButton>
             <SButton
@@ -359,7 +402,9 @@ const handleSave = async (): Promise<void> => {
       <!-- 在线匹配 -->
       <SCard size="small" variant="primary">
         <div class="flex items-center gap-2">
-          <span class="flex-1 text-sm text-on-surface">{{ t("tagEditor.matchHint") }}</span>
+          <span class="flex-1 text-sm text-on-surface">{{
+            t("tagEditor.matchHint")
+          }}</span>
           <div class="w-30 shrink-0">
             <SSelect v-model="matchProvider" :options="providerOptions" />
           </div>
@@ -385,7 +430,10 @@ const handleSave = async (): Promise<void> => {
         </SCheckbox>
 
         <!-- 候选列表在同一卡片内展开 -->
-        <div v-if="candidatesVisible" class="mt-2.5 flex flex-col gap-0.5 max-h-56 overflow-y-auto">
+        <div
+          v-if="candidatesVisible"
+          class="mt-2.5 flex flex-col gap-0.5 max-h-56 overflow-y-auto"
+        >
           <div
             v-for="candidate in candidates"
             :key="`${candidate.provider}:${candidate.id}`"
@@ -401,15 +449,22 @@ const handleSave = async (): Promise<void> => {
             @click="applyCandidate(candidate)"
             @keydown.enter="applyCandidate(candidate)"
           >
-            <SImg :src="candidate.coverUrl" class="size-10 shrink-0 rounded-md overflow-hidden" />
+            <SImg
+              :src="candidate.coverUrl"
+              class="size-10 shrink-0 rounded-md overflow-hidden"
+            />
             <div class="flex flex-col min-w-0 flex-1">
               <span class="text-sm truncate">{{ candidate.title }}</span>
               <span class="text-xs text-on-surface-variant/70 truncate">
                 {{ candidate.artist }}
-                <template v-if="candidate.album">· {{ candidate.album }}</template>
+                <template v-if="candidate.album"
+                  >· {{ candidate.album }}</template
+                >
               </span>
             </div>
-            <span class="text-xs text-on-surface-variant/70 tabular-nums shrink-0">
+            <span
+              class="text-xs text-on-surface-variant/70 tabular-nums shrink-0"
+            >
               {{ candidate.durationMs ? formatTime(candidate.durationMs) : "" }}
             </span>
           </div>
@@ -419,12 +474,16 @@ const handleSave = async (): Promise<void> => {
       <!-- 文本标签 -->
       <div class="grid grid-cols-2 gap-3">
         <label class="flex flex-col gap-1 col-span-2">
-          <span class="text-xs text-on-surface-variant">{{ t("tagEditor.fields.title") }}</span>
+          <span class="text-xs text-on-surface-variant">{{
+            t("tagEditor.fields.title")
+          }}</span>
           <SInput v-model="form.title" />
         </label>
 
         <label class="flex flex-col gap-1">
-          <span class="text-xs text-on-surface-variant">{{ t("tagEditor.fields.artist") }}</span>
+          <span class="text-xs text-on-surface-variant">{{
+            t("tagEditor.fields.artist")
+          }}</span>
           <SInput v-model="form.artist" />
         </label>
 
@@ -436,17 +495,23 @@ const handleSave = async (): Promise<void> => {
         </label>
 
         <label class="flex flex-col gap-1">
-          <span class="text-xs text-on-surface-variant">{{ t("tagEditor.fields.album") }}</span>
+          <span class="text-xs text-on-surface-variant">{{
+            t("tagEditor.fields.album")
+          }}</span>
           <SInput v-model="form.album" />
         </label>
 
         <label class="flex flex-col gap-1">
-          <span class="text-xs text-on-surface-variant">{{ t("tagEditor.fields.genre") }}</span>
+          <span class="text-xs text-on-surface-variant">{{
+            t("tagEditor.fields.genre")
+          }}</span>
           <SInput v-model="form.genre" />
         </label>
 
         <label class="flex flex-col gap-1">
-          <span class="text-xs text-on-surface-variant">{{ t("tagEditor.fields.year") }}</span>
+          <span class="text-xs text-on-surface-variant">{{
+            t("tagEditor.fields.year")
+          }}</span>
           <SNumberInput v-model="form.year" :min="0" :max="9999" />
         </label>
 
@@ -469,7 +534,9 @@ const handleSave = async (): Promise<void> => {
 
       <!-- 内嵌歌词 -->
       <label class="flex flex-col gap-1">
-        <span class="text-xs text-on-surface-variant">{{ t("tagEditor.fields.lyrics") }}</span>
+        <span class="text-xs text-on-surface-variant">{{
+          t("tagEditor.fields.lyrics")
+        }}</span>
         <SInput
           v-model="form.lyrics"
           type="textarea"
@@ -481,7 +548,11 @@ const handleSave = async (): Promise<void> => {
     </div>
 
     <template #footer>
-      <SButton variant="secondary" :disabled="saving" @click="emit('update:open', false)">
+      <SButton
+        variant="secondary"
+        :disabled="saving"
+        @click="emit('update:open', false)"
+      >
         {{ t("common.cancel") }}
       </SButton>
       <SButton :loading="saving" :disabled="loading" @click="handleSave">

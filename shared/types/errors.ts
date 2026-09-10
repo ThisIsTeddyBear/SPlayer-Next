@@ -49,6 +49,8 @@ export enum ErrorCode {
   TAG_READ_FAILED = "TAG_READ_FAILED",
   /** 写入文件标签失败 */
   TAG_WRITE_FAILED = "TAG_WRITE_FAILED",
+  /** 封面图片过大 */
+  COVER_TOO_LARGE = "COVER_TOO_LARGE",
 
   // 扫描相关
   /** 未配置扫描目录 */

@@ -63,7 +63,8 @@ const loadCollection = async (): Promise<void> => {
 
   try {
     await loadCollectionService(source, type, id, {
-      fallbackName: typeof route.query.name === "string" ? route.query.name : undefined,
+      fallbackName:
+        typeof route.query.name === "string" ? route.query.name : undefined,
       signal: myAbort.signal,
       onUpdate: (next) => {
         if (myAbort.signal.aborted) return;
@@ -85,7 +86,9 @@ const loadCollection = async (): Promise<void> => {
 const handleTracksRemoved = (removedIds: string[]): void => {
   if (!collection.value || removedIds.length === 0) return;
   const removed = new Set(removedIds);
-  const tracks = collection.value.tracks.filter((track) => !removed.has(track.id));
+  const tracks = collection.value.tracks.filter(
+    (track) => !removed.has(track.id),
+  );
   collection.value = {
     ...collection.value,
     tracks,
@@ -166,14 +169,25 @@ const manage = usePlaylistManage(collection, {
 });
 
 /** 更多菜单 */
-const editLabel = computed(() => t("collection.edit", { type: typeLabel.value }));
+const editLabel = computed(() =>
+  t("collection.edit", { type: typeLabel.value }),
+);
 
 const moreMenuItems = computed<DropdownMenuItem[]>(() => {
   const isOnline = source !== "local" && source !== "streaming";
   const isLocal = source === "local";
   const list: DropdownMenuItem[] = [
-    { key: "batchManage", label: t("songList.batch.manage"), icon: IconLucideListChecks },
-    { key: "edit", label: editLabel.value, icon: IconLucidePencil, show: manage.canManage.value },
+    {
+      key: "batchManage",
+      label: t("songList.batch.manage"),
+      icon: IconLucideListChecks,
+    },
+    {
+      key: "edit",
+      label: editLabel.value,
+      icon: IconLucidePencil,
+      show: manage.canManage.value,
+    },
     {
       key: "delete",
       label: t("collection.delete", { type: typeLabel.value }),
@@ -274,8 +288,13 @@ onBeforeUnmount(() => {
                 :aria-label="`${scopeLabel} · ${typeLabel}`"
               >
                 <STooltip :content="scopeLabel">
-                  <span class="inline-flex size-6 cursor-default items-center justify-center">
-                    <IconLucideHardDrive v-if="source === 'local'" class="size-4" />
+                  <span
+                    class="inline-flex size-6 cursor-default items-center justify-center"
+                  >
+                    <IconLucideHardDrive
+                      v-if="source === 'local'"
+                      class="size-4"
+                    />
                     <IconLucideGlobe2 v-else class="size-4" />
                   </span>
                 </STooltip>
@@ -285,8 +304,14 @@ onBeforeUnmount(() => {
                     class="inline-flex size-6 cursor-default items-center justify-center text-primary/65"
                   >
                     <IconLucideDisc3 v-if="type === 'album'" class="size-4" />
-                    <IconLucideListMusic v-else-if="type === 'playlist'" class="size-4" />
-                    <IconLucideRadio v-else-if="type === 'radio'" class="size-4" />
+                    <IconLucideListMusic
+                      v-else-if="type === 'playlist'"
+                      class="size-4"
+                    />
+                    <IconLucideRadio
+                      v-else-if="type === 'radio'"
+                      class="size-4"
+                    />
                     <IconLucideCloud v-else class="size-4" />
                   </span>
                 </STooltip>
@@ -294,7 +319,11 @@ onBeforeUnmount(() => {
             </div>
             <div
               class="grid transition-[grid-template-rows,opacity] duration-300"
-              :class="collapsed ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'"
+              :class="
+                collapsed
+                  ? 'grid-rows-[0fr] opacity-0'
+                  : 'grid-rows-[1fr] opacity-100'
+              "
             >
               <div class="overflow-hidden flex flex-col gap-2">
                 <!-- 简介 -->
@@ -320,19 +349,32 @@ onBeforeUnmount(() => {
                 <div
                   class="flex items-center gap-3 text-sm leading-none text-on-surface-variant/50"
                 >
-                  <span v-if="creatorText" class="flex items-center gap-1 min-w-0">
+                  <span
+                    v-if="creatorText"
+                    class="flex items-center gap-1 min-w-0"
+                  >
                     <IconLucideUser class="shrink-0" />
                     <span class="truncate">{{ creatorText }}</span>
                   </span>
                   <span class="flex items-center gap-1 shrink-0">
                     <IconLucideListMusic class="shrink-0" />
-                    {{ t("common.totalSongs", { count: collection.tracks.length }) }}
+                    {{
+                      t("common.totalSongs", {
+                        count: collection.tracks.length,
+                      })
+                    }}
                   </span>
-                  <span v-if="totalDuration" class="flex items-center gap-1 shrink-0">
+                  <span
+                    v-if="totalDuration"
+                    class="flex items-center gap-1 shrink-0"
+                  >
                     <IconLucideHourglass class="shrink-0" />
                     {{ t("collection.totalDuration", { time: totalDuration }) }}
                   </span>
-                  <span v-if="updateTimeText" class="flex items-center gap-1 shrink-0">
+                  <span
+                    v-if="updateTimeText"
+                    class="flex items-center gap-1 shrink-0"
+                  >
                     <IconLucideCalendar class="shrink-0" />
                     {{ updateTimeText }}
                   </span>
@@ -363,7 +405,9 @@ onBeforeUnmount(() => {
                 @click="subscribe.toggle"
               >
                 <template #icon>
-                  <IconMaterialSymbolsFavoriteRounded v-if="subscribe.isSubscribed.value" />
+                  <IconMaterialSymbolsFavoriteRounded
+                    v-if="subscribe.isSubscribed.value"
+                  />
                   <IconMaterialSymbolsFavoriteOutlineRounded v-else />
                 </template>
                 {{
@@ -398,7 +442,9 @@ onBeforeUnmount(() => {
               data-search-input
             >
               <template #prefix>
-                <IconLucideSearch class="size-4 text-on-surface-variant/40 shrink-0" />
+                <IconLucideSearch
+                  class="size-4 text-on-surface-variant/40 shrink-0"
+                />
               </template>
             </SInput>
           </div>
@@ -425,21 +471,34 @@ onBeforeUnmount(() => {
           enable-sort
           @scroll="handleListScroll"
           @change="handleTracksRemoved"
+          @track-updated="loadCollection"
         />
       </div>
       <!-- 加载中 -->
-      <div v-else-if="loading" key="loading" class="flex-1 flex items-center justify-center">
+      <div
+        v-else-if="loading"
+        key="loading"
+        class="flex-1 flex items-center justify-center"
+      >
         <div class="text-center text-on-surface-variant/60">
           <SLoading class="text-4xl text-primary/70 mb-4 mx-auto block" />
           <div class="text-sm">{{ t("common.loading") }}</div>
         </div>
       </div>
       <!-- 错误态 -->
-      <div v-else-if="error" key="error" class="flex-1 flex items-center justify-center px-6">
+      <div
+        v-else-if="error"
+        key="error"
+        class="flex-1 flex items-center justify-center px-6"
+      >
         <div class="text-center text-red-500/85">
           <IconLucideTriangleAlert class="size-14 mx-auto mb-4 opacity-50" />
-          <div class="text-sm font-medium mb-1">{{ t("search.errorTitle") }}</div>
-          <div class="text-xs opacity-80 break-all max-w-xs mb-4">{{ error }}</div>
+          <div class="text-sm font-medium mb-1">
+            {{ t("search.errorTitle") }}
+          </div>
+          <div class="text-xs opacity-80 break-all max-w-xs mb-4">
+            {{ error }}
+          </div>
           <SButton type="primary" variant="secondary" @click="loadCollection">
             <template #icon><IconLucideRefreshCw /></template>
             {{ t("common.retry") }}
@@ -447,7 +506,11 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <!-- 空状态 -->
-      <div v-else-if="collection" key="empty" class="flex-1 flex items-center justify-center">
+      <div
+        v-else-if="collection"
+        key="empty"
+        class="flex-1 flex items-center justify-center"
+      >
         <div class="text-center text-on-surface-variant/50">
           <IconLucideMusic class="size-12 mx-auto mb-3 opacity-30" />
           <div class="text-sm">{{ t("collection.empty") }}</div>
@@ -460,22 +523,38 @@ onBeforeUnmount(() => {
       :title="t('collection.introduction', { type: typeLabel })"
       width="min(520px, calc(100vw - 40px))"
     >
-      <p class="whitespace-pre-wrap break-words leading-6 text-on-surface-variant">
+      <p
+        class="whitespace-pre-wrap break-words leading-6 text-on-surface-variant"
+      >
         {{ collection?.description }}
       </p>
     </SDialog>
     <!-- 编辑弹窗 -->
-    <SDialog v-model:open="manage.editOpen.value" :title="editLabel" width="400px">
+    <SDialog
+      v-model:open="manage.editOpen.value"
+      :title="editLabel"
+      width="400px"
+    >
       <div class="flex flex-col gap-4">
         <SFormItem :label="t('collection.name', { type: typeLabel })">
-          <SInput v-model="manage.editTitle.value" :disabled="manage.submitting.value" />
+          <SInput
+            v-model="manage.editTitle.value"
+            :disabled="manage.submitting.value"
+          />
         </SFormItem>
         <SFormItem :label="t('collection.description', { type: typeLabel })">
-          <SInput v-model="manage.editDescription.value" :disabled="manage.submitting.value" />
+          <SInput
+            v-model="manage.editDescription.value"
+            :disabled="manage.submitting.value"
+          />
         </SFormItem>
       </div>
       <template #footer="{ close }">
-        <SButton variant="secondary" :disabled="manage.submitting.value" @click="close">
+        <SButton
+          variant="secondary"
+          :disabled="manage.submitting.value"
+          @click="close"
+        >
           {{ t("common.cancel") }}
         </SButton>
         <SButton
@@ -494,13 +573,26 @@ onBeforeUnmount(() => {
       :title="t('collection.delete', { type: typeLabel })"
     >
       <p class="text-sm text-on-surface-variant">
-        {{ t("collection.deleteConfirm", { type: typeLabel, title: collection?.title ?? "" }) }}
+        {{
+          t("collection.deleteConfirm", {
+            type: typeLabel,
+            title: collection?.title ?? "",
+          })
+        }}
       </p>
       <template #footer="{ close }">
-        <SButton variant="secondary" :disabled="manage.deleting.value" @click="close">
+        <SButton
+          variant="secondary"
+          :disabled="manage.deleting.value"
+          @click="close"
+        >
           {{ t("common.cancel") }}
         </SButton>
-        <SButton type="error" :loading="manage.deleting.value" @click="manage.confirmDelete">
+        <SButton
+          type="error"
+          :loading="manage.deleting.value"
+          @click="manage.confirmDelete"
+        >
           {{ t("common.confirm") }}
         </SButton>
       </template>

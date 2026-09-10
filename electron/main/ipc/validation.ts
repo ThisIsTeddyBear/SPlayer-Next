@@ -15,7 +15,7 @@ const booleanChannels = new Set([
   "player:setFftEnabled",
 ]);
 
-const metadataProviders = new Set(["netease", "qqmusic", "kugou", "spotify"]);
+const metadataProviders = new Set(["spotify", "netease"]);
 
 /** 在进入原生绑定或配置层前拒绝无效的基础输入。 */
 export const validateIpcArgs = (channel: string, args: unknown[]): void => {
@@ -23,7 +23,10 @@ export const validateIpcArgs = (channel: string, args: unknown[]): void => {
   const value = args[0];
   if (
     range &&
-    (typeof value !== "number" || !Number.isFinite(value) || value < range[0] || value > range[1])
+    (typeof value !== "number" ||
+      !Number.isFinite(value) ||
+      value < range[0] ||
+      value > range[1])
   ) {
     throw new Error("Invalid numeric IPC argument");
   }
@@ -44,12 +47,20 @@ export const validateIpcArgs = (channel: string, args: unknown[]): void => {
       value.length > 256 ||
       value
         .split(".")
-        .some((part) => !part || ["__proto__", "prototype", "constructor"].includes(part)))
+        .some(
+          (part) =>
+            !part || ["__proto__", "prototype", "constructor"].includes(part),
+        ))
   ) {
     throw new Error("Invalid configuration path");
   }
   if (channel === "player:load") {
-    if (typeof value !== "string" || !value || value.length > 65536 || value.includes("\0")) {
+    if (
+      typeof value !== "string" ||
+      !value ||
+      value.length > 65536 ||
+      value.includes("\0")
+    ) {
       throw new Error("Invalid playback source");
     }
     const options = args[1];
@@ -61,7 +72,11 @@ export const validateIpcArgs = (channel: string, args: unknown[]): void => {
     }
   }
   if (channel === "library:searchMetadata") {
-    const query = value as { provider?: unknown; title?: unknown; artist?: unknown } | null;
+    const query = value as {
+      provider?: unknown;
+      title?: unknown;
+      artist?: unknown;
+    } | null;
     if (
       !query ||
       typeof query !== "object" ||

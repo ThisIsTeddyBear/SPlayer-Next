@@ -6,7 +6,8 @@ import type {
   MetadataSearchQuery,
 } from "@shared/types/tagEditor";
 
-const USER_AGENT = "SPlayer-Next/1.2 (https://github.com/SPlayer-Dev/SPlayer-Next)";
+const USER_AGENT =
+  "SPlayer-Next/1.2 (https://github.com/SPlayer-Dev/SPlayer-Next)";
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
@@ -25,7 +26,8 @@ const requestJson = async <T>(url: string): Promise<T> => {
     },
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
-  if (!response.ok) throw new Error(`Metadata request failed: HTTP ${response.status}`);
+  if (!response.ok)
+    throw new Error(`Metadata request failed: HTTP ${response.status}`);
   return (await response.json()) as T;
 };
 
@@ -54,16 +56,23 @@ interface NeteaseSong {
   al?: NeteaseAlbum;
 }
 
-const neteaseAlbum = (song: NeteaseSong): NeteaseAlbum | undefined => song.al ?? song.album;
-const neteaseArtists = (song: NeteaseSong): NeteaseArtist[] => song.ar ?? song.artists ?? [];
+const neteaseAlbum = (song: NeteaseSong): NeteaseAlbum | undefined =>
+  song.al ?? song.album;
+const neteaseArtists = (song: NeteaseSong): NeteaseArtist[] =>
+  song.ar ?? song.artists ?? [];
 
 const neteaseCover = (url: string | undefined): string | undefined => {
   if (!url) return undefined;
-  const secure = url.replace(/^http:\/\/(p\d*\.music\.126\.net)/i, "https://$1");
+  const secure = url.replace(
+    /^http:\/\/(p\d*\.music\.126\.net)/i,
+    "https://$1",
+  );
   return secure.includes("?param=") ? secure : `${secure}?param=500y500`;
 };
 
-const neteaseAlbumArtist = (album: NeteaseAlbum | undefined): string | undefined => {
+const neteaseAlbumArtist = (
+  album: NeteaseAlbum | undefined,
+): string | undefined => {
   if (!album) return undefined;
 
   const artists = (album.artists ?? [])
@@ -82,7 +91,9 @@ const neteaseYear = (album: NeteaseAlbum | undefined): number | undefined => {
   return Number.isFinite(year) ? year : undefined;
 };
 
-const hydrateNeteaseSongs = async (songs: NeteaseSong[]): Promise<NeteaseSong[]> => {
+const hydrateNeteaseSongs = async (
+  songs: NeteaseSong[],
+): Promise<NeteaseSong[]> => {
   if (songs.length === 0) return songs;
 
   try {
@@ -96,7 +107,9 @@ const hydrateNeteaseSongs = async (songs: NeteaseSong[]): Promise<NeteaseSong[]>
       `https://music.163.com/api/song/detail?${params.toString()}`,
     );
 
-    const details = new Map((detail.songs ?? []).map((song) => [String(song.id), song]));
+    const details = new Map(
+      (detail.songs ?? []).map((song) => [String(song.id), song]),
+    );
 
     return songs.map((song) => {
       const full = details.get(String(song.id));
@@ -147,9 +160,12 @@ const searchNetease = async (keyword: string): Promise<MetadataCandidate[]> => {
 /* -------------------------------------------------------------------------- */
 
 const SPOTIFY_TOKEN_TRACK_ID = "4uLU6hMCjMI75M1A2tKUQC";
-const SPOTIFY_SEARCH_HASH = "1d021289df50166c61630e02f002ec91182b518e56bcd681ac6b0640390c0245";
-const SPOTIFY_TRACK_HASH = "d208301e63ccb8504831114cb8db1201636a016187d7c832c8c00933e2cd64c6";
-const SPOTIFY_ALBUM_HASH = "46ae954ef2d2fe7732b4b2b4022157b2e18b7ea84f70591ceb164e4de1b5d5d3";
+const SPOTIFY_SEARCH_HASH =
+  "1d021289df50166c61630e02f002ec91182b518e56bcd681ac6b0640390c0245";
+const SPOTIFY_TRACK_HASH =
+  "d208301e63ccb8504831114cb8db1201636a016187d7c832c8c00933e2cd64c6";
+const SPOTIFY_ALBUM_HASH =
+  "46ae954ef2d2fe7732b4b2b4022157b2e18b7ea84f70591ceb164e4de1b5d5d3";
 
 interface SpotifyImage {
   url?: string;
@@ -338,7 +354,9 @@ const requestSpotifyEmbedToken = async (): Promise<string | null> => {
     if (!nextData) return null;
 
     const state = JSON.parse(nextData) as SpotifyEmbedState;
-    return cacheSpotifyToken(state.props?.pageProps?.state?.settings?.session ?? {});
+    return cacheSpotifyToken(
+      state.props?.pageProps?.state?.settings?.session ?? {},
+    );
   } catch {
     return null;
   }
@@ -415,7 +433,9 @@ const spotifyRequest = async <T>(
   return (await response.json()) as T;
 };
 
-const spotifyNames = (artists: SpotifyArtist[] | undefined): string | undefined => {
+const spotifyNames = (
+  artists: SpotifyArtist[] | undefined,
+): string | undefined => {
   const names = (artists ?? [])
     .map((artist) => artist.profile?.name?.trim())
     .filter((name): name is string => Boolean(name));
@@ -423,16 +443,22 @@ const spotifyNames = (artists: SpotifyArtist[] | undefined): string | undefined 
   return names.length > 0 ? names.join(" / ") : undefined;
 };
 
-const spotifyCover = (images: SpotifyImage[] | undefined): string | undefined => {
+const spotifyCover = (
+  images: SpotifyImage[] | undefined,
+): string | undefined => {
   const usable = (images ?? []).filter((image) => Boolean(image.url));
   if (usable.length === 0) return undefined;
 
   return [...usable].sort(
-    (a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0),
+    (a, b) =>
+      (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0),
   )[0]?.url;
 };
 
-const spotifyYear = (isoDate?: string, explicitYear?: number): number | undefined => {
+const spotifyYear = (
+  isoDate?: string,
+  explicitYear?: number,
+): number | undefined => {
   if (explicitYear && Number.isFinite(explicitYear)) return explicitYear;
   const match = isoDate?.match(/^(\d{4})/);
   return match ? Number(match[1]) : undefined;
@@ -451,7 +477,8 @@ const searchSpotify = async (keyword: string): Promise<MetadataCandidate[]> => {
     SPOTIFY_SEARCH_HASH,
   );
 
-  if (body.errors?.length) throw new Error("Spotify search returned GraphQL errors");
+  if (body.errors?.length)
+    throw new Error("Spotify search returned GraphQL errors");
 
   return (body.data?.searchV2?.tracksV2?.items ?? [])
     .map((entry): MetadataCandidate | null => {
@@ -471,14 +498,17 @@ const searchSpotify = async (keyword: string): Promise<MetadataCandidate[]> => {
     .filter((candidate): candidate is MetadataCandidate => candidate !== null);
 };
 
-const getSpotifyDetail = async (id: string): Promise<MetadataCandidateDetail> => {
+const getSpotifyDetail = async (
+  id: string,
+): Promise<MetadataCandidateDetail> => {
   const trackBody = await spotifyRequest<SpotifyTrackResponse>(
     "getTrack",
     { uri: `spotify:track:${id}` },
     SPOTIFY_TRACK_HASH,
   );
 
-  if (trackBody.errors?.length) throw new Error("Spotify track lookup returned GraphQL errors");
+  if (trackBody.errors?.length)
+    throw new Error("Spotify track lookup returned GraphQL errors");
 
   const track = trackBody.data?.trackUnion;
   if (!track) return {};
@@ -493,7 +523,10 @@ const getSpotifyDetail = async (id: string): Promise<MetadataCandidateDetail> =>
       title: track.name,
       artist: spotifyNames(trackArtists),
       album: track.albumOfTrack?.name,
-      year: spotifyYear(track.albumOfTrack?.date?.isoString, track.albumOfTrack?.date?.year),
+      year: spotifyYear(
+        track.albumOfTrack?.date?.isoString,
+        track.albumOfTrack?.date?.year,
+      ),
       trackNumber: track.trackNumber,
       coverUrl: spotifyCover(track.albumOfTrack?.coverArt?.sources),
     };
@@ -510,7 +543,8 @@ const getSpotifyDetail = async (id: string): Promise<MetadataCandidateDetail> =>
     SPOTIFY_ALBUM_HASH,
   );
 
-  if (albumBody.errors?.length) throw new Error("Spotify album lookup returned GraphQL errors");
+  if (albumBody.errors?.length)
+    throw new Error("Spotify album lookup returned GraphQL errors");
 
   const album = albumBody.data?.albumUnion;
   const albumTrack = album?.tracks?.items?.find(
@@ -519,12 +553,16 @@ const getSpotifyDetail = async (id: string): Promise<MetadataCandidateDetail> =>
 
   return {
     title: albumTrack?.name ?? track.name,
-    artist: spotifyNames(albumTrack?.artists?.items) ?? spotifyNames(trackArtists),
+    artist:
+      spotifyNames(albumTrack?.artists?.items) ?? spotifyNames(trackArtists),
     album: album?.name ?? track.albumOfTrack?.name,
     albumArtist: spotifyNames(album?.artists?.items),
     year:
       spotifyYear(album?.date?.isoString) ??
-      spotifyYear(track.albumOfTrack?.date?.isoString, track.albumOfTrack?.date?.year),
+      spotifyYear(
+        track.albumOfTrack?.date?.isoString,
+        track.albumOfTrack?.date?.year,
+      ),
     trackNumber: albumTrack?.trackNumber ?? track.trackNumber,
     discNumber: albumTrack?.discNumber,
     coverUrl:
@@ -547,9 +585,6 @@ export const searchMetadata = async (
   const keyword = `${title} ${artist}`.trim();
 
   if (query.provider === "spotify") return searchSpotify(keyword);
-
-  // Preserve the fork's existing metadata-search behavior for NCM/QM/KG.
-  // These providers currently share the existing NetEase metadata lookup path.
   return searchNetease(keyword);
 };
 
