@@ -1,6 +1,7 @@
 import { ipcMain } from "./trusted";
 import { fetchWithProxy } from "@main/utils/proxy";
 import { systemLog } from "@main/utils/logger";
+import { extractGoogleRomanization, hasNonLatinLetter } from "@shared/utils/romanization";
 
 const TIMEOUT_MS = 4_000;
 const RETRIES = 2;
@@ -14,18 +15,6 @@ const cache = new Map<string, string>();
 const failureCache = new Map<string, number>();
 
 let providerBlockedUntil = 0;
-
-const hasNonLatinLetter = (value: string): boolean =>
-  [...value].some((char) => /\p{L}/u.test(char) && !/\p{Script=Latin}/u.test(char));
-
-const normalizeReading = (value: string): string =>
-  value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[\u2018\u2019`´]/g, "'")
-    .replace(/[\u2010-\u2015]/g, "-")
-    .replace(/\s+/g, " ")
-    .trim();
 
 const rememberFailure = (text: string): void => {
   failureCache.set(text, Date.now());
@@ -43,59 +32,6 @@ const isRecentlyFailed = (text: string): boolean => {
   failureCache.delete(text);
   return false;
 };
-
-const extractObjectRomanization = (payload: unknown): string | undefined => {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return undefined;
-
-  const sentences = (payload as { sentences?: unknown }).sentences;
-  if (!Array.isArray(sentences)) return undefined;
-
-  const reading = normalizeReading(
-    sentences
-      .map((sentence) => {
-        if (!sentence || typeof sentence !== "object") return "";
-        const srcTranslit = (sentence as { src_translit?: unknown }).src_translit;
-        return typeof srcTranslit === "string" ? srcTranslit : "";
-      })
-      .filter(Boolean)
-      .join(" "),
-  );
-
-  return reading && !hasNonLatinLetter(reading) ? reading : undefined;
-};
-
-const extractLegacyRomanization = (payload: unknown): string | undefined => {
-  if (!Array.isArray(payload) || !Array.isArray(payload[0])) return undefined;
-
-  const segments = (payload[0] as unknown[]).filter(
-    (segment): segment is unknown[] => Array.isArray(segment),
-  );
-  if (!segments.length) return undefined;
-
-  const trailing = segments[segments.length - 1];
-  if (trailing && trailing[0] == null && trailing[1] == null) {
-    const candidate = trailing.find(
-      (value): value is string => typeof value === "string" && Boolean(value.trim()),
-    );
-
-    if (candidate) {
-      const reading = normalizeReading(candidate);
-      if (reading && !hasNonLatinLetter(reading)) return reading;
-    }
-  }
-
-  const reading = normalizeReading(
-    segments
-      .map((segment) => (typeof segment[3] === "string" ? segment[3] : ""))
-      .filter(Boolean)
-      .join(" "),
-  );
-
-  return reading && !hasNonLatinLetter(reading) ? reading : undefined;
-};
-
-const extractRomanization = (payload: unknown): string | undefined =>
-  extractObjectRomanization(payload) ?? extractLegacyRomanization(payload);
 
 const blockProvider = (reason: string, cooldownMs = PROVIDER_COOLDOWN_MS): void => {
   providerBlockedUntil = Math.max(providerBlockedUntil, Date.now() + cooldownMs);
@@ -115,10 +51,8 @@ const romanizeLine = async (text: string): Promise<string | undefined> => {
     client: "gtx",
     sl: "auto",
     tl: "en",
-    dj: "1",
     q: text,
   });
-  params.append("dt", "t");
   params.append("dt", "rm");
   url.search = params.toString();
 
@@ -163,7 +97,7 @@ const romanizeLine = async (text: string): Promise<string | undefined> => {
         return undefined;
       }
 
-      const reading = extractRomanization(payload);
+      const reading = extractGoogleRomanization(payload);
       if (!reading) {
         rememberFailure(text);
         systemLog.warn("[romanization] Google response contained no usable romanization");
@@ -193,7 +127,11 @@ const romanizeLine = async (text: string): Promise<string | undefined> => {
   return undefined;
 };
 
-/** 将多行原文转换为罗马音 */
+/**
+ * 将多行原文转换为罗马音
+ * @param input - 原文歌词行
+ * @returns 按原文索引的罗马音结果
+ */
 export const romanizeLines = async (input: string[]): Promise<Record<string, string>> => {
   const lines = [
     ...new Set(

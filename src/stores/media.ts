@@ -10,6 +10,7 @@ import { applyLyricExclude } from "@/utils/lyric/lyricStripper";
 import { normalizeLyricLines } from "@/utils/lyric/normalize";
 import { applyProfanityUncensor } from "@/utils/preset/profanity";
 import { applyLyricCjkTransform } from "@/utils/lyric/cjkTransform";
+import { hasNonLatinLetter } from "@shared/utils/romanization";
 export const useMediaStore = defineStore("media", () => {
   watchLyricPreference();
 
@@ -100,6 +101,47 @@ export const useMediaStore = defineStore("media", () => {
   let transformToken = 0;
   let cjkTransformPromise: Promise<void> = Promise.resolve();
 
+  /**
+   * 为缺少提供方音译的当前歌词补全罗马音
+   * @param generation - 当前歌词代次
+   */
+  const fillMissingRomanization = async (generation: number): Promise<void> => {
+    await cjkTransformPromise;
+
+    if (generation !== lyricGeneration || !romanizationVisible.value || romanizationLoading.value) {
+      return;
+    }
+
+    const missing = [
+      ...new Set(
+        parsedLyric.value
+          .filter((line) => !line.romanLyric)
+          .map((line) => line.words.map((word) => word.word).join(""))
+          .filter(hasNonLatinLetter),
+      ),
+    ];
+    if (!missing.length) return;
+
+    romanizationLoading.value = true;
+    try {
+      const readings = await window.api.lyrics.romanize(missing);
+      if (generation !== lyricGeneration || !romanizationVisible.value) return;
+
+      parsedLyric.value = parsedLyric.value.map((line) => {
+        if (line.romanLyric) return line;
+
+        const text = line.words.map((word) => word.word).join("");
+        const romanLyric = readings[text];
+        return romanLyric ? { ...line, romanLyric } : line;
+      });
+      syncToMain();
+    } catch (error) {
+      console.warn("[media] lyric romanization failed", error);
+    } finally {
+      if (generation === lyricGeneration) romanizationLoading.value = false;
+    }
+  };
+
   const resetLyricState = (): void => {
     ++lyricGeneration;
     ++transformToken;
@@ -130,6 +172,7 @@ export const useMediaStore = defineStore("media", () => {
     ++lyricGeneration;
     const cjkToken = ++transformToken;
     cjkTransformPromise = Promise.resolve();
+    romanizationLoading.value = false;
 
     let nextLines: LyricLine[] = [];
     const settings = useSettingsStore();
@@ -175,10 +218,11 @@ export const useMediaStore = defineStore("media", () => {
           console.error("[media] CJK transform failed", error);
         });
     }
-  };
 
-  const hasNonLatinLetter = (value: string): boolean =>
-    [...value].some((char) => /\p{L}/u.test(char) && !/\p{Script=Latin}/u.test(char));
+    if (hasContent && romanizationVisible.value) {
+      void fillMissingRomanization(lyricGeneration);
+    }
+  };
 
   const canRomanize = computed(() =>
     parsedLyric.value.some(
@@ -195,41 +239,7 @@ export const useMediaStore = defineStore("media", () => {
     if (!romanizationVisible.value || romanizationLoading.value) return;
 
     const generation = lyricGeneration;
-    romanizationLoading.value = true;
-
-    try {
-      await cjkTransformPromise;
-
-      if (generation !== lyricGeneration || !romanizationVisible.value) return;
-
-      const missing = [
-        ...new Set(
-          parsedLyric.value
-            .filter((line) => !line.romanLyric)
-            .map((line) => line.words.map((word) => word.word).join(""))
-            .filter(hasNonLatinLetter),
-        ),
-      ];
-
-      if (!missing.length) return;
-
-      const readings = await window.api.lyrics.romanize(missing);
-
-      if (generation !== lyricGeneration || !romanizationVisible.value) return;
-
-      parsedLyric.value = parsedLyric.value.map((line) => {
-        if (line.romanLyric) return line;
-
-        const text = line.words.map((word) => word.word).join("");
-        const romanLyric = readings[text];
-
-        return romanLyric ? { ...line, romanLyric } : line;
-      });
-
-      syncToMain();
-    } finally {
-      romanizationLoading.value = false;
-    }
+    await fillMissingRomanization(generation);
   };
   /**
    */
