@@ -338,9 +338,8 @@ const handleSave = async (): Promise<void> => {
   const outcome = outcomes?.[0];
   if (outcome?.success) {
     toast.success(t("tagEditor.saveSuccess"));
-    const updated = outcomes
-      .filter((o) => o.success && o.track)
-      .map((o) => o.track!);
+    const updated =
+      outcomes?.filter((o) => o.success && o.track).map((o) => o.track!) ?? [];
     emit("saved", updated);
     emit("update:open", false);
   } else if (outcome?.error) {
