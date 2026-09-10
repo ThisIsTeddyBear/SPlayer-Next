@@ -89,8 +89,18 @@ onBeforeUnmount(() => window.removeEventListener("keydown", cancelLyricSyncPick)
       variant="ghost"
       circle
       :size="40"
-      :disabled="!media.canRomanize || media.romanizationLoading"
-      :title="media.romanizationVisible ? 'Show native lyrics' : 'Show romanized lyrics'"
+      :disabled="!media.canRomanize"
+      :aria-busy="media.romanizationLoading"
+      :class="media.romanizationError ? 'ring-1 ring-cover/50' : ''"
+      :title="
+        media.romanizationError
+          ? t('player.romanizationRetry')
+          : media.romanizationLoading
+            ? t('player.romanizationLoading')
+            : media.romanizationVisible
+              ? 'Show native lyrics'
+              : 'Show romanized lyrics'
+      "
       @click="media.toggleRomanization()"
     >
       <template #icon>

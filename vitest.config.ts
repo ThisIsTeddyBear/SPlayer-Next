@@ -30,7 +30,13 @@ export default defineConfig({
   ],
   test: {
     environment: "happy-dom",
-    include: ["src/**/*.spec.ts", "windows/**/*.spec.ts", "docs/**/*.spec.ts", "electron/**/*.spec.ts"],
+    include: [
+      "src/**/*.spec.ts",
+      "shared/**/*.spec.ts",
+      "windows/**/*.spec.ts",
+      "docs/**/*.spec.ts",
+      "electron/**/*.spec.ts",
+    ],
     clearMocks: true,
     restoreMocks: true,
   },

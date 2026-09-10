@@ -223,6 +223,7 @@ const collectTransliterations = (doc: Document): TransliterationMaps => {
       } else if (node.nodeType === Node.ELEMENT_NODE) {
         const childEl = node as Element;
         if (getAttr(childEl, "role") === "x-bg") {
+          lineBg += childEl.textContent ?? "";
           const timedSpans = Array.from(childEl.querySelectorAll("span[begin][end]"));
           if (timedSpans.length > 0) {
             for (const span of timedSpans) {
@@ -232,15 +233,17 @@ const collectTransliterations = (doc: Document): TransliterationMaps => {
                 text: stripParens(span.textContent ?? ""),
               });
             }
-          } else {
-            lineBg += childEl.textContent ?? "";
           }
-        } else if (childEl.hasAttribute("begin") && childEl.hasAttribute("end")) {
-          mainWords.push({
-            startTime: parseTTMLTime(childEl.getAttribute("begin") ?? ""),
-            endTime: parseTTMLTime(childEl.getAttribute("end") ?? ""),
-            text: childEl.textContent ?? "",
-          });
+        } else {
+          // 逐词音译也必须组成整行文本，否则关闭逐词显示后会丢失已有音译。
+          lineMain += childEl.textContent ?? "";
+          if (childEl.hasAttribute("begin") && childEl.hasAttribute("end")) {
+            mainWords.push({
+              startTime: parseTTMLTime(childEl.getAttribute("begin") ?? ""),
+              endTime: parseTTMLTime(childEl.getAttribute("end") ?? ""),
+              text: childEl.textContent ?? "",
+            });
+          }
         }
       }
     }
@@ -249,8 +252,8 @@ const collectTransliterations = (doc: Document): TransliterationMaps => {
       words.set(key, { main: mainWords, bg: bgWords });
     }
 
-    lineMain = lineMain.trim();
-    lineBg = stripParens(lineBg);
+    lineMain = lineMain.replace(/\s+/g, " ").trim();
+    lineBg = stripParens(lineBg.replace(/\s+/g, " "));
     if (lineMain || lineBg) lines.set(key, { main: lineMain, bg: lineBg });
   }
 

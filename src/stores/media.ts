@@ -39,6 +39,7 @@ export const useMediaStore = defineStore("media", () => {
 
   const romanizationVisible = ref(true);
   const romanizationLoading = ref(false);
+  const romanizationError = ref(false);
 
   const lyricSyncPicking = ref(false);
 
@@ -106,6 +107,7 @@ export const useMediaStore = defineStore("media", () => {
   let transformToken = 0;
   let cjkTransformPromise: Promise<void> = Promise.resolve();
   let romanizationRequestId = 0;
+  let romanizationResult: LyricLine[] | null = null;
 
   /**
    * 为缺少提供方音译的当前歌词补全罗马音
@@ -138,11 +140,14 @@ export const useMediaStore = defineStore("media", () => {
       }
 
       const enriched = applyGeneratedRomanization(lines, readings);
+      romanizationError.value = missing.some((text) => !readings[text]);
       if (enriched !== lines) {
+        romanizationResult = enriched;
         parsedLyric.value = enriched;
         syncToMain();
       }
     } catch (error) {
+      if (requestId === romanizationRequestId) romanizationError.value = true;
       console.warn("[media] lyric romanization failed", error);
     } finally {
       if (requestId === romanizationRequestId) romanizationLoading.value = false;
@@ -151,12 +156,24 @@ export const useMediaStore = defineStore("media", () => {
 
   watch(
     [parsedLyric, romanizationVisible],
-    ([lines, visible]) => {
+    ([lines, visible], [, wasVisible]) => {
+      // 自己写入的部分成功结果不能触发新一轮网络请求。
+      const ownResult = lines === romanizationResult;
+      romanizationResult = null;
+      if (ownResult && visible === wasVisible) return;
       const requestId = ++romanizationRequestId;
       romanizationLoading.value = false;
+      romanizationError.value = false;
       if (visible && lines.length) void fillMissingRomanization(lines, requestId);
     },
     { flush: "post" },
+  );
+
+  watch(
+    () => useSettingsStore().lyric.showRomanization,
+    (visible) => {
+      romanizationVisible.value = visible;
+    },
   );
 
   const resetLyricState = (): void => {
@@ -170,6 +187,7 @@ export const useMediaStore = defineStore("media", () => {
     lyricAuthors.value = [];
     lyricIndex.value = -1;
     romanizationLoading.value = false;
+    romanizationError.value = false;
     lyricSyncPicking.value = false;
     lyricLoading.value = true;
     syncToMain();
@@ -190,6 +208,7 @@ export const useMediaStore = defineStore("media", () => {
     ++romanizationRequestId;
     cjkTransformPromise = Promise.resolve();
     romanizationLoading.value = false;
+    romanizationError.value = false;
 
     let nextLines: LyricLine[] = [];
     const settings = useSettingsStore();
@@ -239,13 +258,18 @@ export const useMediaStore = defineStore("media", () => {
 
   const canRomanize = computed(() =>
     parsedLyric.value.some(
-      (line) =>
-        Boolean(line.romanLyric) || needsRomanization(getLyricLineText(line)),
+      (line) => Boolean(line.romanLyric) || needsRomanization(getLyricLineText(line)),
     ),
   );
 
   const toggleRomanization = (): void => {
     if (!canRomanize.value) return;
+
+    if (romanizationError.value && romanizationVisible.value) {
+      romanizationError.value = false;
+      void fillMissingRomanization(parsedLyric.value, ++romanizationRequestId);
+      return;
+    }
 
     romanizationVisible.value = !romanizationVisible.value;
   };
@@ -268,6 +292,7 @@ export const useMediaStore = defineStore("media", () => {
     parsedLyric.value = [];
     romanizationVisible.value = true;
     romanizationLoading.value = false;
+    romanizationError.value = false;
     lyricSyncPicking.value = false;
     lyricAuthors.value = [];
     lyricLoading.value = false;
@@ -284,6 +309,7 @@ export const useMediaStore = defineStore("media", () => {
     parsedLyric,
     romanizationVisible,
     romanizationLoading,
+    romanizationError,
     lyricSyncPicking,
     canRomanize,
     lyricAuthors,

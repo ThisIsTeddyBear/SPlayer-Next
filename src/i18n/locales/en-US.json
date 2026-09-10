@@ -492,6 +492,8 @@
     },
     "lyricCredit": "Lyrics by",
     "noLyrics": "No lyrics available",
+    "romanizationRetry": "Some romanization could not be generated. Click to retry.",
+    "romanizationLoading": "Generating romanization… Click to hide.",
     "bitPerfectActive": "Bit-perfect active",
     "copyLyric": {
       "title": "Copy Lyrics",
