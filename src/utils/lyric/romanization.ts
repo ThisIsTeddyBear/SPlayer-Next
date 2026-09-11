@@ -9,14 +9,10 @@ export const getLyricLineText = (line: LyricLine): string =>
 
 /** 收集没有内嵌罗马音的非拉丁歌词行。 */
 export const collectMissingRomanization = (lines: LyricLine[]): string[] => [
-  ...new Set(
-    lines
-      .filter((line) => !line.romanLyric.trim())
-      .map(getLyricLineText)
-      .filter((text) =>
-        [...text].some((char) => /\p{Letter}/u.test(char) && !/\p{Script=Latin}/u.test(char)),
-      ),
-  ),
+  ...lines
+    .filter((line) => !line.romanLyric.trim())
+    .map(getLyricLineText)
+    .filter((text) => !/^[\u0000-\u007f\u0080-\u00ff\u0100-\u017f\u0180-\u024f]*$/.test(text)),
 ];
 
 /** 将生成的罗马音填入原本没有内嵌转写的行。 */

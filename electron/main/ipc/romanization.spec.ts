@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./trusted", () => ({ ipcMain: { handle: mocks.handle } }));
-vi.mock("@main/utils/proxy", () => ({ fetchWithProxy: mocks.fetch }));
 vi.mock("@main/utils/logger", () => ({ systemLog: { info: mocks.info, warn: mocks.warn } }));
 
 const { registerRomanizationIpc, romanizeLines } = await import("./romanization");
@@ -19,17 +18,15 @@ describe("Google Translate 罗马音", () => {
     mocks.handle.mockReset();
     mocks.info.mockReset();
     mocks.warn.mockReset();
+    vi.stubGlobal("fetch", mocks.fetch);
   });
+
+  afterEach(() => vi.unstubAllGlobals());
 
   it("uses the source transliteration returned by Google Translate", async () => {
     mocks.fetch.mockResolvedValue(
       new Response(
-        JSON.stringify({
-          sentences: [
-            { trans: "you also have news", orig: "तुमको भी है खबर" },
-            { src_translit: "tumko bhi hai khabar" },
-          ],
-        }),
+        JSON.stringify([[["you also have news", "तुमको भी है खबर", null, "tumko bhi hai khabar"]]]),
       ),
     );
 
