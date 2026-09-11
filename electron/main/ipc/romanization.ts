@@ -1,4 +1,8 @@
 import { systemLog } from "@main/utils/logger";
+import {
+  getCachedRomanizations,
+  setCachedRomanizations,
+} from "@main/database/lyricRomanizationCache";
 import { ipcMain } from "./trusted";
 
 const GOOGLE_TRANSLATE_ENDPOINT = "https://translate.googleapis.com/translate_a/single";
@@ -9,6 +13,8 @@ const FETCH_TIMEOUT_MS = 6_000;
 
 /** 判断文本是否完全由拉丁字符、数字和常见标点组成。 */
 const isPurelyLatinScript = (text: string): boolean =>
+  // 需要涵盖 ASCII 控制字符以保持既有拉丁文本判断不变。
+  // eslint-disable-next-line no-control-regex
   /^[\u0000-\u007f\u0080-\u00ff\u0100-\u017f\u0180-\u024f]*$/.test(text);
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -52,19 +58,31 @@ export const romanizeLines = async (input: unknown): Promise<Record<string, stri
           typeof line === "string" && line.length <= MAX_LINE_LENGTH && !isPurelyLatinScript(line),
       )
     : [];
-  const result: Record<string, string> = {};
+  const cached = getCachedRomanizations(lines);
+  const pending = lines.filter((line) => !cached[line]);
+  const result = { ...cached };
+  const generated: Record<string, string> = {};
 
-  if (lines.length > 0) {
-    systemLog.info(`[romanization] requesting ${lines.length} lines from Google Translate`);
+  if (pending.length > 0) {
+    systemLog.info(
+      `[romanization] cache hit ${lines.length - pending.length}/${lines.length}, requesting ${pending.length} lines from Google Translate`,
+    );
   }
 
-  for (const line of lines) {
+  for (const line of pending) {
     const reading = await romanizeLine(line);
-    if (reading) result[line] = reading;
+    if (reading) {
+      result[line] = reading;
+      generated[line] = reading;
+    }
   }
 
+  setCachedRomanizations(generated);
+
   if (lines.length > 0) {
-    systemLog.info(`[romanization] generated ${Object.keys(result).length}/${lines.length} lines`);
+    systemLog.info(
+      `[romanization] returned ${Object.keys(result).length}/${lines.length} lines (${Object.keys(generated).length} newly cached)`,
+    );
   }
   return result;
 };

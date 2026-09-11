@@ -16,6 +16,7 @@ import { getDb } from "@main/database";
 import { clearLyricCache } from "@main/database/lyricCache";
 import { clearLyricTtmlCache } from "@main/database/lyricTtmlCache";
 import { clearLyricMatchCache } from "@main/database/lyricMatchCache";
+import { clearLyricRomanizationCache } from "@main/database/lyricRomanizationCache";
 import * as songCache from "@main/services/songCache";
 import type { TrackSource } from "@shared/types/player";
 import { systemLog } from "@main/utils/logger";
@@ -23,7 +24,14 @@ import { defaultCacheDir } from "@main/utils/paths";
 
 /** 已知的缓存类别 */
 export type CacheCategory =
-  "covers" | "artists" | "backgrounds" | "songs" | "lyric" | "lyricTTML" | "lyricMatch";
+  | "covers"
+  | "artists"
+  | "backgrounds"
+  | "songs"
+  | "lyric"
+  | "lyricTTML"
+  | "lyricMatch"
+  | "lyricRomanization";
 
 /** 缓存介质 */
 export type CacheKind = "file" | "db";
@@ -157,6 +165,12 @@ const categoryHandlers: Record<
     path: () => "lyric_match_cache",
     size: () => tableSize("lyric_match_cache", ["fingerprint", "platform_id", "extra"]),
     clear: clearLyricMatchCache,
+  },
+  lyricRomanization: {
+    kind: "db",
+    path: () => "lyric_romanization_cache",
+    size: () => tableSize("lyric_romanization_cache", ["lyric_text", "romanization"]),
+    clear: clearLyricRomanizationCache,
   },
 };
 

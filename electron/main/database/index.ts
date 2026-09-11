@@ -90,6 +90,15 @@ export const initDatabase = (): void => {
       PRIMARY KEY (platform, id)
     );
 
+    CREATE TABLE IF NOT EXISTS lyric_romanization_cache (
+      lyric_text TEXT PRIMARY KEY,
+      romanization TEXT NOT NULL,
+      cached_at INTEGER NOT NULL,
+      last_used_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_lyric_romanization_cache_last_used
+      ON lyric_romanization_cache(last_used_at);
+
     CREATE TABLE IF NOT EXISTS song_cache (
       cache_key TEXT PRIMARY KEY,
       source TEXT NOT NULL,

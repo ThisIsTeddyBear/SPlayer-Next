@@ -2037,7 +2037,8 @@
       "songs": "Song Files",
       "lyric": "Lyric Content Cache",
       "lyricTTML": "TTML Lyric Cache",
-      "lyricMatch": "Lyric Match Cache"
+      "lyricMatch": "Lyric Match Cache",
+      "lyricRomanization": "Romanized Lyric Cache"
     },
     "enableSongCache": {
       "label": "Song Cache",

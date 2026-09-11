@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 
 /** 当前 schema 版本 */
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 type TableInfoRow = { name: string };
 
@@ -60,6 +60,20 @@ export const migrate = (d: Database.Database): void => {
   if (v < 6) {
     d.exec("DROP TABLE IF EXISTS lyric_romanization_cache");
     v = 6;
+  }
+
+  if (v < 7) {
+    d.exec(`
+      CREATE TABLE IF NOT EXISTS lyric_romanization_cache (
+        lyric_text TEXT PRIMARY KEY,
+        romanization TEXT NOT NULL,
+        cached_at INTEGER NOT NULL,
+        last_used_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_lyric_romanization_cache_last_used
+        ON lyric_romanization_cache(last_used_at);
+    `);
+    v = 7;
   }
 
   // 版本无关部分
