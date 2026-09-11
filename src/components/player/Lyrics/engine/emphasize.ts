@@ -94,9 +94,9 @@ export const createFloatAnimation = (
 };
 
 /**
- * 为强调单词的每个字符创建 glow + 正弦浮动动画
+ * 为强调单词的每个字素簇创建 glow + 正弦浮动动画
  *
- * @param charElements - 字符级 span 元素数组
+ * @param charElements - 字素簇级 span 元素数组
  * @param duration - 合并后单词的总持续时间（ms）
  * @param delay - 相对行起始的延迟（ms）
  * @param isLastWord - 是否为行末单词（增强效果）

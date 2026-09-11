@@ -7,6 +7,19 @@ import type { LyricLine, LyricWord } from "@shared/types/lyrics";
 import { needsSpaceBetween } from "../utils/split-words";
 import { shouldChunkEmphasize } from "./emphasize";
 
+const graphemeSegmenter =
+  typeof Intl !== "undefined" && typeof Intl.Segmenter !== "undefined"
+    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+    : null;
+
+/**
+ * 按字素簇拆分文本，避免将组合字符与其基字符分离。
+ */
+export const splitGraphemes = (text: string): string[] =>
+  graphemeSegmenter
+    ? Array.from(graphemeSegmenter.segment(text), ({ segment }) => segment)
+    : [text];
+
 /** 单个歌词单词的 DOM 元素与测量数据 */
 export interface WordMeasurement {
   /** 对应的 span 元素 */
@@ -27,7 +40,7 @@ export interface WordAnimTarget {
   word: LyricWord;
   /** 是否为强调词 */
   isEmphasize: boolean;
-  /** 强调词的字符级 span（非强调词为空数组） */
+  /** 强调词的字素簇级 span（非强调词为空数组） */
   charElements: HTMLElement[];
   /** 是否为行末单词 */
   isLastWord: boolean;
@@ -202,9 +215,9 @@ function buildEmphasizedChunk(
   wrapper.className = "lp-emp-wrapper";
 
   const charElements: HTMLElement[] = [];
-  for (const char of trimmed) {
+  for (const grapheme of splitGraphemes(trimmed)) {
     const charSpan = document.createElement("span");
-    charSpan.textContent = char;
+    charSpan.textContent = grapheme;
     wrapper.appendChild(charSpan);
     charElements.push(charSpan);
   }
