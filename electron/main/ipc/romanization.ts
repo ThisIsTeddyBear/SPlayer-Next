@@ -8,11 +8,43 @@ import { extractGoogleRomanization, needsRomanization } from "@shared/utils/roma
 
 const TIMEOUT_MS = 6_000;
 const RETRIES = 3;
-const CONCURRENCY = 4;
+const CONCURRENCY = 2;
+const REQUEST_INTERVAL_MS = 120;
+const RATE_LIMIT_COOLDOWN_MS = 10_000;
 const MAX_LINE_LENGTH = 1_500;
 const CACHE_LIMIT = 1_800;
 
 const cache = new Map<string, string>();
+const inFlight = new Map<string, Promise<string | undefined>>();
+let nextRequestAt = 0;
+let rateLimitUntil = 0;
+
+class GoogleRomanizationError extends Error {
+  constructor(
+    readonly status: number,
+    readonly retryAfterMs = 0,
+  ) {
+    super(`HTTP ${status}`);
+  }
+}
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+const retryAfterMs = (value: string | null): number => {
+  if (!value) return RATE_LIMIT_COOLDOWN_MS;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1_000;
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : RATE_LIMIT_COOLDOWN_MS;
+};
+
+/** Google 公共端点会在突发请求后返回 429；所有歌词批次共用节流窗口。 */
+const waitForGoogleRequestSlot = async (): Promise<void> => {
+  const now = Date.now();
+  const requestAt = Math.max(now, nextRequestAt, rateLimitUntil);
+  nextRequestAt = requestAt + REQUEST_INTERVAL_MS;
+  if (requestAt > now) await delay(requestAt - now);
+};
 
 const storeReading = (text: string, reading: string): void => {
   cache.delete(text);
@@ -37,16 +69,7 @@ const persistReading = (text: string, reading: string): void => {
   }
 };
 
-const romanizeText = async (text: string): Promise<string | undefined> => {
-  const cached = cache.get(text);
-  if (cached) return cached;
-
-  const persisted = getPersistedReading(text);
-  if (persisted) {
-    storeReading(text, persisted);
-    return persisted;
-  }
-
+const requestRomanization = async (text: string): Promise<string | undefined> => {
   const url = new URL("https://translate.googleapis.com/translate_a/single");
   url.search = new URLSearchParams({
     client: "gtx",
@@ -58,10 +81,16 @@ const romanizeText = async (text: string): Promise<string | undefined> => {
 
   for (let attempt = 0; attempt < RETRIES; attempt++) {
     try {
+      await waitForGoogleRequestSlot();
       const response = await fetch(url, {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const cooldown =
+          response.status === 429 ? retryAfterMs(response.headers.get("retry-after")) : 0;
+        if (cooldown) rateLimitUntil = Math.max(rateLimitUntil, Date.now() + cooldown);
+        throw new GoogleRomanizationError(response.status, cooldown);
+      }
 
       const reading = extractGoogleRomanization((await response.json()) as unknown, text);
       if (!reading) return undefined;
@@ -75,11 +104,35 @@ const romanizeText = async (text: string): Promise<string | undefined> => {
         return undefined;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1_000 * 2 ** attempt));
+      const backoff = 1_000 * 2 ** attempt;
+      const cooldown = error instanceof GoogleRomanizationError ? error.retryAfterMs : 0;
+      await delay(Math.max(backoff, cooldown));
     }
   }
 
   return undefined;
+};
+
+const romanizeText = async (text: string): Promise<string | undefined> => {
+  const cached = cache.get(text);
+  if (cached) return cached;
+
+  const persisted = getPersistedReading(text);
+  if (persisted) {
+    storeReading(text, persisted);
+    return persisted;
+  }
+
+  const active = inFlight.get(text);
+  if (active) return active;
+
+  const request = requestRomanization(text);
+  inFlight.set(text, request);
+  try {
+    return await request;
+  } finally {
+    inFlight.delete(text);
+  }
 };
 
 /**
