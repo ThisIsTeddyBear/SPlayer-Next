@@ -143,9 +143,7 @@ const categoryHandlers: Record<
   lyric: {
     kind: "db",
     path: () => "lyric_cache",
-    size: () =>
-      tableSize("lyric_cache", ["data"]) +
-      tableSize("lyric_romanization_cache", ["source_text", "reading"]),
+    size: () => tableSize("lyric_cache", ["data"]),
     clear: clearLyricCache,
   },
   lyricTTML: {

@@ -279,7 +279,6 @@ const api = {
       ipcRenderer.invoke("apis:setCookie", platform, cookie),
   },
   lyrics: {
-    romanize: (lines: string[]) => ipcRenderer.invoke("lyrics:romanize", lines),
     matchById: (platform: string, id: string) =>
       ipcRenderer.invoke("lyrics:matchById", platform, id),
     matchByQuery: (platform: string, track: unknown) =>

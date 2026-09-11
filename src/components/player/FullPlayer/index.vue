@@ -337,7 +337,7 @@ const toggleLyric = (): void => {
                 :hide-passed-lines="settings.lyric.hidePassedLines"
                 :enable-blur="settings.lyric.enableBlur"
                 :show-translation="settings.lyric.showTranslation"
-                :show-line-romanization="media.romanizationVisible"
+                :show-line-romanization="settings.lyric.amllShowLineRomanization"
                 :show-word-romanization="settings.lyric.amllShowWordRomanization"
                 :sync-picking="media.lyricSyncPicking"
                 @seek="handleLyricSeek"
@@ -373,7 +373,7 @@ const toggleLyric = (): void => {
                 :enable-float-animation="settings.lyric.enableFloatAnimation"
                 :enable-emphasize-effect="settings.lyric.enableEmphasizeEffect"
                 :show-translation="settings.lyric.showTranslation"
-                :show-romanization="media.romanizationVisible"
+                :show-romanization="settings.lyric.showRomanization"
                 @seek="handleLyricSeek"
               >
                 <template #bottom>

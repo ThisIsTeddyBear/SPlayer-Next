@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 
 /** 当前 schema 版本 */
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 type TableInfoRow = { name: string };
 
@@ -55,6 +55,11 @@ export const migrate = (d: Database.Database): void => {
   if (v < 5) {
     if (!hasColumn(d, "tracks", "isrc")) d.exec("ALTER TABLE tracks ADD COLUMN isrc TEXT");
     v = 5;
+  }
+
+  if (v < 6) {
+    d.exec("DROP TABLE IF EXISTS lyric_romanization_cache");
+    v = 6;
   }
 
   // 版本无关部分
