@@ -18,8 +18,14 @@
  * This module intentionally uses no third-party dependencies.
  */
 
-const GOOGLE_ROMANIZATION_ENDPOINT =
-  "https://translate.googleapis.com/translate_a/single";
+import {
+  getCachedRomanization,
+  setCachedRomanization,
+} from "@main/database/lyricRomanizationCache";
+import { needsRomanization } from "@shared/utils/romanization";
+import { ipcMain } from "./trusted";
+
+const GOOGLE_ROMANIZATION_ENDPOINT = "https://translate.googleapis.com/translate_a/single";
 
 const MIN_REQUEST_INTERVAL_MS = 1_250;
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -29,6 +35,7 @@ const MAX_RATE_LIMIT_COOLDOWN_MS = 15 * 60_000;
 const RATE_LIMIT_JITTER_MS = 10_000;
 
 const MAX_LINE_CACHE_ENTRIES = 512;
+const MAX_LINE_LENGTH = 1_500;
 
 type GoogleSentence = {
   src?: string;
@@ -306,10 +313,7 @@ function extractRomanization(payload: unknown): string | null {
 
       // Older client variants sometimes put romanization in index 1 on a
       // metadata-style row whose translated text (index 0) is empty.
-      if (
-        (segment[0] === null || segment[0] === undefined) &&
-        nonEmptyString(segment[1])
-      ) {
+      if ((segment[0] === null || segment[0] === undefined) && nonEmptyString(segment[1])) {
         pieces.push(segment[1].trim());
       }
     }
@@ -322,10 +326,7 @@ function extractRomanization(payload: unknown): string | null {
   return null;
 }
 
-async function fetchWithTimeout(
-  url: string,
-  externalSignal?: AbortSignal,
-): Promise<Response> {
+async function fetchWithTimeout(url: string, externalSignal?: AbortSignal): Promise<Response> {
   throwIfAborted(externalSignal);
 
   const controller = new AbortController();
@@ -374,10 +375,7 @@ async function fetchWithTimeout(
  * The name is exported intentionally because your recent SPlayer build uses
  * requestRomanization() in its stack trace.
  */
-export async function requestRomanization(
-  text: string,
-  signal?: AbortSignal,
-): Promise<string> {
+export async function requestRomanization(text: string, signal?: AbortSignal): Promise<string> {
   const normalized = text.trim();
 
   if (!normalized) return text;
@@ -481,17 +479,11 @@ export async function requestRomanization(
 /**
  * Backward-compatible single-line alias.
  */
-export async function romanizeText(
-  text: string,
-  signal?: AbortSignal,
-): Promise<string> {
+export async function romanizeText(text: string, signal?: AbortSignal): Promise<string> {
   return requestRomanization(text, signal);
 }
 
-async function runRomanizeLines(
-  lines: readonly string[],
-  signal?: AbortSignal,
-): Promise<string[]> {
+async function runRomanizeLines(lines: readonly string[], signal?: AbortSignal): Promise<string[]> {
   const result = Array.from(lines);
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -539,7 +531,7 @@ async function runRomanizeLines(
  * Simultaneous identical song requests share one Promise. This handles the
  * SPlayer case where multiple windows/surfaces ask for the same romanization.
  */
-export function romanizeLines(
+async function romanizeLineArray(
   lines: readonly string[],
   signal?: AbortSignal,
 ): Promise<string[]> {
@@ -564,6 +556,52 @@ export function romanizeLines(
   inFlightSongs.set(songKey, promise);
   return promise;
 }
+
+/**
+ * 将歌词行转换为罗马音。
+ * @param input - 原文歌词行
+ * @returns 按原文索引的罗马音结果
+ */
+export async function romanizeLines(input: unknown): Promise<Record<string, string>> {
+  const lines = Array.isArray(input)
+    ? [
+        ...new Set(
+          input.filter(
+            (line): line is string =>
+              typeof line === "string" && line.length <= MAX_LINE_LENGTH && needsRomanization(line),
+          ),
+        ),
+      ]
+    : [];
+  const result: Record<string, string> = {};
+  const missing: string[] = [];
+
+  for (const line of lines) {
+    const cached = getCachedRomanization(line);
+    if (cached) {
+      setCachedLine(line, cached);
+      result[line] = cached;
+    } else {
+      missing.push(line);
+    }
+  }
+
+  const readings = await romanizeLineArray(missing);
+  for (const [index, reading] of readings.entries()) {
+    const line = missing[index];
+    if (!line || needsRomanization(reading)) continue;
+
+    result[line] = reading;
+    setCachedRomanization(line, reading);
+  }
+
+  return result;
+}
+
+/** 注册 Google 罗马音转换 IPC */
+export const registerRomanizationIpc = (): void => {
+  ipcMain.handle("lyrics:romanize", (_event, input: unknown) => romanizeLines(input));
+};
 
 /**
  * Useful when logging/debugging the limiter state from your existing system IPC.
