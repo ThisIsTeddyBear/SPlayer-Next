@@ -8,6 +8,7 @@ import { buildLineElements } from "@/components/player/Lyrics/engine/line-builde
 
 const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
+  romanizationCache: new Map<string, string>(),
   settings: {
     locale: "en-US",
     lyric: { showRomanization: true, cjkTransform: "none", enableExcludeLyrics: false },
@@ -19,6 +20,11 @@ vi.mock("@/stores/settings", () => ({ useSettingsStore: () => mocks.settings }))
 vi.mock("@main/ipc/trusted", () => ({ ipcMain: { handle: vi.fn() } }));
 vi.mock("@main/utils/proxy", () => ({ fetchWithProxy: mocks.fetch }));
 vi.mock("@main/utils/logger", () => ({ systemLog: { warn: vi.fn() } }));
+vi.mock("@main/database/lyricRomanizationCache", () => ({
+  getCachedRomanization: (text: string) => mocks.romanizationCache.get(text),
+  setCachedRomanization: (text: string, reading: string) =>
+    mocks.romanizationCache.set(text, reading),
+}));
 
 const { romanizeLines } = await vi.importActual<{ romanizeLines: LyricsApi["romanize"] }>(
   "@main/ipc/romanization",
@@ -51,6 +57,7 @@ describe("media romanization through TTML and IPC", () => {
       lyric: { showRomanization: true, cjkTransform: "none", enableExcludeLyrics: false },
       preset: { uncensorProfanity: false },
     });
+    mocks.romanizationCache.clear();
     mocks.fetch.mockImplementation(
       async () =>
         new Response(JSON.stringify([[[null, null, null, "tumko bhi hai khabar"]], null, "hi"])),
@@ -80,6 +87,13 @@ describe("media romanization through TTML and IPC", () => {
     expect(rendered.lineElements[0].querySelector(".lp-sub")?.textContent).toBe(
       "tumko bhi hai khabar",
     );
+  });
+
+  it("uses the persisted lyric cache before contacting Google", async () => {
+    mocks.romanizationCache.set("缓存歌词", "Huan cun ge ci");
+    const readings = await romanizeLines(["缓存歌词"]);
+    expect(readings).toEqual({ 缓存歌词: "Huan cun ge ci" });
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
   it("enriches the result after CJK conversion replaces the lyric array", async () => {

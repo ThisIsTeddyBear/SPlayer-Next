@@ -2,9 +2,10 @@ import { ipcMain } from "./trusted";
 import { fetchWithProxy } from "@main/utils/proxy";
 import { systemLog } from "@main/utils/logger";
 import {
-  extractGoogleRomanization,
-  needsRomanization,
-} from "@shared/utils/romanization";
+  getCachedRomanization,
+  setCachedRomanization,
+} from "@main/database/lyricRomanizationCache";
+import { extractGoogleRomanization, needsRomanization } from "@shared/utils/romanization";
 
 const TIMEOUT_MS = 6_000;
 const RETRIES = 3;
@@ -20,9 +21,32 @@ const storeReading = (text: string, reading: string): void => {
   while (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value!);
 };
 
+const getPersistedReading = (text: string): string | undefined => {
+  try {
+    return getCachedRomanization(text);
+  } catch (error) {
+    systemLog.warn("[romanization] Persistent lyric cache read failed", error);
+    return undefined;
+  }
+};
+
+const persistReading = (text: string, reading: string): void => {
+  try {
+    setCachedRomanization(text, reading);
+  } catch (error) {
+    systemLog.warn("[romanization] Persistent lyric cache write failed", error);
+  }
+};
+
 const romanizeText = async (text: string): Promise<string | undefined> => {
   const cached = cache.get(text);
   if (cached) return cached;
+
+  const persisted = getPersistedReading(text);
+  if (persisted) {
+    storeReading(text, persisted);
+    return persisted;
+  }
 
   const url = new URL("https://translate.googleapis.com/translate_a/single");
   url.search = new URLSearchParams({
@@ -40,10 +64,11 @@ const romanizeText = async (text: string): Promise<string | undefined> => {
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      const reading = extractGoogleRomanization((await response.json()) as unknown);
+      const reading = extractGoogleRomanization((await response.json()) as unknown, text);
       if (!reading) return undefined;
 
       storeReading(text, reading);
+      persistReading(text, reading);
       return reading;
     } catch (error) {
       if (attempt + 1 === RETRIES) {
@@ -69,9 +94,7 @@ export const romanizeLines = async (input: unknown): Promise<Record<string, stri
         ...new Set(
           input.filter(
             (line): line is string =>
-              typeof line === "string" &&
-              line.length <= MAX_LINE_LENGTH &&
-              needsRomanization(line),
+              typeof line === "string" && line.length <= MAX_LINE_LENGTH && needsRomanization(line),
           ),
         ),
       ]

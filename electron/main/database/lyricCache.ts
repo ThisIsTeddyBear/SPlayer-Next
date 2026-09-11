@@ -11,6 +11,7 @@
 import type { LyricMatchResult } from "@shared/types/lyrics";
 import type { Platform } from "@shared/types/platform";
 import { getDb } from "./index";
+import { clearLyricRomanizationCache } from "./lyricRomanizationCache";
 
 /** 按 (platform, platformId) 命中原始接口返回，未命中返回 null */
 export const getCachedLyric = (platform: Platform, platformId: string): LyricMatchResult | null => {
@@ -44,4 +45,5 @@ export const setCachedLyric = (
 /** 清空全部歌词缓存（给"存储管理"按钮用） */
 export const clearLyricCache = (): void => {
   getDb().prepare("DELETE FROM lyric_cache").run();
+  clearLyricRomanizationCache();
 };
