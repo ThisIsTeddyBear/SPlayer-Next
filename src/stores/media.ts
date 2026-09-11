@@ -10,6 +10,7 @@ import { applyLyricExclude } from "@/utils/lyric/lyricStripper";
 import { normalizeLyricLines } from "@/utils/lyric/normalize";
 import { applyProfanityUncensor } from "@/utils/preset/profanity";
 import { applyLyricCjkTransform } from "@/utils/lyric/cjkTransform";
+import { applyGeneratedRomanization, collectMissingRomanization } from "@/utils/lyric/romanization";
 
 export const useMediaStore = defineStore("media", () => {
   watchLyricPreference();
@@ -95,9 +96,54 @@ export const useMediaStore = defineStore("media", () => {
   };
 
   let transformToken = 0;
+  let cjkTransformPromise: Promise<void> = Promise.resolve();
+  let romanizationRequestId = 0;
+  let romanizationResult: LyricLine[] | null = null;
+
+  /**
+   * 为没有内嵌转写的当前歌词补全 Google Translate 罗马音。
+   * @param lines - 发起请求时的歌词
+   * @param requestId - 当前请求编号
+   */
+  const fillMissingRomanization = async (lines: LyricLine[], requestId: number): Promise<void> => {
+    await cjkTransformPromise;
+    if (requestId !== romanizationRequestId || parsedLyric.value !== lines) return;
+
+    const missing = collectMissingRomanization(lines);
+    if (missing.length === 0) return;
+
+    try {
+      const readings = await window.api.lyrics.romanize(missing);
+      if (requestId !== romanizationRequestId || parsedLyric.value !== lines) return;
+
+      const enriched = applyGeneratedRomanization(lines, readings);
+      if (enriched !== lines) {
+        romanizationResult = enriched;
+        parsedLyric.value = enriched;
+        syncToMain();
+      }
+    } catch (error) {
+      console.warn("[media] lyric romanization failed", error);
+    }
+  };
+
+  watch(
+    [parsedLyric, () => useSettingsStore().lyric.showRomanization],
+    ([lines, visible], [, wasVisible]) => {
+      const ownResult = lines === romanizationResult;
+      romanizationResult = null;
+      if (ownResult && visible === wasVisible) return;
+
+      const requestId = ++romanizationRequestId;
+      if (visible && lines.length > 0) void fillMissingRomanization(lines, requestId);
+    },
+    { flush: "post" },
+  );
 
   const resetLyricState = (): void => {
     ++transformToken;
+    ++romanizationRequestId;
+    cjkTransformPromise = Promise.resolve();
 
     activeLyric.value = null;
     lyricContent.value = null;
@@ -121,6 +167,8 @@ export const useMediaStore = defineStore("media", () => {
    */
   const setLyric = (source: LyricData, input: LyricInput | null): void => {
     const cjkToken = ++transformToken;
+    ++romanizationRequestId;
+    cjkTransformPromise = Promise.resolve();
 
     let nextLines: LyricLine[] = [];
     const settings = useSettingsStore();
@@ -154,7 +202,7 @@ export const useMediaStore = defineStore("media", () => {
 
     const cjkMode = settings.lyric.cjkTransform;
     if (hasContent && cjkMode && cjkMode !== "none") {
-      void applyLyricCjkTransform(nextLines, cjkMode)
+      cjkTransformPromise = applyLyricCjkTransform(nextLines, cjkMode)
         .then((transformed) => {
           if (cjkToken !== transformToken) return;
 
@@ -175,6 +223,8 @@ export const useMediaStore = defineStore("media", () => {
 
   const clear = (): void => {
     ++transformToken;
+    ++romanizationRequestId;
+    cjkTransformPromise = Promise.resolve();
 
     track.value = null;
     playbackContext.value = undefined;

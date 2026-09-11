@@ -86,6 +86,7 @@ export type LyricMatchResponse =
 export type LyricTTMLResponse = { ok: true; data: string | null } | { ok: false; error: string };
 
 export interface LyricsApi {
+  romanize: (lines: string[]) => Promise<Record<string, string>>;
   matchById: (platform: Platform, id: string) => Promise<LyricMatchResponse>;
   matchByQuery: (platform: Platform, track: Track) => Promise<LyricMatchResponse>;
   fetchTTMLOverlay: (track: Track, platform: "netease" | "qqmusic") => Promise<LyricTTMLResponse>;
