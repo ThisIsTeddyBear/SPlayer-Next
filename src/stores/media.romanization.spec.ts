@@ -18,7 +18,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/services/lyric/loader", () => ({ watchLyricPreference: vi.fn() }));
 vi.mock("@/stores/settings", () => ({ useSettingsStore: () => mocks.settings }));
 vi.mock("@main/ipc/trusted", () => ({ ipcMain: { handle: vi.fn() } }));
-vi.mock("@main/utils/proxy", () => ({ fetchWithProxy: mocks.fetch }));
 vi.mock("@main/utils/logger", () => ({ systemLog: { warn: vi.fn() } }));
 vi.mock("@main/database/lyricRomanizationCache", () => ({
   getCachedRomanization: (text: string) => mocks.romanizationCache.get(text),
@@ -58,6 +57,7 @@ describe("media romanization through TTML and IPC", () => {
       preset: { uncensorProfanity: false },
     });
     mocks.romanizationCache.clear();
+    vi.stubGlobal("fetch", mocks.fetch);
     mocks.fetch.mockImplementation(
       async () =>
         new Response(JSON.stringify([[[null, null, null, "tumko bhi hai khabar"]], null, "hi"])),
@@ -69,7 +69,10 @@ describe("media romanization through TTML and IPC", () => {
     } as unknown as typeof window.api;
   });
 
-  afterEach(() => disposePinia(pinia));
+  afterEach(() => {
+    disposePinia(pinia);
+    vi.unstubAllGlobals();
+  });
 
   it("fills a Hindi TTML with no transliterations via the real IPC implementation", async () => {
     const media = useMediaStore();

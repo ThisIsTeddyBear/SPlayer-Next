@@ -1,5 +1,4 @@
 import { ipcMain } from "./trusted";
-import { fetchWithProxy } from "@main/utils/proxy";
 import { systemLog } from "@main/utils/logger";
 import {
   getCachedRomanization,
@@ -59,7 +58,7 @@ const romanizeText = async (text: string): Promise<string | undefined> => {
 
   for (let attempt = 0; attempt < RETRIES; attempt++) {
     try {
-      const response = await fetchWithProxy(url, {
+      const response = await fetch(url, {
         signal: AbortSignal.timeout(TIMEOUT_MS),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
