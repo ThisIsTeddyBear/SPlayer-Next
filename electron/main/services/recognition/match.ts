@@ -9,17 +9,30 @@ const MATCH_URL = "https://www.shazam.com/services/webrec/match_extensionv2";
 const COUNT_URL = "https://amp.shazam.com/count/v2/web/track";
 const installationId = randomUUID();
 
-interface ShazamMatch {
+interface ShazamArtist {
+  name?: string;
+}
+
+interface ShazamAttributes {
+  title?: string;
+  name?: string;
+  subtitle?: string;
+  artist?: string;
+  artistName?: string;
+  artistNames?: string[];
+  artists?: Array<string | ShazamArtist>;
+  album?: string;
+  albumName?: string;
+  releaseDate?: string;
+  releaseYear?: string | number;
+  webUrl?: string;
+  appleMusicUrl?: string;
+  images?: { coverArtHq?: string; coverart?: string };
+}
+
+interface ShazamMatch extends ShazamAttributes {
   trackId?: string | number;
-  attributes?: {
-    title?: string;
-    subtitle?: string;
-    album?: string;
-    releaseDate?: string;
-    webUrl?: string;
-    appleMusicUrl?: string;
-    images?: { coverArtHq?: string; coverart?: string };
-  };
+  attributes?: ShazamAttributes;
 }
 
 interface MatchResponse {
@@ -88,22 +101,40 @@ export const matchAudio = async (signature: Uint8Array): Promise<MatchResult> =>
     }
     const match = body.results?.matches?.[0];
     const trackId = match?.trackId;
-    const title = match?.attributes?.title;
+    const attributes = match?.attributes ?? match;
+    const title = attributes?.title ?? attributes?.name;
     if (!trackId || !title) return { ok: true, candidates: [] };
     const normalizedId = String(trackId);
-    const releaseYear = match.attributes?.releaseDate?.match(/^\d{4}/)?.[0];
+    const artistNames = Array.isArray(attributes?.artistNames)
+      ? attributes.artistNames.filter((artist) => artist.trim())
+      : [];
+    const artists = Array.isArray(attributes?.artists)
+      ? attributes.artists
+          .map((artist) => (typeof artist === "string" ? artist : artist.name))
+          .filter((artist): artist is string => Boolean(artist?.trim()))
+      : [];
+    const fallbackArtist = attributes?.subtitle ?? attributes?.artistName ?? attributes?.artist;
+    const releaseYear = String(attributes?.releaseDate ?? attributes?.releaseYear ?? "").match(
+      /^\d{4}/,
+    )?.[0];
     return {
       ok: true,
       candidates: [
         {
           songId: normalizedId,
           title,
-          artists: match.attributes?.subtitle ? [match.attributes.subtitle] : [],
-          album: match.attributes?.album,
+          artists: artistNames.length
+            ? artistNames
+            : artists.length
+              ? artists
+              : fallbackArtist
+                ? [fallbackArtist]
+                : [],
+          album: attributes?.album ?? attributes?.albumName,
           releaseYear,
-          cover: match.attributes?.images?.coverArtHq ?? match.attributes?.images?.coverart,
-          shazamUrl: match.attributes?.webUrl,
-          appleMusicUrl: match.attributes?.appleMusicUrl,
+          cover: attributes?.images?.coverArtHq ?? attributes?.images?.coverart,
+          shazamUrl: attributes?.webUrl,
+          appleMusicUrl: attributes?.appleMusicUrl,
           tagCount: await getTagCount(normalizedId),
         },
       ],
