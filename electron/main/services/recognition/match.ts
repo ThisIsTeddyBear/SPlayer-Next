@@ -15,6 +15,7 @@ interface ShazamMatch {
     title?: string;
     subtitle?: string;
     album?: string;
+    releaseDate?: string;
     webUrl?: string;
     appleMusicUrl?: string;
     images?: { coverArtHq?: string; coverart?: string };
@@ -30,6 +31,7 @@ export interface ShazamCandidate {
   title: string;
   artists: string[];
   album?: string;
+  releaseYear?: string;
   cover?: string;
   shazamUrl?: string;
   appleMusicUrl?: string;
@@ -89,6 +91,7 @@ export const matchAudio = async (signature: Uint8Array): Promise<MatchResult> =>
     const title = match?.attributes?.title;
     if (!trackId || !title) return { ok: true, candidates: [] };
     const normalizedId = String(trackId);
+    const releaseYear = match.attributes?.releaseDate?.match(/^\d{4}/)?.[0];
     return {
       ok: true,
       candidates: [
@@ -97,6 +100,7 @@ export const matchAudio = async (signature: Uint8Array): Promise<MatchResult> =>
           title,
           artists: match.attributes?.subtitle ? [match.attributes.subtitle] : [],
           album: match.attributes?.album,
+          releaseYear,
           cover: match.attributes?.images?.coverArtHq ?? match.attributes?.images?.coverart,
           shazamUrl: match.attributes?.webUrl,
           appleMusicUrl: match.attributes?.appleMusicUrl,

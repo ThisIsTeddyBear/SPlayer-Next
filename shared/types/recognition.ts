@@ -24,6 +24,7 @@ export interface RecognitionCandidate {
   title: string;
   artists: string[];
   album?: string;
+  releaseYear?: string;
   cover?: string;
   shazamUrl?: string;
   appleMusicUrl?: string;

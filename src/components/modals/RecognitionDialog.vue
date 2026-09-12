@@ -160,11 +160,19 @@ const start = (): void => void session.start();
             <p class="line-clamp-2 text-lg leading-6 font-bold text-on-surface">
               {{ candidate.title }}
             </p>
-            <p class="mt-1.5 truncate text-sm font-medium text-on-surface-variant/75">
+            <p
+              v-if="candidate.artists.length"
+              class="mt-1.5 truncate text-sm font-medium text-on-surface-variant/75"
+            >
               {{ candidate.artists.join(" / ") }}
             </p>
-            <p v-if="candidate.album" class="mt-1 truncate text-xs text-on-surface-variant/55">
-              {{ candidate.album }}
+            <p
+              v-if="candidate.album || candidate.releaseYear"
+              class="mt-1 truncate text-xs text-on-surface-variant/55"
+            >
+              <span v-if="candidate.album">{{ candidate.album }}</span>
+              <span v-if="candidate.album && candidate.releaseYear" aria-hidden="true">·</span>
+              <span v-if="candidate.releaseYear">{{ candidate.releaseYear }}</span>
             </p>
           </div>
         </div>
