@@ -32,7 +32,7 @@ pub struct JsCaptureConfig {
 
 #[napi(object)]
 pub struct JsCaptureEvent {
-    /// "level" | "done" | "error"
+    /// "level" | "snapshot" | "done" | "error"
     pub event_type: String,
     /// 8 kHz 单声道 f32 LE 原始字节（仅 done 事件，cancelled 时为 None）
     pub data: Option<Buffer>,
@@ -42,6 +42,8 @@ pub struct JsCaptureEvent {
     pub error: Option<String>,
     /// 错误码："unsupported" | "no-device" | "permission-denied" | "capture-failed"
     pub error_code: Option<String>,
+    /// snapshot 事件的 PCM 采样率
+    pub sample_rate: Option<u32>,
 }
 
 struct AudioCaptureSessionInner {

@@ -413,9 +413,6 @@ const api = {
     cancel: () => ipcRenderer.invoke("recognition:cancel"),
     /**
      */
-    submitPcm: (pcm: Float32Array) => ipcRenderer.invoke("recognition:submitPcm", pcm),
-    /**
-     */
     onEvent: (callback: (event: RecognitionEvent) => void) => {
       ipcRenderer.removeAllListeners("recognition:event");
       return subscribe<RecognitionEvent>("recognition:event", callback);

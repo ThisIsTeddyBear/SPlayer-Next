@@ -1,70 +1,111 @@
-/**
- * 听歌识曲结果适配
- */
+/** Shazam 匹配服务适配。 */
 
-import { randomBytes } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { app } from "electron";
 import { fetchWithProxy } from "@main/utils/proxy";
 import { recognitionLog } from "@main/utils/logger";
 
-const MATCH_URL = "https://interface.music.163.com/api/music/audio/match";
+const MATCH_URL = "https://www.shazam.com/services/webrec/match_extensionv2";
+const COUNT_URL = "https://amp.shazam.com/count/v2/web/track";
+const installationId = randomUUID();
 
-/** 匹配接口返回的原始歌曲信息 */
-export interface MatchedSong {
-  id: number;
-  name: string;
-  artists: { name: string }[];
-  album?: { name: string; picUrl?: string };
-}
-
-interface MatchResponse {
-  code?: number;
-  data?: {
-    result?: { startTime?: number; song?: MatchedSong }[];
+interface ShazamMatch {
+  trackId?: string | number;
+  attributes?: {
+    title?: string;
+    subtitle?: string;
+    album?: string;
+    webUrl?: string;
+    appleMusicUrl?: string;
+    images?: { coverArtHq?: string; coverart?: string };
   };
 }
 
-type MatchResult =
-  { ok: true; songs: { song: MatchedSong; startTime?: number }[] } | { ok: false; code: "network" };
+interface MatchResponse {
+  results?: { matches?: ShazamMatch[] };
+}
+
+export interface ShazamCandidate {
+  songId: string;
+  title: string;
+  artists: string[];
+  album?: string;
+  cover?: string;
+  shazamUrl?: string;
+  appleMusicUrl?: string;
+  tagCount?: number;
+}
+
+type MatchResult = { ok: true; candidates: ShazamCandidate[] } | { ok: false; code: "network" };
+
+/** 根据系统区域生成 Shazam 请求参数 */
+const getLocale = (): { language: string; country: string } => {
+  const locale = app.getLocale() || "en-US";
+  const [language = "en", country = "US"] = locale.split("-");
+  return { language, country: country.toUpperCase() };
+};
+
+/** 读取歌曲的 Shazam 识别次数；该副请求失败不影响匹配结果 */
+const getTagCount = async (trackId: string): Promise<number | undefined> => {
+  try {
+    const response = await fetchWithProxy(`${COUNT_URL}/${encodeURIComponent(trackId)}`, {
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) return undefined;
+    const body = (await response.json()) as { total?: unknown };
+    return typeof body.total === "number" ? body.total : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 /**
- * 将音频指纹交给网易云模块匹配
- * @param fingerprint - AFP 生成的指纹字符串
- * @param durationSec - 音频片段时长，单位为秒
- * @returns 最多三个候选，失败时返回网络错误
+ * 将 Shazam 二进制签名提交给匹配服务
+ * @param signature - sigx 生成的二进制签名
+ * @returns 第一个匹配候选，失败时返回网络错误
  */
-export const matchAudio = async (
-  fingerprint: string,
-  durationSec: number,
-): Promise<MatchResult> => {
+export const matchAudio = async (signature: Uint8Array): Promise<MatchResult> => {
   try {
-    const params = new URLSearchParams({
-      sessionId: randomBytes(8).toString("hex"),
-      algorithmCode: "shazam_v2",
-      duration: String(durationSec),
-      rawdata: fingerprint,
-      times: "1",
-      decrypt: "1",
-    });
-    const response = await fetchWithProxy(`${MATCH_URL}?${params}`, {
-      headers: {
-        Accept: "application/json",
-        Referer: "https://music.163.com/",
-        "User-Agent": "Mozilla/5.0",
-      },
-      signal: AbortSignal.timeout(8_000),
+    const { language, country } = getLocale();
+    const response = await fetchWithProxy(MATCH_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        data: Buffer.from(signature).toString("base64"),
+        sessionId: randomUUID(),
+        inid: installationId,
+        lang: language,
+        country,
+      }),
+      signal: AbortSignal.timeout(10_000),
     });
     const body = (await response.json()) as MatchResponse;
-    if (!response.ok || body.code !== 200) {
-      recognitionLog.error(`音频匹配接口错误: HTTP ${response.status}, code=${body.code}`);
+    if (!response.ok) {
+      recognitionLog.error(`Shazam 匹配接口错误: HTTP ${response.status}`);
       return { ok: false, code: "network" };
     }
-    const songs = (body.data?.result ?? [])
-      .filter((item): item is { startTime?: number; song: MatchedSong } => !!item.song)
-      .slice(0, 3)
-      .map((item) => ({ song: item.song, startTime: item.startTime }));
-    return { ok: true, songs };
+    const match = body.results?.matches?.[0];
+    const trackId = match?.trackId;
+    const title = match?.attributes?.title;
+    if (!trackId || !title) return { ok: true, candidates: [] };
+    const normalizedId = String(trackId);
+    return {
+      ok: true,
+      candidates: [
+        {
+          songId: normalizedId,
+          title,
+          artists: match.attributes?.subtitle ? [match.attributes.subtitle] : [],
+          album: match.attributes?.album,
+          cover: match.attributes?.images?.coverArtHq ?? match.attributes?.images?.coverart,
+          shazamUrl: match.attributes?.webUrl,
+          appleMusicUrl: match.attributes?.appleMusicUrl,
+          tagCount: await getTagCount(normalizedId),
+        },
+      ],
+    };
   } catch (error) {
-    recognitionLog.error("音频匹配请求失败:", error);
+    recognitionLog.error("Shazam 匹配请求失败:", error);
     return { ok: false, code: "network" };
   }
 };

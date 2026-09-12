@@ -2,9 +2,6 @@
  * 听歌识曲（Recognition）共享类型
  */
 
-/** 采集来源 */
-export type RecognitionSource = "system" | "microphone";
-
 /** 识别流程阶段 */
 export type RecognitionPhase =
   "idle" | "capturing" | "fingerprinting" | "matching" | "done" | "error";
@@ -17,19 +14,20 @@ export type RecognitionErrorCode =
   | "capture-failed"
   | "silent-input"
   | "network"
-  | "afp-unavailable"
+  | "signature-unavailable"
   | "unknown";
 
 /** 识别候选 */
 export interface RecognitionCandidate {
-  /** 歌曲 id */
+  /** Shazam 歌曲 id */
   songId: string;
   title: string;
   artists: string[];
   album?: string;
   cover?: string;
-  /** 在音频片段中的起始时间（秒） */
-  startTime?: number;
+  shazamUrl?: string;
+  appleMusicUrl?: string;
+  tagCount?: number;
 }
 
 /** 识别错误 */
@@ -51,7 +49,6 @@ export interface RecognitionEvent {
 
 /** 启动识别会话的配置 */
 export interface RecognitionConfig {
-  source: RecognitionSource;
   /** 最大采集时长（毫秒） */
   durationMs: number;
 }
@@ -61,6 +58,5 @@ export interface RecognitionApi {
   isSupported: () => Promise<boolean>;
   start: (config: RecognitionConfig) => Promise<unknown>;
   cancel: () => Promise<unknown>;
-  submitPcm: (pcm: Float32Array) => Promise<unknown>;
   onEvent: (callback: (event: RecognitionEvent) => void) => () => void;
 }

@@ -11,7 +11,7 @@ const router = useRouter();
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ "update:open": [value: boolean] }>();
 const session = useRecognitionSession();
-const { phase, level, candidates, error, supported, source } = session;
+const { phase, level, candidates, error, supported } = session;
 
 const isBusy = computed(() => ["capturing", "fingerprinting", "matching"].includes(phase.value));
 
@@ -59,9 +59,7 @@ const onOpenUpdate = (value: boolean): void => {
   emit("update:open", value);
 };
 
-const start = (): void => {
-  void session.start(source.value);
-};
+const start = (): void => void session.start();
 </script>
 
 <template>
@@ -114,23 +112,8 @@ const start = (): void => {
               {{ isBusy ? t(`recognition.phase.${phase}`) : t("recognition.description") }}
             </p>
             <p class="mt-1 max-w-80 text-xs leading-5 text-on-surface-variant/60 text-pretty">
-              {{ isBusy ? t(`recognition.source.${source}`) : t(`recognition.hint.${source}`) }}
+              {{ isBusy ? t("recognition.systemAudio") : t("recognition.hint") }}
             </p>
-          </div>
-        </div>
-
-        <div
-          v-if="phase === 'idle' && supported"
-          class="mt-auto flex h-8 shrink-0 items-center justify-center"
-        >
-          <div class="flex items-center gap-5">
-            <span class="text-xs text-on-surface-variant/60">
-              {{ t("recognition.sourceLabel") }}
-            </span>
-            <SRadioGroup v-model:value="source" size="small" class="flex gap-4">
-              <SRadio value="system" :label="t('recognition.source.system')" />
-              <SRadio value="microphone" :label="t('recognition.source.microphone')" />
-            </SRadioGroup>
           </div>
         </div>
       </div>

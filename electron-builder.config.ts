@@ -69,11 +69,7 @@ const config: Configuration = {
       to: "native",
       filter: ["*.node"],
     },
-    {
-      from: "resources/afp",
-      to: "afp",
-      filter: ["afp.mjs", "afp.wasm.mjs"],
-    },
+    { from: "resources/shazam", to: "shazam", filter: ["sigx.cjs", "sigx.wasm"] },
     {
       from: "native/media-ctrl",
       to: "native",

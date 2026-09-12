@@ -38,10 +38,10 @@ export default defineConfig({
           index: resolve(__dirname, "electron/main/index.ts"),
           // 插件 host worker
           "host.worker": resolve(__dirname, "electron/main/plugins/host.worker.ts"),
-          // 听歌识曲指纹 worker
-          "fingerprint.worker": resolve(
+          // Shazam 签名 worker
+          "signature.worker": resolve(
             __dirname,
-            "electron/main/services/recognition/fingerprint.worker.ts",
+            "electron/main/services/recognition/signature.worker.ts",
           ),
         },
       },

@@ -74,6 +74,7 @@ pub struct CaptureSink {
     level_count: usize,
     level_pending: usize,
     level_interval: usize,
+    next_snapshot_seconds: u32,
 }
 
 impl CaptureSink {
@@ -88,6 +89,7 @@ impl CaptureSink {
             level_count: 0,
             level_pending: 0,
             level_interval: 1,
+            next_snapshot_seconds: 3,
         };
         sink.set_sample_rate(sample_rate);
         sink.mono.reserve(sink.target_samples);
@@ -110,6 +112,7 @@ impl CaptureSink {
             }
         }
         self.mono.extend_from_slice(samples);
+        self.emit_ready_snapshots();
     }
 
     pub fn push_silence(&mut self, frames: usize) {
@@ -120,6 +123,7 @@ impl CaptureSink {
             }
         }
         self.mono.extend(std::iter::repeat_n(0.0f32, frames));
+        self.emit_ready_snapshots();
     }
 
     pub fn ready(&self) -> bool {
@@ -148,7 +152,30 @@ impl CaptureSink {
             level: Some(level),
             error: None,
             error_code: None,
+            sample_rate: None,
         });
+    }
+
+    fn emit_ready_snapshots(&mut self) {
+        while self.next_snapshot_seconds * 1000 <= self.duration_ms {
+            let sample_count = self.sample_rate as usize * self.next_snapshot_seconds as usize;
+            if self.mono.len() < sample_count {
+                break;
+            }
+            let mut bytes = Vec::with_capacity(sample_count * 4);
+            for sample in &self.mono[..sample_count] {
+                bytes.extend_from_slice(&sample.to_le_bytes());
+            }
+            (self.emitter)(JsCaptureEvent {
+                event_type: "snapshot".into(),
+                data: Some(Buffer::from(bytes)),
+                level: None,
+                error: None,
+                error_code: None,
+                sample_rate: Some(self.sample_rate),
+            });
+            self.next_snapshot_seconds += 3;
+        }
     }
 
     pub fn emit_done(&mut self, cancelled: bool) {
@@ -170,6 +197,7 @@ impl CaptureSink {
             level: None,
             error: None,
             error_code: None,
+            sample_rate: None,
         });
         self.mono.clear();
     }
@@ -182,6 +210,7 @@ impl CaptureSink {
             level: None,
             error: Some(error.to_string()),
             error_code: Some(error.code().into()),
+            sample_rate: None,
         });
     }
 }

@@ -7,7 +7,6 @@ import {
   startRecognition,
   cancelRecognition,
   isRecognitionSupported,
-  submitPcm,
 } from "@main/services/recognition";
 import type { RecognitionConfig } from "@shared/types/recognition";
 
@@ -20,11 +19,6 @@ export const registerRecognitionIpc = (): void => {
   });
   ipcMain.handle("recognition:cancel", () => {
     cancelRecognition();
-    return { success: true };
-  });
-  // 渲染进程麦克风（macOS/Linux）路径：结构化克隆传入 8 kHz 单声道 PCM
-  ipcMain.handle("recognition:submitPcm", (_event, pcm: Float32Array) => {
-    submitPcm(pcm);
     return { success: true };
   });
 };

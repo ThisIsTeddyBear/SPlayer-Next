@@ -233,22 +233,15 @@
     "title": "Music Recognition",
     "entry": "Recognize",
     "description": "Identify the music currently playing",
-    "start": "Start Recognition",
-    "sourceLabel": "Audio source",
-    "hint": {
-      "system": "We will capture a short audio sample from your system to identify the music",
-      "microphone": "Move closer to the source and keep the room quiet for better results"
-    },
-    "source": {
-      "system": "System Audio",
-      "microphone": "Microphone"
-    },
+    "start": "Identify with Shazam",
+    "hint": "We will listen to system audio and try again at 3, 6, 9, and 12 seconds",
+    "systemAudio": "Listening to system audio",
     "phase": {
       "capturing": "Listening…",
-      "fingerprinting": "Generating fingerprint…",
-      "matching": "Matching library…"
+      "fingerprinting": "Creating Shazam signature…",
+      "matching": "Searching Shazam…"
     },
-    "empty": "No song identified, move closer to the sound source and retry",
+    "empty": "No song identified from system audio, please try again",
     "retry": "Try Again",
     "cancel": "Cancel",
     "play": "Play",
@@ -256,12 +249,11 @@
     "searching": "Search this song",
     "error": {
       "unsupported": "System audio capture is not supported on this platform",
-      "no-device": "No audio input device found",
-      "permission-denied": "Microphone permission denied, please grant access in system settings",
+      "no-device": "No system audio device found",
+      "permission-denied": "System audio capture permission denied",
       "capture-failed": "Audio capture failed",
-      "silent-input": "No sound detected, please check audio output",
       "network": "Matching service unavailable, please try again later",
-      "afp-unavailable": "Audio fingerprint library unavailable",
+      "signature-unavailable": "Shazam signature library unavailable",
       "unknown": "Recognition failed, please try again"
     }
   },
