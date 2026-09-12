@@ -4,12 +4,12 @@ import { toast } from "@/composables/useToast";
 import { useRecognitionSession } from "@/composables/useRecognitionSession";
 import { openExternal } from "@/utils/url";
 import IconLucideArrowLeft from "~icons/lucide/arrow-left";
-import IconLucideAudioLines from "~icons/lucide/audio-lines";
 import IconLucideAudioWaveform from "~icons/lucide/audio-waveform";
-import IconLucideCirclePlay from "~icons/lucide/circle-play";
-import IconLucideCloud from "~icons/lucide/cloud";
-import IconLucideMusic2 from "~icons/lucide/music-2";
 import IconLucideSearch from "~icons/lucide/search";
+import IconSpAppleMusic from "~icons/sp/apple-music";
+import IconSpSoundcloud from "~icons/sp/soundcloud";
+import IconSpSpotify from "~icons/sp/spotify";
+import IconSpYoutube from "~icons/sp/youtube";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -142,77 +142,87 @@ const start = (): void => void session.start();
         </div>
       </div>
 
-      <div v-else-if="phase === 'done' && candidate" class="flex min-h-0 flex-1 flex-col pt-1">
-        <p class="mb-3 text-center text-xs font-medium tracking-wide text-primary uppercase">
-          {{ t("recognition.matchFound") }}
-        </p>
-        <div class="flex items-center gap-4 rounded-xl bg-on-surface/5 p-3">
+      <div v-else-if="phase === 'done' && candidate" class="flex min-h-0 flex-1 flex-col pt-4">
+        <div
+          class="relative flex items-center gap-4 overflow-hidden rounded-2xl bg-on-surface/6 p-4"
+        >
+          <div
+            class="pointer-events-none absolute -right-10 -top-10 size-36 rounded-full bg-primary/12 blur-3xl"
+            aria-hidden="true"
+          />
           <SImg
             :src="candidate.cover"
             :alt="candidate.title"
-            class="size-20 shrink-0 rounded-lg outline outline-1 outline-black/10 dark:outline-white/10"
+            class="relative size-24 shrink-0 rounded-xl shadow-lg outline outline-1 outline-black/10 dark:outline-white/10"
             decoding="async"
           />
-          <div class="min-w-0 flex-1">
-            <p class="truncate text-base font-semibold text-on-surface">{{ candidate.title }}</p>
-            <p class="mt-1 truncate text-sm text-on-surface-variant/70">
+          <div class="relative min-w-0 flex-1">
+            <p class="line-clamp-2 text-lg leading-6 font-bold text-on-surface">
+              {{ candidate.title }}
+            </p>
+            <p class="mt-1.5 truncate text-sm font-medium text-on-surface-variant/75">
               {{ candidate.artists.join(" / ") }}
             </p>
-            <p v-if="candidate.album" class="mt-1 truncate text-xs text-on-surface-variant/50">
+            <p v-if="candidate.album" class="mt-1 truncate text-xs text-on-surface-variant/55">
               {{ candidate.album }}
             </p>
           </div>
         </div>
-        <SButton class="mt-4" type="primary" size="large" block @click="searchCandidate(candidate)">
+        <SButton
+          class="mt-5 font-semibold"
+          type="primary"
+          size="large"
+          block
+          @click="searchCandidate(candidate)"
+        >
           <template #icon><IconLucideSearch /></template>
           {{ t("recognition.searching") }}
         </SButton>
-        <div class="mt-4 border-t border-solid border-outline-variant/35 pt-3">
-          <p class="mb-2 text-center text-xs text-on-surface-variant/55">
-            {{ t("recognition.listenOn") }}
-          </p>
-          <div class="flex items-center justify-center gap-2">
-            <SButton
-              variant="tertiary"
-              circle
-              size="large"
-              :title="t('recognition.services.appleMusic')"
-              :aria-label="t('recognition.services.appleMusic')"
-              @click="openInService('appleMusic')"
-            >
-              <template #icon><IconLucideMusic2 /></template>
-            </SButton>
-            <SButton
-              variant="tertiary"
-              circle
-              size="large"
-              :title="t('recognition.services.spotify')"
-              :aria-label="t('recognition.services.spotify')"
-              @click="openInService('spotify')"
-            >
-              <template #icon><IconLucideAudioLines /></template>
-            </SButton>
-            <SButton
-              variant="tertiary"
-              circle
-              size="large"
-              :title="t('recognition.services.youtube')"
-              :aria-label="t('recognition.services.youtube')"
-              @click="openInService('youtube')"
-            >
-              <template #icon><IconLucideCirclePlay /></template>
-            </SButton>
-            <SButton
-              variant="tertiary"
-              circle
-              size="large"
-              :title="t('recognition.services.soundcloud')"
-              :aria-label="t('recognition.services.soundcloud')"
-              @click="openInService('soundcloud')"
-            >
-              <template #icon><IconLucideCloud /></template>
-            </SButton>
-          </div>
+        <div class="mt-5 flex items-center justify-center gap-3">
+          <SButton
+            variant="tertiary"
+            circle
+            :size="48"
+            :icon-size="21"
+            :title="t('recognition.services.appleMusic')"
+            :aria-label="t('recognition.services.appleMusic')"
+            @click="openInService('appleMusic')"
+          >
+            <template #icon><IconSpAppleMusic /></template>
+          </SButton>
+          <SButton
+            variant="tertiary"
+            circle
+            :size="48"
+            :icon-size="23"
+            :title="t('recognition.services.spotify')"
+            :aria-label="t('recognition.services.spotify')"
+            @click="openInService('spotify')"
+          >
+            <template #icon><IconSpSpotify /></template>
+          </SButton>
+          <SButton
+            variant="tertiary"
+            circle
+            :size="48"
+            :icon-size="24"
+            :title="t('recognition.services.youtube')"
+            :aria-label="t('recognition.services.youtube')"
+            @click="openInService('youtube')"
+          >
+            <template #icon><IconSpYoutube /></template>
+          </SButton>
+          <SButton
+            variant="tertiary"
+            circle
+            :size="48"
+            :icon-size="25"
+            :title="t('recognition.services.soundcloud')"
+            :aria-label="t('recognition.services.soundcloud')"
+            @click="openInService('soundcloud')"
+          >
+            <template #icon><IconSpSoundcloud /></template>
+          </SButton>
         </div>
       </div>
     </div>

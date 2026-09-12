@@ -237,8 +237,6 @@
     "hint": "We’ll listen to the audio playing on your device.",
     "listeningTitle": "Listening…",
     "listeningDescription": "Keep the music playing while we identify it.",
-    "matchFound": "Match found",
-    "listenOn": "Listen on",
     "services": {
       "appleMusic": "Open in Apple Music",
       "spotify": "Open in Spotify",
