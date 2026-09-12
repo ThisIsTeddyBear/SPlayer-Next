@@ -2,8 +2,13 @@
 import type { RecognitionCandidate } from "@shared/types/recognition";
 import { toast } from "@/composables/useToast";
 import { useRecognitionSession } from "@/composables/useRecognitionSession";
+import { openExternal } from "@/utils/url";
 import IconLucideArrowLeft from "~icons/lucide/arrow-left";
+import IconLucideAudioLines from "~icons/lucide/audio-lines";
 import IconLucideAudioWaveform from "~icons/lucide/audio-waveform";
+import IconLucideCirclePlay from "~icons/lucide/circle-play";
+import IconLucideCloud from "~icons/lucide/cloud";
+import IconLucideMusic2 from "~icons/lucide/music-2";
 import IconLucideSearch from "~icons/lucide/search";
 
 const { t } = useI18n();
@@ -14,6 +19,7 @@ const session = useRecognitionSession();
 const { phase, level, candidates, error, supported } = session;
 
 const isBusy = computed(() => ["capturing", "fingerprinting", "matching"].includes(phase.value));
+const candidate = computed(() => candidates.value[0] ?? null);
 
 watch(phase, (value) => {
   if (value === "error") {
@@ -55,6 +61,24 @@ const searchCandidate = (candidate: RecognitionCandidate): void => {
   });
 };
 
+type StreamingService = "appleMusic" | "spotify" | "youtube" | "soundcloud";
+
+/** 在指定服务中打开搜索结果
+ * @param service - 音乐服务
+ */
+const openInService = (service: StreamingService): void => {
+  if (!candidate.value) return;
+
+  const query = encodeURIComponent([candidate.value.title, ...candidate.value.artists].join(" "));
+  const urls: Record<StreamingService, string> = {
+    appleMusic: candidate.value.appleMusicUrl ?? `https://music.apple.com/us/search?term=${query}`,
+    spotify: `https://open.spotify.com/search/${query}`,
+    youtube: `https://www.youtube.com/results?search_query=${query}`,
+    soundcloud: `https://soundcloud.com/search?q=${query}`,
+  };
+  openExternal(urls[service]);
+};
+
 const onOpenUpdate = (value: boolean): void => {
   emit("update:open", value);
 };
@@ -67,9 +91,9 @@ const start = (): void => void session.start();
     :open="props.open"
     :destroy-on-close="true"
     :title="t('recognition.title')"
-    width="420px"
-    height="360px"
-    :content-style="{ padding: '0 20px' }"
+    width="440px"
+    height="440px"
+    :content-style="{ padding: '0 24px' }"
     @update:open="onOpenUpdate"
   >
     <div class="flex h-full min-h-0 flex-col">
@@ -79,7 +103,7 @@ const start = (): void => void session.start();
         aria-live="polite"
       >
         <div class="flex flex-1 flex-col items-center justify-center">
-          <div class="relative mb-3 size-20 shrink-0" aria-hidden="true">
+          <div class="relative mb-5 size-22 shrink-0" aria-hidden="true">
             <div
               class="absolute inset-0 flex items-center justify-center rounded-full bg-primary/10 text-primary transition-[opacity,scale,filter] duration-240 ease-[cubic-bezier(0.2,0,0,1)]"
               :class="
@@ -107,38 +131,88 @@ const start = (): void => void session.start();
             </div>
           </div>
 
-          <div class="flex h-12 shrink-0 flex-col items-center">
-            <p class="text-sm font-medium text-on-surface">
-              {{ isBusy ? t(`recognition.phase.${phase}`) : t("recognition.description") }}
+          <div class="flex h-14 shrink-0 flex-col items-center">
+            <p class="text-base font-semibold text-on-surface">
+              {{ isBusy ? t("recognition.listeningTitle") : t("recognition.description") }}
             </p>
-            <p class="mt-1 max-w-80 text-xs leading-5 text-on-surface-variant/60 text-pretty">
-              {{ isBusy ? t("recognition.systemAudio") : t("recognition.hint") }}
+            <p class="mt-1 max-w-72 text-xs leading-5 text-on-surface-variant/65 text-pretty">
+              {{ isBusy ? t("recognition.listeningDescription") : t("recognition.hint") }}
             </p>
           </div>
         </div>
       </div>
 
-      <div v-else-if="phase === 'done'" class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-        <div
-          v-for="candidate in candidates"
-          :key="candidate.songId"
-          class="flex min-h-16 items-center gap-3 rounded-lg bg-on-surface/4 p-2 pr-3"
-        >
+      <div v-else-if="phase === 'done' && candidate" class="flex min-h-0 flex-1 flex-col pt-1">
+        <p class="mb-3 text-center text-xs font-medium tracking-wide text-primary uppercase">
+          {{ t("recognition.matchFound") }}
+        </p>
+        <div class="flex items-center gap-4 rounded-xl bg-on-surface/5 p-3">
           <SImg
             :src="candidate.cover"
             :alt="candidate.title"
-            class="size-12 shrink-0 rounded-md outline outline-1 outline-black/10 dark:outline-white/10"
+            class="size-20 shrink-0 rounded-lg outline outline-1 outline-black/10 dark:outline-white/10"
             decoding="async"
           />
           <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-medium text-on-surface">{{ candidate.title }}</p>
-            <p class="mt-0.5 truncate text-xs text-on-surface-variant/60">
+            <p class="truncate text-base font-semibold text-on-surface">{{ candidate.title }}</p>
+            <p class="mt-1 truncate text-sm text-on-surface-variant/70">
               {{ candidate.artists.join(" / ") }}
             </p>
+            <p v-if="candidate.album" class="mt-1 truncate text-xs text-on-surface-variant/50">
+              {{ candidate.album }}
+            </p>
           </div>
-          <SButton variant="ghost" circle @click="searchCandidate(candidate)">
-            <template #icon><IconLucideSearch /></template>
-          </SButton>
+        </div>
+        <SButton class="mt-4" type="primary" size="large" block @click="searchCandidate(candidate)">
+          <template #icon><IconLucideSearch /></template>
+          {{ t("recognition.searching") }}
+        </SButton>
+        <div class="mt-4 border-t border-solid border-outline-variant/35 pt-3">
+          <p class="mb-2 text-center text-xs text-on-surface-variant/55">
+            {{ t("recognition.listenOn") }}
+          </p>
+          <div class="flex items-center justify-center gap-2">
+            <SButton
+              variant="tertiary"
+              circle
+              size="large"
+              :title="t('recognition.services.appleMusic')"
+              :aria-label="t('recognition.services.appleMusic')"
+              @click="openInService('appleMusic')"
+            >
+              <template #icon><IconLucideMusic2 /></template>
+            </SButton>
+            <SButton
+              variant="tertiary"
+              circle
+              size="large"
+              :title="t('recognition.services.spotify')"
+              :aria-label="t('recognition.services.spotify')"
+              @click="openInService('spotify')"
+            >
+              <template #icon><IconLucideAudioLines /></template>
+            </SButton>
+            <SButton
+              variant="tertiary"
+              circle
+              size="large"
+              :title="t('recognition.services.youtube')"
+              :aria-label="t('recognition.services.youtube')"
+              @click="openInService('youtube')"
+            >
+              <template #icon><IconLucideCirclePlay /></template>
+            </SButton>
+            <SButton
+              variant="tertiary"
+              circle
+              size="large"
+              :title="t('recognition.services.soundcloud')"
+              :aria-label="t('recognition.services.soundcloud')"
+              @click="openInService('soundcloud')"
+            >
+              <template #icon><IconLucideCloud /></template>
+            </SButton>
+          </div>
         </div>
       </div>
     </div>

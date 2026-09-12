@@ -234,12 +234,16 @@
     "entry": "Recognize",
     "description": "Identify the music currently playing",
     "start": "Identify with Shazam",
-    "hint": "We will listen to system audio and try again at 3, 6, 9, and 12 seconds",
-    "systemAudio": "Listening to system audio",
-    "phase": {
-      "capturing": "Listening…",
-      "fingerprinting": "Creating Shazam signature…",
-      "matching": "Searching Shazam…"
+    "hint": "We’ll listen to the audio playing on your device.",
+    "listeningTitle": "Listening…",
+    "listeningDescription": "Keep the music playing while we identify it.",
+    "matchFound": "Match found",
+    "listenOn": "Listen on",
+    "services": {
+      "appleMusic": "Open in Apple Music",
+      "spotify": "Open in Spotify",
+      "youtube": "Open in YouTube",
+      "soundcloud": "Open in SoundCloud"
     },
     "empty": "No song identified from system audio, please try again",
     "retry": "Try Again",
