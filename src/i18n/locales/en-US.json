@@ -240,8 +240,7 @@
     "services": {
       "appleMusic": "Open in Apple Music",
       "spotify": "Open in Spotify",
-      "youtube": "Open in YouTube",
-      "soundcloud": "Open in SoundCloud"
+      "youtubeMusic": "Open in YouTube Music"
     },
     "empty": "No song identified from system audio, please try again",
     "retry": "Try Again",

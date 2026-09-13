@@ -7,9 +7,8 @@ import IconLucideArrowLeft from "~icons/lucide/arrow-left";
 import IconLucideAudioWaveform from "~icons/lucide/audio-waveform";
 import IconLucideSearch from "~icons/lucide/search";
 import IconSpAppleMusic from "~icons/sp/apple-music";
-import IconSpSoundcloud from "~icons/sp/soundcloud";
 import IconSpSpotify from "~icons/sp/spotify";
-import IconSpYoutube from "~icons/sp/youtube";
+import IconSpYoutubeMusic from "~icons/sp/youtube-music";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -61,7 +60,7 @@ const searchCandidate = (candidate: RecognitionCandidate): void => {
   });
 };
 
-type StreamingService = "appleMusic" | "spotify" | "youtube" | "soundcloud";
+type StreamingService = "appleMusic" | "spotify" | "youtubeMusic";
 
 /** 在指定服务中打开搜索结果
  * @param service - 音乐服务
@@ -70,13 +69,13 @@ const openInService = (service: StreamingService): void => {
   if (!candidate.value) return;
 
   const query = encodeURIComponent([candidate.value.title, ...candidate.value.artists].join(" "));
-  const urls: Record<StreamingService, string> = {
-    appleMusic: candidate.value.appleMusicUrl ?? `https://music.apple.com/us/search?term=${query}`,
+  const urls: Record<StreamingService, string | undefined> = {
+    appleMusic: candidate.value.appleMusicUrl,
     spotify: `https://open.spotify.com/search/${query}`,
-    youtube: `https://www.youtube.com/results?search_query=${query}`,
-    soundcloud: `https://soundcloud.com/search?q=${query}`,
+    youtubeMusic: `https://music.youtube.com/search?q=${query}`,
   };
-  openExternal(urls[service]);
+  const url = urls[service];
+  if (url) openExternal(url);
 };
 
 const onOpenUpdate = (value: boolean): void => {
@@ -166,14 +165,6 @@ const start = (): void => void session.start();
             >
               {{ candidate.artists.join(" / ") }}
             </p>
-            <p
-              v-if="candidate.album || candidate.releaseYear"
-              class="mt-1 truncate text-xs text-on-surface-variant/55"
-            >
-              <span v-if="candidate.album">{{ candidate.album }}</span>
-              <span v-if="candidate.album && candidate.releaseYear" aria-hidden="true">·</span>
-              <span v-if="candidate.releaseYear">{{ candidate.releaseYear }}</span>
-            </p>
           </div>
         </div>
         <SButton
@@ -194,6 +185,7 @@ const start = (): void => void session.start();
             :icon-size="21"
             :title="t('recognition.services.appleMusic')"
             :aria-label="t('recognition.services.appleMusic')"
+            :disabled="!candidate.appleMusicUrl"
             @click="openInService('appleMusic')"
           >
             <template #icon><IconSpAppleMusic /></template>
@@ -214,22 +206,11 @@ const start = (): void => void session.start();
             circle
             :size="48"
             :icon-size="24"
-            :title="t('recognition.services.youtube')"
-            :aria-label="t('recognition.services.youtube')"
-            @click="openInService('youtube')"
+            :title="t('recognition.services.youtubeMusic')"
+            :aria-label="t('recognition.services.youtubeMusic')"
+            @click="openInService('youtubeMusic')"
           >
-            <template #icon><IconSpYoutube /></template>
-          </SButton>
-          <SButton
-            variant="tertiary"
-            circle
-            :size="48"
-            :icon-size="25"
-            :title="t('recognition.services.soundcloud')"
-            :aria-label="t('recognition.services.soundcloud')"
-            @click="openInService('soundcloud')"
-          >
-            <template #icon><IconSpSoundcloud /></template>
+            <template #icon><IconSpYoutubeMusic /></template>
           </SButton>
         </div>
       </div>
