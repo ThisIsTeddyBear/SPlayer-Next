@@ -27,6 +27,8 @@ interface ShazamAttributes {
   releaseDate?: string;
   releaseYear?: string | number;
   webUrl?: string;
+  url?: string;
+  trackUrl?: string;
   appleMusicUrl?: string;
   images?: { coverArtHq?: string; coverart?: string };
 }
@@ -69,6 +71,16 @@ interface ShazamTrackDetails {
   releaseYear?: string;
 }
 
+/** 从 Shazam 曲目链接提取稳定的曲目编号 */
+const getTrackIdFromUrl = (url?: string): string | undefined => {
+  if (!url?.startsWith("https://www.shazam.com/")) return undefined;
+  try {
+    return new URL(url).pathname.match(/\/(?:song|track)\/([^/]+)/)?.[1];
+  } catch {
+    return undefined;
+  }
+};
+
 /** 根据系统区域生成 Shazam 请求参数 */
 const getLocale = (): { language: string; country: string } => {
   const locale = app.getLocale() || "en-US";
@@ -91,9 +103,9 @@ const getTagCount = async (trackId: string): Promise<number | undefined> => {
 };
 
 /** 读取 Shazam 曲目页中同一首歌的补充元数据 */
-const getTrackDetails = async (trackId: string, webUrl?: string): Promise<ShazamTrackDetails> => {
-  const url = webUrl?.startsWith("https://www.shazam.com/")
-    ? webUrl
+const getTrackDetails = async (trackId: string, trackUrl?: string): Promise<ShazamTrackDetails> => {
+  const url = trackUrl?.startsWith("https://www.shazam.com/")
+    ? trackUrl
     : `${TRACK_URL}/${encodeURIComponent(trackId)}`;
   try {
     const response = await fetchWithProxy(url, { signal: AbortSignal.timeout(5_000) });
@@ -105,7 +117,8 @@ const getTrackDetails = async (trackId: string, webUrl?: string): Promise<Shazam
     if (!jsonLd) return {};
     const page = JSON.parse(jsonLd) as ShazamTrackPage;
     const canonicalUrl = page["@id"] ?? page.url;
-    if (!canonicalUrl?.includes(`/${trackId}/`)) return {};
+    const expectedId = getTrackIdFromUrl(trackUrl) ?? trackId;
+    if (!canonicalUrl?.includes(`/${expectedId}/`)) return {};
     return {
       artist: page.byArtist ?? page.creator?.name,
       album: page.inAlbum?.name,
@@ -167,27 +180,34 @@ export const matchAudio = async (signature: Uint8Array): Promise<MatchResult> =>
           ? [fallbackArtist]
           : [];
     const resolvedAlbum = attributes?.album ?? attributes?.albumName;
+    const trackUrl = attributes?.webUrl ?? attributes?.trackUrl ?? attributes?.url;
     const [tagCount, details] = await Promise.all([
       getTagCount(normalizedId),
       resolvedArtists.length && resolvedAlbum && releaseYear
         ? Promise.resolve<ShazamTrackDetails>({})
-        : getTrackDetails(normalizedId, attributes?.webUrl),
+        : getTrackDetails(normalizedId, trackUrl),
     ]);
+    const matchedArtists = resolvedArtists.length
+      ? resolvedArtists
+      : details.artist
+        ? [details.artist]
+        : [];
+    const matchedAlbum = resolvedAlbum ?? details.album;
+    const matchedReleaseYear = releaseYear ?? details.releaseYear;
+    recognitionLog.info(
+      `Shazam metadata: track=${normalizedId}, url=${trackUrl ? "provided" : "fallback"}, artist=${matchedArtists.length > 0}, album=${Boolean(matchedAlbum)}, year=${Boolean(matchedReleaseYear)}`,
+    );
     return {
       ok: true,
       candidates: [
         {
           songId: normalizedId,
           title,
-          artists: resolvedArtists.length
-            ? resolvedArtists
-            : details.artist
-              ? [details.artist]
-              : [],
-          album: resolvedAlbum ?? details.album,
-          releaseYear: releaseYear ?? details.releaseYear,
+          artists: matchedArtists,
+          album: matchedAlbum,
+          releaseYear: matchedReleaseYear,
           cover: attributes?.images?.coverArtHq ?? attributes?.images?.coverart,
-          shazamUrl: attributes?.webUrl,
+          shazamUrl: trackUrl,
           appleMusicUrl: attributes?.appleMusicUrl,
           tagCount,
         },
