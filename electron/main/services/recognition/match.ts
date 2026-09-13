@@ -7,6 +7,7 @@ import { recognitionLog } from "@main/utils/logger";
 
 const MATCH_URL = "https://www.shazam.com/services/webrec/match_extensionv2";
 const COUNT_URL = "https://amp.shazam.com/count/v2/web/track";
+const TRACK_URL = "https://www.shazam.com/song";
 const installationId = randomUUID();
 
 interface ShazamArtist {
@@ -53,6 +54,21 @@ export interface ShazamCandidate {
 
 type MatchResult = { ok: true; candidates: ShazamCandidate[] } | { ok: false; code: "network" };
 
+interface ShazamTrackPage {
+  "@id"?: string;
+  url?: string;
+  byArtist?: string;
+  creator?: { name?: string };
+  inAlbum?: { name?: string };
+  datePublished?: string;
+}
+
+interface ShazamTrackDetails {
+  artist?: string;
+  album?: string;
+  releaseYear?: string;
+}
+
 /** 根据系统区域生成 Shazam 请求参数 */
 const getLocale = (): { language: string; country: string } => {
   const locale = app.getLocale() || "en-US";
@@ -71,6 +87,32 @@ const getTagCount = async (trackId: string): Promise<number | undefined> => {
     return typeof body.total === "number" ? body.total : undefined;
   } catch {
     return undefined;
+  }
+};
+
+/** 读取 Shazam 曲目页中同一首歌的补充元数据 */
+const getTrackDetails = async (trackId: string, webUrl?: string): Promise<ShazamTrackDetails> => {
+  const url = webUrl?.startsWith("https://www.shazam.com/")
+    ? webUrl
+    : `${TRACK_URL}/${encodeURIComponent(trackId)}`;
+  try {
+    const response = await fetchWithProxy(url, { signal: AbortSignal.timeout(5_000) });
+    if (!response.ok) return {};
+    const html = await response.text();
+    const jsonLd = html.match(
+      /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i,
+    )?.[1];
+    if (!jsonLd) return {};
+    const page = JSON.parse(jsonLd) as ShazamTrackPage;
+    const canonicalUrl = page["@id"] ?? page.url;
+    if (!canonicalUrl?.includes(`/${trackId}/`)) return {};
+    return {
+      artist: page.byArtist ?? page.creator?.name,
+      album: page.inAlbum?.name,
+      releaseYear: page.datePublished?.match(/^\d{4}/)?.[0],
+    };
+  } catch {
+    return {};
   }
 };
 
@@ -117,25 +159,37 @@ export const matchAudio = async (signature: Uint8Array): Promise<MatchResult> =>
     const releaseYear = String(attributes?.releaseDate ?? attributes?.releaseYear ?? "").match(
       /^\d{4}/,
     )?.[0];
+    const resolvedArtists = artistNames.length
+      ? artistNames
+      : artists.length
+        ? artists
+        : fallbackArtist
+          ? [fallbackArtist]
+          : [];
+    const resolvedAlbum = attributes?.album ?? attributes?.albumName;
+    const [tagCount, details] = await Promise.all([
+      getTagCount(normalizedId),
+      resolvedArtists.length && resolvedAlbum && releaseYear
+        ? Promise.resolve<ShazamTrackDetails>({})
+        : getTrackDetails(normalizedId, attributes?.webUrl),
+    ]);
     return {
       ok: true,
       candidates: [
         {
           songId: normalizedId,
           title,
-          artists: artistNames.length
-            ? artistNames
-            : artists.length
-              ? artists
-              : fallbackArtist
-                ? [fallbackArtist]
-                : [],
-          album: attributes?.album ?? attributes?.albumName,
-          releaseYear,
+          artists: resolvedArtists.length
+            ? resolvedArtists
+            : details.artist
+              ? [details.artist]
+              : [],
+          album: resolvedAlbum ?? details.album,
+          releaseYear: releaseYear ?? details.releaseYear,
           cover: attributes?.images?.coverArtHq ?? attributes?.images?.coverart,
           shazamUrl: attributes?.webUrl,
           appleMusicUrl: attributes?.appleMusicUrl,
-          tagCount: await getTagCount(normalizedId),
+          tagCount,
         },
       ],
     };
