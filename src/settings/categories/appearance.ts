@@ -1,5 +1,4 @@
 import type { SettingCategory } from "@/types/settings-schema";
-import { useSettingsStore } from "@/stores/settings";
 import { useThemeStore } from "@/stores/theme";
 import FontConfig from "@/components/settings/custom/FontConfig.vue";
 import BackgroundImagePicker from "@/components/settings/custom/BackgroundImagePicker.vue";
@@ -234,62 +233,15 @@ const appearanceCategory: SettingCategory = {
           options: [
             { value: "blur", labelKey: "settings.playerBgType.blur" },
             { value: "solid", labelKey: "settings.playerBgType.solid" },
-            { value: "animation", labelKey: "settings.playerBgType.animation" },
+            { value: "original", labelKey: "settings.playerBgType.original" },
           ],
-          defaultValue: "blur",
+          defaultValue: "original",
           confirm: {
-            when: (next) => next === "animation",
+            when: (next) => next === "original",
             titleKey: "settings.confirm.highResourceTitle",
             contentKey: "settings.confirm.highResourceContent",
             type: "warning",
           },
-          childrenCondition: () =>
-            useSettingsStore().player.playerBgType === "animation",
-          hideChildren: true,
-          children: [
-            {
-              key: "playerBgFlowSpeed",
-              type: "slider",
-              binding: { store: "settings", path: "player.playerBgFlowSpeed" },
-              min: 0.1,
-              max: 10,
-              step: 0.1,
-              defaultValue: 4,
-              marks: { 0.1: "0.1", 4: "4", 10: "10" },
-            },
-            {
-              key: "playerBgRenderScale",
-              type: "slider",
-              binding: { store: "settings", path: "player.playerBgRenderScale" },
-              min: 0.5,
-              max: 2,
-              step: 0.1,
-              defaultValue: 0.5,
-              marks: { 0.5: "0.5", 1: "1", 2: "2" },
-            },
-            {
-              key: "playerBgFps",
-              type: "slider",
-              binding: { store: "settings", path: "player.playerBgFps" },
-              min: 24,
-              max: 120,
-              step: 2,
-              defaultValue: 30,
-              marks: { 24: "24", 60: "60", 120: "120" },
-            },
-            {
-              key: "playerBgFreezeOnPause",
-              type: "switch",
-              binding: { store: "settings", path: "player.playerBgFreezeOnPause" },
-              defaultValue: false,
-            },
-            {
-              key: "playerBgBeat",
-              type: "switch",
-              binding: { store: "settings", path: "player.playerBgBeat" },
-              defaultValue: false,
-            },
-          ],
         },
         {
           key: "coverLayout",
