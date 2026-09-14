@@ -866,28 +866,63 @@ const setFallbackArtwork = (source: string) => {
   });
 };
 
-const loadArtwork = async (source: string) => {
-  const request = ++imageRequest;
-  fallbackCover.value = source || DEFAULT_COVER;
+const loadWebglImage = async (
+  source: string,
+): Promise<{ image: HTMLImageElement; release: () => void }> => {
+  let objectUrl: string | undefined;
+  if (/^(https?|cache|streaming-cover):\/\//i.test(source)) {
+    const result = await window.api.system.fetchImageBytes(source);
+    if (result.success && result.data) {
+      objectUrl = URL.createObjectURL(new Blob([new Uint8Array(result.data)]));
+    }
+  }
   const image = new Image();
   image.decoding = "async";
-  image.src = fallbackCover.value;
+  image.src = objectUrl ?? source;
   try {
     await image.decode();
   } catch {
-    if (!image.complete || image.naturalWidth === 0) return;
+    if (!image.complete || image.naturalWidth === 0) {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      throw new Error("Unable to decode dynamic background artwork");
+    }
   }
-  if (request !== imageRequest || !renderer.value) return;
+  return {
+    image,
+    release: () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    },
+  };
+};
+
+const loadArtwork = async (source: string) => {
+  const request = ++imageRequest;
+  fallbackCover.value = source || DEFAULT_COVER;
   setFallbackArtwork(fallbackCover.value);
-  const profile = profileFromImage(image);
-  artworkProfile.value = profile;
   try {
-    if (
-      renderer.value.loadImage(image, profile, pendingTransitionProfile ?? props.transitionProfile)
-    ) {
-      pendingTransitionProfile = undefined;
-      webglReady.value = true;
-      updatePlayback();
+    const { image, release } = await loadWebglImage(fallbackCover.value);
+    if (request !== imageRequest || !renderer.value) {
+      release();
+      return;
+    }
+    const profile = profileFromImage(image);
+    artworkProfile.value = profile;
+    try {
+      if (
+        renderer.value.loadImage(
+          image,
+          profile,
+          pendingTransitionProfile ?? props.transitionProfile,
+        )
+      ) {
+        pendingTransitionProfile = undefined;
+        webglReady.value = true;
+        updatePlayback();
+      }
+    } catch {
+      webglReady.value = false;
+    } finally {
+      release();
     }
   } catch {
     webglReady.value = false;

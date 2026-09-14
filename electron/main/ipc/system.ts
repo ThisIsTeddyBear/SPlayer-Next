@@ -96,6 +96,15 @@ export const registerSystemIpc = (): void => {
     return { success: true, data: buf };
   });
 
+  ipcMain.handle("system:fetchImageBytes", async (_event, url: string) => {
+    if (typeof url !== "string" || !/^(https?|cache|streaming-cover):\/\//i.test(url)) {
+      return { success: false, error: "Invalid image URL" };
+    }
+    const data = await fetchBytes(url, { requireImage: true });
+    if (!data) return { success: false, error: "Failed to fetch image" };
+    return { success: true, data };
+  });
+
   // 保存文件到下载目录
   ipcMain.handle("system:saveFile", async (_event, data: ArrayBuffer, fileName: string) => {
     try {

@@ -113,6 +113,7 @@ const api = {
       subscribe<{ category?: string; highlight?: string }>("system:openSettings", callback),
     listFonts: () => ipcRenderer.invoke("system:listFonts"),
     fetchRemoteBytes: (url: string) => ipcRenderer.invoke("system:fetchRemoteBytes", url),
+    fetchImageBytes: (url: string) => ipcRenderer.invoke("system:fetchImageBytes", url),
     saveFile: (data: ArrayBuffer, defaultName: string) =>
       ipcRenderer.invoke("system:saveFile", data, defaultName),
     relaunch: () => ipcRenderer.invoke("system:relaunch"),
