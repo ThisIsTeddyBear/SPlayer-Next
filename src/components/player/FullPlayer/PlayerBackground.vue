@@ -3,21 +3,13 @@ import { useSettingsStore } from "@/stores/settings";
 import { useMediaStore } from "@/stores/media";
 import { useStatusStore } from "@/stores/status";
 import DEFAULT_COVER from "@/assets/images/song.jpg";
-import OriginalBackground from "./OriginalBackground.vue";
+import BackgroundRender from "./BackgroundRender.vue";
 
 const media = useMediaStore();
 const settings = useSettingsStore();
 const status = useStatusStore();
 
 const bgType = computed(() => settings.player.playerBgType as string);
-
-watch(
-  () => settings.player.playerBgType,
-  (type) => {
-    if ((type as string) === "animation") settings.player.playerBgType = "original";
-  },
-  { immediate: true },
-);
 
 /**
  * 背景是否就绪
@@ -50,7 +42,11 @@ watch(
 onBeforeUnmount(() => clearTimeout(bgReadyTimer));
 
 // 流体背景播放态
-const bgPlaying = computed(() => status.isPlayerExpanded && status.isPlaying);
+const bgPlaying = computed(() => {
+  if (!status.isPlayerExpanded) return false;
+  if (!status.isPlaying && settings.player.playerBgFreezeOnPause) return false;
+  return true;
+});
 
 // 模糊模式：双缓冲层，切歌时交叉淡入淡出
 const initialCover = media.track?.cover || media.track?.coverOriginal || DEFAULT_COVER;
@@ -131,17 +127,17 @@ onBeforeUnmount(() => {
     </div>
   </Transition>
   <!-- 流体背景 -->
-  <Transition v-else-if="bgType === 'original'" name="bg-fade">
-    <div v-if="bgReady" class="absolute inset-0 overflow-hidden -z-1 bg-original-wrap">
-      <img
-        v-for="(layer, index) in blurLayers"
-        :key="index"
-        :src="layer.src"
-        :class="['bg-img', { active: layer.active }]"
-        decoding="async"
-        alt=""
+  <Transition v-else-if="bgType === 'animation'" name="bg-fade">
+    <div v-if="bgReady" class="absolute inset-0 overflow-hidden -z-1">
+      <BackgroundRender
+        :album="media.track?.cover || DEFAULT_COVER"
+        :playing="bgPlaying"
+        :fps="settings.player.playerBgFps"
+        :flow-speed="settings.player.playerBgFlowSpeed"
+        :render-scale="settings.player.playerBgRenderScale"
+        :has-lyric="media.parsedLyric.length > 0"
+        :enable-beat="settings.player.playerBgBeat"
       />
-      <OriginalBackground :album="media.track?.cover || DEFAULT_COVER" :playing="bgPlaying" />
     </div>
   </Transition>
 </template>
@@ -193,30 +189,6 @@ onBeforeUnmount(() => {
 
 .bg-blur-wrap .bg-img.active {
   opacity: 1;
-}
-
-.bg-original-wrap {
-  background: rgb(10, 10, 14);
-}
-
-.bg-original-wrap .bg-img {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: scale(1.35);
-  filter: blur(42px) saturate(1.15) brightness(0.45);
-  opacity: 0;
-  transition: opacity 0.65s ease-in-out;
-}
-
-.bg-original-wrap .bg-img.active {
-  opacity: 1;
-}
-
-.bg-original-wrap :deep(.original-background) {
-  position: absolute;
-  inset: 0;
 }
 
 /* 流体背景渐入 */

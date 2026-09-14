@@ -107,7 +107,12 @@ export const useSettingsStore = defineStore(
     });
 
     const player = reactive<PlayerSettings>({
-      playerBgType: "original",
+      playerBgType: "blur",
+      playerBgFps: 30,
+      playerBgFlowSpeed: 4,
+      playerBgRenderScale: 0.5,
+      playerBgFreezeOnPause: false,
+      playerBgBeat: false,
       coverLayout: "default",
       coverLyricRatio: 0.45,
       autoCenterCover: true,

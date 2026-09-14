@@ -5,7 +5,7 @@ import { ALL_PLATFORMS } from "@shared/types/platform";
 import type { CjkTransformMode } from "@shared/types/opencc";
 import type { QualityLevel } from "@/utils/quality";
 
-export type PlayerBgType = "blur" | "solid" | "original";
+export type PlayerBgType = "blur" | "solid" | "animation";
 export type CoverLayout = "default" | "fullscreen";
 
 /**
@@ -130,6 +130,11 @@ export interface LyricSettings {
 
 export interface PlayerSettings {
   playerBgType: PlayerBgType;
+  playerBgFps: number;
+  playerBgFlowSpeed: number;
+  playerBgRenderScale: number;
+  playerBgFreezeOnPause: boolean;
+  playerBgBeat: boolean;
   coverLayout: CoverLayout;
   coverLyricRatio: number;
   autoCenterCover: boolean;
