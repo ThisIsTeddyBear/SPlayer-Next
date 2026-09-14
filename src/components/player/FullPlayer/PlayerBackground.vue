@@ -49,6 +49,21 @@ const bgPlaying = computed(() => {
   return true;
 });
 
+const dynamicLyricFocus = computed(() => {
+  if (
+    settings.player.coverLayout === "fullscreen" ||
+    status.fullQueueOpen ||
+    media.parsedLyric.length === 0
+  ) {
+    return 50;
+  }
+  return (settings.player.coverLyricRatio + (1 - settings.player.coverLyricRatio) * 0.52) * 100;
+});
+
+const dynamicTransitionProfile = computed(() =>
+  status.duration > 0 && status.position >= status.duration - 2_000 ? "normal" : "skip",
+);
+
 // 模糊模式：双缓冲层，切歌时交叉淡入淡出
 const initialCover = media.track?.cover || media.track?.coverOriginal || DEFAULT_COVER;
 const blurLayers = reactive([
@@ -130,7 +145,12 @@ onBeforeUnmount(() => {
   <!-- 动态背景 -->
   <Transition v-else-if="bgType === 'dynamic'" name="bg-fade">
     <div v-if="bgReady" class="absolute inset-0 overflow-hidden -z-1">
-      <DynamicBackground :album="media.track?.cover || DEFAULT_COVER" :playing="status.isPlaying" />
+      <DynamicBackground
+        :album="media.track?.cover || DEFAULT_COVER"
+        :playing="status.isPlaying"
+        :lyric-focus="dynamicLyricFocus"
+        :transition-profile="dynamicTransitionProfile"
+      />
     </div>
   </Transition>
   <!-- 流体背景 -->

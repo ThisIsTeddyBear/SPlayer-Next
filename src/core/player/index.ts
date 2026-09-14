@@ -56,6 +56,16 @@ let consecutiveFailures = 0;
 const MAX_CONSECUTIVE_FAILURES = 5;
 const SKIP_ON_ERROR_DELAY_MS = 1000;
 
+type DynamicBackgroundTransitionProfile = "normal" | "skip";
+
+const announceTrackTransition = (profile: DynamicBackgroundTransitionProfile): void => {
+  window.dispatchEvent(
+    new CustomEvent<DynamicBackgroundTransitionProfile>("splayer:track-transition", {
+      detail: profile,
+    }),
+  );
+};
+
 /**
  */
 const skipOnFailure = async (myToken: number, getCurrentToken: () => number): Promise<void> => {
@@ -588,6 +598,7 @@ export const playHeartMode = async (tracks: readonly Track[]): Promise<void> => 
   status.heartMode = true;
   status.fmMode = false;
   syncPlayMode();
+  announceTrackTransition("skip");
   await loadTrack(status.currentTrack, status.currentPlaybackContext);
 };
 
@@ -603,6 +614,7 @@ export const playPersonalFm = async (options?: PersonalFmOptions): Promise<boole
   if (!track) return false;
   status.fmMode = true;
   status.heartMode = false;
+  announceTrackTransition("skip");
   await loadTrack(track);
   return true;
 };
@@ -618,11 +630,16 @@ export const dislikeFmTrack = async (): Promise<void> => {
 
 /**
  */
-export const nextTrack = async (): Promise<void> => {
+export const nextTrack = async (
+  transitionProfile: DynamicBackgroundTransitionProfile = "skip",
+): Promise<void> => {
   const status = useStatusStore();
   if (status.fmMode) {
     const next = await fm.next();
-    if (next) await loadTrack(next);
+    if (next) {
+      announceTrackTransition(transitionProfile);
+      await loadTrack(next);
+    }
     return;
   }
   if (queue.queueLength.value === 0) return;
@@ -636,6 +653,7 @@ export const nextTrack = async (): Promise<void> => {
   } else {
     status.playIndex++;
   }
+  announceTrackTransition(transitionProfile);
   await loadTrack(status.currentTrack, status.currentPlaybackContext);
 };
 
@@ -650,6 +668,7 @@ export const playAtIndex = async (index: number): Promise<void> => {
   }
   status.fmMode = false;
   status.playIndex = index;
+  announceTrackTransition("skip");
   await loadTrack(status.currentTrack, status.currentPlaybackContext);
 };
 
@@ -658,6 +677,7 @@ export const prevTrack = async (): Promise<void> => {
   if (status.fmMode) return;
   if (queue.queueLength.value === 0) return;
   status.playIndex = status.playIndex > 0 ? status.playIndex - 1 : queue.queueLength.value - 1;
+  announceTrackTransition("skip");
   await loadTrack(status.currentTrack, status.currentPlaybackContext);
 };
 
@@ -812,6 +832,7 @@ export const playNow = async (item: Track, context?: PlaybackContext): Promise<v
   }
   status.fmMode = false;
   status.playIndex = insertToQueue(item, undefined, context);
+  announceTrackTransition("skip");
   await loadTrack(item, context);
 };
 

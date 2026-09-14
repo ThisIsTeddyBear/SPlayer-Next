@@ -45,7 +45,7 @@ const finishCurrentTrack = async (): Promise<void> => {
       await seek(0);
       await play();
     } else {
-      await nextTrack();
+      await nextTrack("normal");
     }
   } finally {
     endedGuard = false;

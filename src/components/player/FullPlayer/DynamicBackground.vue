@@ -18,15 +18,43 @@ interface DynamicBackgroundOptions {
   onContextRestored?: () => void;
 }
 
+type TransitionProfile = "normal" | "skip";
+
+interface ArtworkProfile {
+  primary: [number, number, number];
+  secondary: [number, number, number];
+  tint: Float32Array;
+  tintIntensity: number;
+  saturation: number;
+  exposure: number;
+  shadowLift: number;
+  focalDim: number;
+  edgeColorStrength: number;
+}
+
 const props = defineProps<{
   album: string;
   playing: boolean;
+  lyricFocus: number;
+  transitionProfile: TransitionProfile;
 }>();
 
 const BLUR_SIZE = 128;
 const BLUR_PASSES = 8;
-const TRANSITION_DURATION = 260;
-const TINT_COLOR = new Float32Array([0.157, 0.157, 0.235]);
+const NORMAL_TRANSITION_HOLD = 100;
+const NORMAL_TRANSITION_DURATION = 560;
+const SKIP_TRANSITION_DURATION = 180;
+const DEFAULT_PROFILE: ArtworkProfile = {
+  primary: [82, 91, 148],
+  secondary: [155, 79, 132],
+  tint: new Float32Array([0.157, 0.157, 0.235]),
+  tintIntensity: 0.2,
+  saturation: 1.55,
+  exposure: 1,
+  shadowLift: 0.1,
+  focalDim: 0.34,
+  edgeColorStrength: 0.11,
+};
 
 const vertexShader = `
   attribute vec2 a_position;
@@ -132,6 +160,9 @@ const outputShader = `
   uniform sampler2D u_texture;
   uniform float u_saturation;
   uniform float u_dithering;
+  uniform float u_exposure;
+  uniform float u_shadowLift;
+  uniform float u_vignette;
   uniform float u_time;
   uniform float u_scale;
   uniform vec2 u_resolution;
@@ -146,8 +177,10 @@ const outputShader = `
     uv = clamp(uv, 0.0, 1.0);
     vec4 color = texture2D(u_texture, uv);
     vec2 center = v_texCoord - 0.5;
-    float vignette = 1.0 - dot(center, center) * 0.3;
+    float vignette = 1.0 - dot(center, center) * u_vignette;
     color.rgb *= vignette;
+    color.rgb = mix(color.rgb, sqrt(max(color.rgb, vec3(0.0))), u_shadowLift);
+    color.rgb *= u_exposure;
     float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));
     color.rgb = mix(vec3(gray), color.rgb, u_saturation);
     vec2 pixelPos = floor(v_texCoord * u_resolution);
@@ -182,9 +215,13 @@ class DynamicBackgroundRenderer {
   private hasCurrent = false;
   private isTransitioning = false;
   private transitionStartTime = 0;
+  private transitionHold = 0;
+  private transitionDuration = SKIP_TRANSITION_DURATION;
   private contextLost = false;
   private renderWidth = 0;
   private renderHeight = 0;
+  private currentProfile: ArtworkProfile = DEFAULT_PROFILE;
+  private nextProfile: ArtworkProfile = DEFAULT_PROFILE;
 
   constructor(canvas: HTMLCanvasElement, options: DynamicBackgroundOptions = {}) {
     const gl = canvas.getContext("webgl", {
@@ -378,7 +415,7 @@ class DynamicBackgroundRenderer {
     this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
   }
 
-  private blurSourceInto(target: Framebuffer) {
+  private blurSourceInto(target: Framebuffer, profile: ArtworkProfile) {
     this.gl.useProgram(this.programs.tint);
     this.setupAttributes();
     this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.blurFBO1.framebuffer);
@@ -386,8 +423,8 @@ class DynamicBackgroundRenderer {
     this.gl.activeTexture(this.gl.TEXTURE0);
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.sourceTexture);
     this.gl.uniform1i(this.uniform("tint", "u_texture"), 0);
-    this.gl.uniform3fv(this.uniform("tint", "u_tintColor"), TINT_COLOR);
-    this.gl.uniform1f(this.uniform("tint", "u_tintIntensity"), 0.15);
+    this.gl.uniform3fv(this.uniform("tint", "u_tintColor"), profile.tint);
+    this.gl.uniform1f(this.uniform("tint", "u_tintIntensity"), profile.tintIntensity);
     this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
 
     this.gl.useProgram(this.programs.blur);
@@ -409,8 +446,13 @@ class DynamicBackgroundRenderer {
   }
 
   private transitionFactor(now: number) {
-    const linear = Math.max(0, Math.min(1, (now - this.transitionStartTime) / TRANSITION_DURATION));
+    const linear = this.transitionLinearFactor(now);
     return 1 - (1 - linear) ** 3;
+  }
+
+  private transitionLinearFactor(now: number) {
+    const elapsed = Math.max(0, now - this.transitionStartTime - this.transitionHold);
+    return Math.max(0, Math.min(1, elapsed / this.transitionDuration));
   }
 
   private blendInto(target: Framebuffer, from: WebGLTexture, to: WebGLTexture, factor: number) {
@@ -430,26 +472,52 @@ class DynamicBackgroundRenderer {
 
   private captureInterruptedTransition() {
     if (!this.isTransitioning) return;
+    const factor = this.transitionFactor(performance.now());
     this.blendInto(
       this.snapshotAlbumFBO,
       this.currentAlbumFBO.texture,
       this.nextAlbumFBO.texture,
-      this.transitionFactor(performance.now()),
+      factor,
     );
     const oldCurrent = this.currentAlbumFBO;
     this.currentAlbumFBO = this.snapshotAlbumFBO;
     this.snapshotAlbumFBO = this.nextAlbumFBO;
     this.nextAlbumFBO = oldCurrent;
+    this.currentProfile = this.mixProfile(this.currentProfile, this.nextProfile, factor);
     this.isTransitioning = false;
   }
 
   private commitTransition() {
     if (!this.isTransitioning) return;
     [this.currentAlbumFBO, this.nextAlbumFBO] = [this.nextAlbumFBO, this.currentAlbumFBO];
+    this.currentProfile = this.nextProfile;
     this.isTransitioning = false;
   }
 
-  loadImage(image: HTMLImageElement) {
+  private mixProfile(from: ArtworkProfile, to: ArtworkProfile, factor: number): ArtworkProfile {
+    const mix = (a: number, b: number) => a + (b - a) * factor;
+    return {
+      primary: from.primary.map((value, index) =>
+        Math.round(mix(value, to.primary[index])),
+      ) as ArtworkProfile["primary"],
+      secondary: from.secondary.map((value, index) =>
+        Math.round(mix(value, to.secondary[index])),
+      ) as ArtworkProfile["secondary"],
+      tint: new Float32Array(from.tint.map((value, index) => mix(value, to.tint[index]))),
+      tintIntensity: mix(from.tintIntensity, to.tintIntensity),
+      saturation: mix(from.saturation, to.saturation),
+      exposure: mix(from.exposure, to.exposure),
+      shadowLift: mix(from.shadowLift, to.shadowLift),
+      focalDim: mix(from.focalDim, to.focalDim),
+      edgeColorStrength: mix(from.edgeColorStrength, to.edgeColorStrength),
+    };
+  }
+
+  loadImage(
+    image: HTMLImageElement,
+    profile: ArtworkProfile,
+    transitionProfile: TransitionProfile,
+  ) {
     if (this.contextLost) return false;
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.sourceTexture);
     this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
@@ -462,15 +530,21 @@ class DynamicBackgroundRenderer {
       image,
     );
     if (!this.hasCurrent) {
-      this.blurSourceInto(this.currentAlbumFBO);
+      this.blurSourceInto(this.currentAlbumFBO, profile);
       this.copyTexture(this.currentAlbumFBO.texture, this.nextAlbumFBO);
+      this.currentProfile = profile;
+      this.nextProfile = profile;
       this.hasCurrent = true;
       this.renderFrame();
       return true;
     }
     this.captureInterruptedTransition();
-    this.blurSourceInto(this.nextAlbumFBO);
+    this.blurSourceInto(this.nextAlbumFBO, profile);
+    this.nextProfile = profile;
     this.transitionStartTime = performance.now();
+    this.transitionHold = transitionProfile === "normal" ? NORMAL_TRANSITION_HOLD : 0;
+    this.transitionDuration =
+      transitionProfile === "normal" ? NORMAL_TRANSITION_DURATION : SKIP_TRANSITION_DURATION;
     this.isTransitioning = true;
     this.start();
     return true;
@@ -504,14 +578,13 @@ class DynamicBackgroundRenderer {
     const width = this.renderWidth;
     const height = this.renderHeight;
     let source = this.currentAlbumFBO.texture;
+    let profile = this.currentProfile;
     if (this.isTransitioning) {
-      const linear = Math.max(
-        0,
-        Math.min(1, (timestamp - this.transitionStartTime) / TRANSITION_DURATION),
-      );
+      const linear = this.transitionLinearFactor(timestamp);
       if (linear >= 1) {
         this.commitTransition();
         source = this.currentAlbumFBO.texture;
+        profile = this.currentProfile;
       } else {
         this.blendInto(
           this.blendScratchFBO,
@@ -520,6 +593,7 @@ class DynamicBackgroundRenderer {
           1 - (1 - linear) ** 3,
         );
         source = this.blendScratchFBO.texture;
+        profile = this.mixProfile(this.currentProfile, this.nextProfile, 1 - (1 - linear) ** 3);
       }
     }
 
@@ -541,8 +615,11 @@ class DynamicBackgroundRenderer {
     this.gl.activeTexture(this.gl.TEXTURE0);
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.warpFBO.texture);
     this.gl.uniform1i(this.uniform("output", "u_texture"), 0);
-    this.gl.uniform1f(this.uniform("output", "u_saturation"), 1.7);
-    this.gl.uniform1f(this.uniform("output", "u_dithering"), 0);
+    this.gl.uniform1f(this.uniform("output", "u_saturation"), profile.saturation);
+    this.gl.uniform1f(this.uniform("output", "u_dithering"), 0.012);
+    this.gl.uniform1f(this.uniform("output", "u_exposure"), profile.exposure);
+    this.gl.uniform1f(this.uniform("output", "u_shadowLift"), profile.shadowLift);
+    this.gl.uniform1f(this.uniform("output", "u_vignette"), 0.38);
     this.gl.uniform1f(this.uniform("output", "u_time"), time);
     this.gl.uniform1f(this.uniform("output", "u_scale"), 1);
     this.gl.uniform2f(this.uniform("output", "u_resolution"), width, height);
@@ -599,6 +676,130 @@ class DynamicBackgroundRenderer {
   }
 }
 
+interface PaletteBucket {
+  count: number;
+  red: number;
+  green: number;
+  blue: number;
+  saturation: number;
+  hue: number;
+}
+
+const clamp = (value: number, minimum: number, maximum: number) =>
+  Math.max(minimum, Math.min(maximum, value));
+
+const luminance = (red: number, green: number, blue: number) =>
+  (red * 0.299 + green * 0.587 + blue * 0.114) / 255;
+
+const rgbToHsv = (red: number, green: number, blue: number) => {
+  const r = red / 255;
+  const g = green / 255;
+  const b = blue / 255;
+  const maximum = Math.max(r, g, b);
+  const minimum = Math.min(r, g, b);
+  const delta = maximum - minimum;
+  let hue = 0;
+  if (delta > 0) {
+    if (maximum === r) hue = ((g - b) / delta) % 6;
+    else if (maximum === g) hue = (b - r) / delta + 2;
+    else hue = (r - g) / delta + 4;
+    hue /= 6;
+    if (hue < 0) hue += 1;
+  }
+  return { hue, saturation: maximum === 0 ? 0 : delta / maximum };
+};
+
+const profileFromImage = (image: HTMLImageElement): ArtworkProfile => {
+  const analysisCanvas = document.createElement("canvas");
+  analysisCanvas.width = 48;
+  analysisCanvas.height = 48;
+  const context = analysisCanvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return DEFAULT_PROFILE;
+
+  try {
+    context.drawImage(image, 0, 0, analysisCanvas.width, analysisCanvas.height);
+    const pixels = context.getImageData(0, 0, analysisCanvas.width, analysisCanvas.height).data;
+    const buckets = new Map<string, PaletteBucket>();
+    let sampledPixels = 0;
+    let totalLuminance = 0;
+    let totalSaturation = 0;
+
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (pixels[index + 3] < 128) continue;
+      const red = pixels[index];
+      const green = pixels[index + 1];
+      const blue = pixels[index + 2];
+      const brightness = luminance(red, green, blue);
+      const { hue, saturation } = rgbToHsv(red, green, blue);
+      const hueBucket = Math.floor(hue * 12);
+      const saturationBucket = Math.min(3, Math.floor(saturation * 4));
+      const luminanceBucket = Math.min(3, Math.floor(brightness * 4));
+      const key = `${hueBucket}:${saturationBucket}:${luminanceBucket}`;
+      const bucket = buckets.get(key) ?? {
+        count: 0,
+        red: 0,
+        green: 0,
+        blue: 0,
+        saturation: 0,
+        hue: 0,
+      };
+      bucket.count += 1;
+      bucket.red += red;
+      bucket.green += green;
+      bucket.blue += blue;
+      bucket.saturation += saturation;
+      bucket.hue += hue;
+      buckets.set(key, bucket);
+      sampledPixels += 1;
+      totalLuminance += brightness;
+      totalSaturation += saturation;
+    }
+
+    if (sampledPixels === 0) return DEFAULT_PROFILE;
+    const candidates = [...buckets.values()]
+      .map((bucket) => ({
+        color: [
+          Math.round(bucket.red / bucket.count),
+          Math.round(bucket.green / bucket.count),
+          Math.round(bucket.blue / bucket.count),
+        ] as ArtworkProfile["primary"],
+        saturation: bucket.saturation / bucket.count,
+        hue: bucket.hue / bucket.count,
+        score: bucket.count * (0.35 + (bucket.saturation / bucket.count) * 0.65),
+      }))
+      .sort((left, right) => right.score - left.score);
+    const primary =
+      candidates.find((candidate) => candidate.saturation >= 0.12)?.color ??
+      candidates.find((candidate) => luminance(...candidate.color) >= 0.08)?.color ??
+      DEFAULT_PROFILE.primary;
+    const primaryHue = rgbToHsv(...primary).hue;
+    const secondary =
+      candidates.find((candidate) => {
+        const distance = Math.abs(candidate.hue - primaryHue);
+        return candidate.saturation >= 0.12 && Math.min(distance, 1 - distance) >= 0.1;
+      })?.color ?? primary;
+    const averageLuminance = totalLuminance / sampledPixels;
+    const averageSaturation = totalSaturation / sampledPixels;
+    const brightCover = clamp((averageLuminance - 0.48) / 0.52, 0, 1);
+    const darkCover = clamp((0.32 - averageLuminance) / 0.32, 0, 1);
+    const tint = primary.map((value) => clamp((value / 255) * 0.68 + 0.055, 0, 1));
+
+    return {
+      primary,
+      secondary,
+      tint: new Float32Array(tint),
+      tintIntensity: 0.14 + darkCover * 0.15,
+      saturation: clamp(1.42 + averageSaturation * 0.3 - brightCover * 0.08, 1.35, 1.72),
+      exposure: 1 - brightCover * 0.18 + darkCover * 0.1,
+      shadowLift: 0.035 + darkCover * 0.14,
+      focalDim: 0.28 + brightCover * 0.24 - darkCover * 0.06,
+      edgeColorStrength: 0.07 + averageSaturation * 0.1,
+    };
+  } catch {
+    return DEFAULT_PROFILE;
+  }
+};
+
 const canvas = ref<HTMLCanvasElement>();
 const renderer = shallowRef<DynamicBackgroundRenderer>();
 const fallbackCover = ref(props.album || DEFAULT_COVER);
@@ -606,10 +807,12 @@ const fallbackLayers = reactive([
   { source: fallbackCover.value, active: true },
   { source: "", active: false },
 ]);
+const artworkProfile = shallowRef<ArtworkProfile>(DEFAULT_PROFILE);
 const webglReady = ref(false);
 let imageRequest = 0;
 let fallbackLayerIndex = 0;
 let fallbackSwitchToken = 0;
+let pendingTransitionProfile: TransitionProfile | undefined;
 
 const updatePlayback = () => {
   if (!renderer.value) return;
@@ -623,6 +826,17 @@ const updatePlayback = () => {
     renderer.value.stop();
   }
 };
+
+const compositionStyle = computed(() => {
+  const profile = artworkProfile.value;
+  return {
+    "--dynamic-primary": profile.primary.join(", "),
+    "--dynamic-secondary": profile.secondary.join(", "),
+    "--dynamic-focus-x": `${clamp(props.lyricFocus, 0, 100)}%`,
+    "--dynamic-focal-dim": profile.focalDim.toFixed(3),
+    "--dynamic-edge-color": profile.edgeColorStrength.toFixed(3),
+  };
+});
 
 const createRenderer = () => {
   if (!canvas.value) return;
@@ -665,8 +879,13 @@ const loadArtwork = async (source: string) => {
   }
   if (request !== imageRequest || !renderer.value) return;
   setFallbackArtwork(fallbackCover.value);
+  const profile = profileFromImage(image);
+  artworkProfile.value = profile;
   try {
-    if (renderer.value.loadImage(image)) {
+    if (
+      renderer.value.loadImage(image, profile, pendingTransitionProfile ?? props.transitionProfile)
+    ) {
+      pendingTransitionProfile = undefined;
       webglReady.value = true;
       updatePlayback();
     }
@@ -676,6 +895,10 @@ const loadArtwork = async (source: string) => {
 };
 
 const handleVisibilityChange = () => updatePlayback();
+const handleTrackTransition = (event: Event) => {
+  const profile = (event as CustomEvent<TransitionProfile>).detail;
+  if (profile === "normal" || profile === "skip") pendingTransitionProfile = profile;
+};
 let resizeObserver: ResizeObserver | undefined;
 
 onMounted(() => {
@@ -684,6 +907,7 @@ onMounted(() => {
     resizeObserver = new ResizeObserver(() => renderer.value?.renderFrame());
     if (canvas.value) resizeObserver.observe(canvas.value);
     document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("splayer:track-transition", handleTrackTransition);
     void loadArtwork(props.album || DEFAULT_COVER);
   } catch {
     webglReady.value = false;
@@ -701,6 +925,7 @@ onBeforeUnmount(() => {
   fallbackSwitchToken += 1;
   resizeObserver?.disconnect();
   document.removeEventListener("visibilitychange", handleVisibilityChange);
+  window.removeEventListener("splayer:track-transition", handleTrackTransition);
   renderer.value?.dispose();
   renderer.value = undefined;
   fallbackLayers.forEach((layer) => {
@@ -711,7 +936,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="dynamic-background" :class="{ 'is-ready': webglReady }">
+  <div class="dynamic-background" :class="{ 'is-ready': webglReady }" :style="compositionStyle">
     <div
       v-for="(layer, index) in fallbackLayers"
       :key="index"
@@ -720,7 +945,7 @@ onBeforeUnmount(() => {
       :style="{ backgroundImage: `url(${JSON.stringify(layer.source)})` }"
     />
     <canvas ref="canvas" class="dynamic-canvas" aria-hidden="true" />
-    <div class="dynamic-shade" aria-hidden="true" />
+    <div class="dynamic-composition" aria-hidden="true" />
   </div>
 </template>
 
@@ -728,7 +953,7 @@ onBeforeUnmount(() => {
 .dynamic-background,
 .dynamic-fallback,
 .dynamic-canvas,
-.dynamic-shade {
+.dynamic-composition {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -768,13 +993,21 @@ onBeforeUnmount(() => {
   display: none;
 }
 
-.dynamic-shade {
+.dynamic-composition {
   background:
     radial-gradient(
-      ellipse 112% 96% at 50% 43%,
-      rgba(0, 0, 0, 0.14) 0%,
-      rgba(0, 0, 0, 0.2) 54%,
-      rgba(0, 0, 0, 0.46) 100%
+      ellipse 54% 108% at var(--dynamic-focus-x) 49%,
+      rgba(0, 0, 0, var(--dynamic-focal-dim)) 0%,
+      rgba(0, 0, 0, calc(var(--dynamic-focal-dim) * 0.68)) 48%,
+      transparent 76%
+    ),
+    radial-gradient(ellipse 90% 94% at 50% 43%, transparent 42%, rgba(0, 0, 0, 0.3) 100%),
+    linear-gradient(
+      112deg,
+      rgba(var(--dynamic-primary), var(--dynamic-edge-color)) 0%,
+      transparent 36%,
+      transparent 64%,
+      rgba(var(--dynamic-secondary), var(--dynamic-edge-color)) 100%
     ),
     linear-gradient(
       to bottom,
