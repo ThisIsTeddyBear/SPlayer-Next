@@ -5,7 +5,7 @@ import { ALL_PLATFORMS } from "@shared/types/platform";
 import type { CjkTransformMode } from "@shared/types/opencc";
 import type { QualityLevel } from "@/utils/quality";
 
-export type PlayerBgType = "blur" | "solid" | "animation";
+export type PlayerBgType = "blur" | "solid" | "dynamic" | "animation";
 export type CoverLayout = "default" | "fullscreen";
 
 /**

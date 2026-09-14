@@ -4,6 +4,7 @@ import { useMediaStore } from "@/stores/media";
 import { useStatusStore } from "@/stores/status";
 import DEFAULT_COVER from "@/assets/images/song.jpg";
 import BackgroundRender from "./BackgroundRender.vue";
+import DynamicBackground from "./DynamicBackground.vue";
 
 const media = useMediaStore();
 const settings = useSettingsStore();
@@ -124,6 +125,12 @@ onBeforeUnmount(() => {
         decoding="async"
         alt=""
       />
+    </div>
+  </Transition>
+  <!-- 动态背景 -->
+  <Transition v-else-if="bgType === 'dynamic'" name="bg-fade">
+    <div v-if="bgReady" class="absolute inset-0 overflow-hidden -z-1">
+      <DynamicBackground :album="media.track?.cover || DEFAULT_COVER" :playing="status.isPlaying" />
     </div>
   </Transition>
   <!-- 流体背景 -->

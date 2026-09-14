@@ -234,17 +234,17 @@ const appearanceCategory: SettingCategory = {
           options: [
             { value: "blur", labelKey: "settings.playerBgType.blur" },
             { value: "solid", labelKey: "settings.playerBgType.solid" },
+            { value: "dynamic", labelKey: "settings.playerBgType.dynamic" },
             { value: "animation", labelKey: "settings.playerBgType.animation" },
           ],
           defaultValue: "blur",
           confirm: {
-            when: (next) => next === "animation",
+            when: (next) => next === "dynamic" || next === "animation",
             titleKey: "settings.confirm.highResourceTitle",
             contentKey: "settings.confirm.highResourceContent",
             type: "warning",
           },
-          childrenCondition: () =>
-            useSettingsStore().player.playerBgType === "animation",
+          childrenCondition: () => useSettingsStore().player.playerBgType === "animation",
           hideChildren: true,
           children: [
             {

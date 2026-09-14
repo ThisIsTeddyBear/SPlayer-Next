@@ -1444,6 +1444,7 @@
       "description": "Background type of the full-screen player",
       "blur": "Blur",
       "solid": "Solid",
+      "dynamic": "Dynamic",
       "animation": "Fluid"
     },
     "playerBgFlowSpeed": {
