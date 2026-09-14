@@ -526,7 +526,7 @@ defineExpose({
               <div v-if="showAlbum" class="flex-1 min-w-0">
                 {{ t("songList.album") }}
               </div>
-              <div class="w-7 shrink-0 text-center">
+              <div class="w-16 shrink-0 text-center">
                 {{ t("songList.actions") }}
               </div>
               <div v-if="showDuration" class="w-16 shrink-0 text-center">
@@ -719,7 +719,7 @@ defineExpose({
               </div>
               <div
                 v-if="!batch.active.value"
-                class="w-7 shrink-0 flex items-center justify-center"
+                class="w-16 shrink-0 flex items-center justify-center"
                 @click.stop
               >
                 <SButton
@@ -738,7 +738,7 @@ defineExpose({
                   </template>
                 </SButton>
               </div>
-              <div v-else class="w-7 shrink-0" />
+              <div v-else class="w-16 shrink-0" />
               <div
                 v-if="showDuration"
                 class="w-16 shrink-0 text-center text-sm tabular-nums"

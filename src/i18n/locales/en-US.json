@@ -121,6 +121,7 @@
     "copied": "Copied",
     "copyFailed": "Copy failed",
     "playAll": "Play All",
+    "shufflePlay": "Shuffle play",
     "totalSongs": "{count} songs",
     "totalAlbums": "{count} albums",
     "totalArtists": "{count} artists",

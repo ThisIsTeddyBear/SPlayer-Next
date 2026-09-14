@@ -57,6 +57,13 @@ const handlePlayAll = (): void => {
   player.playFrom(tracks.value, 0, playbackContext.value);
 };
 
+const handleShufflePlay = (): void => {
+  if (tracks.value.length === 0) return;
+  player.setShuffleMode("on");
+  const startIndex = Math.floor(Math.random() * tracks.value.length);
+  player.playFrom(tracks.value, startIndex, playbackContext.value);
+};
+
 // 扫描进度百分比
 const scanPercent = computed(() => {
   if (!scanProgress.value || scanProgress.value.total === 0) return 0;
@@ -167,6 +174,18 @@ onUnmounted(() => {
               <IconLucidePlay />
             </template>
             {{ t("common.playAll") }}
+          </SButton>
+          <SButton
+            variant="secondary"
+            circle
+            :disabled="tracks.length === 0"
+            :aria-label="t('common.shufflePlay')"
+            :title="t('common.shufflePlay')"
+            @click="handleShufflePlay"
+          >
+            <template #icon>
+              <IconLucideShuffle />
+            </template>
           </SButton>
           <SButton
             variant="secondary"
