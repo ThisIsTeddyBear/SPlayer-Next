@@ -6,6 +6,7 @@ import type { CjkTransformMode } from "@shared/types/opencc";
 import type { QualityLevel } from "@/utils/quality";
 
 export type PlayerBgType = "blur" | "solid" | "dynamic" | "animation";
+export type DynamicBackgroundPreset = "balanced" | "immersive" | "focus";
 export type CoverLayout = "default" | "fullscreen";
 
 /**
@@ -130,6 +131,7 @@ export interface LyricSettings {
 
 export interface PlayerSettings {
   playerBgType: PlayerBgType;
+  dynamicBackgroundPreset: DynamicBackgroundPreset;
   playerBgFps: number;
   playerBgFlowSpeed: number;
   playerBgRenderScale: number;

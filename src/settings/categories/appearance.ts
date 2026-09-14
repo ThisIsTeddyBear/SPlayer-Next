@@ -292,6 +292,18 @@ const appearanceCategory: SettingCategory = {
           ],
         },
         {
+          key: "dynamicBackgroundPreset",
+          type: "select",
+          binding: { store: "settings", path: "player.dynamicBackgroundPreset" },
+          options: [
+            { value: "balanced", labelKey: "settings.dynamicBackgroundPreset.balanced" },
+            { value: "immersive", labelKey: "settings.dynamicBackgroundPreset.immersive" },
+            { value: "focus", labelKey: "settings.dynamicBackgroundPreset.focus" },
+          ],
+          defaultValue: "balanced",
+          visible: () => useSettingsStore().player.playerBgType === "dynamic",
+        },
+        {
           key: "coverLayout",
           type: "select",
           binding: { store: "settings", path: "player.coverLayout" },

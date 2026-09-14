@@ -108,6 +108,7 @@ export const useSettingsStore = defineStore(
 
     const player = reactive<PlayerSettings>({
       playerBgType: "blur",
+      dynamicBackgroundPreset: "balanced",
       playerBgFps: 30,
       playerBgFlowSpeed: 4,
       playerBgRenderScale: 0.5,

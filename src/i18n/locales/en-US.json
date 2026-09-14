@@ -1447,6 +1447,13 @@
       "dynamic": "Dynamic",
       "animation": "Fluid"
     },
+    "dynamicBackgroundPreset": {
+      "label": "Dynamic Style",
+      "description": "Curated motion and readability profile for the Dynamic background",
+      "balanced": "Balanced",
+      "immersive": "Immersive",
+      "focus": "Focus"
+    },
     "playerBgFlowSpeed": {
       "label": "Flow Speed",
       "description": "Animation flow speed of the fluid background"

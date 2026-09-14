@@ -5,6 +5,7 @@
  * Kawarp renderer and Dynamic Background theme; see THIRD_PARTY_NOTICES.md.
  */
 import DEFAULT_COVER from "@/assets/images/song.jpg";
+import type { DynamicBackgroundPreset } from "@/types/settings";
 
 interface Framebuffer {
   framebuffer: WebGLFramebuffer;
@@ -19,6 +20,17 @@ interface DynamicBackgroundOptions {
 }
 
 type TransitionProfile = "normal" | "skip";
+
+interface DynamicPresetConfig {
+  warpIntensity: number;
+  animationSpeed: number;
+  saturation: number;
+  grain: number;
+  vignette: number;
+  canvasOpacity: number;
+  focalDim: number;
+  edgeColor: number;
+}
 
 interface ArtworkProfile {
   primary: [number, number, number];
@@ -37,6 +49,7 @@ const props = defineProps<{
   playing: boolean;
   lyricFocus: number;
   transitionProfile: TransitionProfile;
+  preset: DynamicBackgroundPreset;
 }>();
 
 const BLUR_SIZE = 128;
@@ -54,6 +67,38 @@ const DEFAULT_PROFILE: ArtworkProfile = {
   shadowLift: 0.1,
   focalDim: 0.34,
   edgeColorStrength: 0.11,
+};
+const DYNAMIC_PRESETS: Record<DynamicBackgroundPreset, DynamicPresetConfig> = {
+  balanced: {
+    warpIntensity: 1,
+    animationSpeed: 1.8,
+    saturation: 1,
+    grain: 0.012,
+    vignette: 0.38,
+    canvasOpacity: 0.75,
+    focalDim: 1,
+    edgeColor: 1,
+  },
+  immersive: {
+    warpIntensity: 1.28,
+    animationSpeed: 2.35,
+    saturation: 1.12,
+    grain: 0.014,
+    vignette: 0.3,
+    canvasOpacity: 0.82,
+    focalDim: 0.78,
+    edgeColor: 1.35,
+  },
+  focus: {
+    warpIntensity: 0.45,
+    animationSpeed: 0.75,
+    saturation: 0.88,
+    grain: 0.008,
+    vignette: 0.47,
+    canvasOpacity: 0.68,
+    focalDim: 1.34,
+    edgeColor: 0.68,
+  },
 };
 
 const vertexShader = `
@@ -222,6 +267,7 @@ class DynamicBackgroundRenderer {
   private renderHeight = 0;
   private currentProfile: ArtworkProfile = DEFAULT_PROFILE;
   private nextProfile: ArtworkProfile = DEFAULT_PROFILE;
+  private visualPreset: DynamicPresetConfig = DYNAMIC_PRESETS.balanced;
 
   constructor(canvas: HTMLCanvasElement, options: DynamicBackgroundOptions = {}) {
     const gl = canvas.getContext("webgl", {
@@ -605,7 +651,7 @@ class DynamicBackgroundRenderer {
     this.gl.bindTexture(this.gl.TEXTURE_2D, source);
     this.gl.uniform1i(this.uniform("warp", "u_texture"), 0);
     this.gl.uniform1f(this.uniform("warp", "u_time"), time);
-    this.gl.uniform1f(this.uniform("warp", "u_intensity"), 1);
+    this.gl.uniform1f(this.uniform("warp", "u_intensity"), this.visualPreset.warpIntensity);
     this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
 
     this.gl.useProgram(this.programs.output);
@@ -615,11 +661,14 @@ class DynamicBackgroundRenderer {
     this.gl.activeTexture(this.gl.TEXTURE0);
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.warpFBO.texture);
     this.gl.uniform1i(this.uniform("output", "u_texture"), 0);
-    this.gl.uniform1f(this.uniform("output", "u_saturation"), profile.saturation);
-    this.gl.uniform1f(this.uniform("output", "u_dithering"), 0.012);
+    this.gl.uniform1f(
+      this.uniform("output", "u_saturation"),
+      profile.saturation * this.visualPreset.saturation,
+    );
+    this.gl.uniform1f(this.uniform("output", "u_dithering"), this.visualPreset.grain);
     this.gl.uniform1f(this.uniform("output", "u_exposure"), profile.exposure);
     this.gl.uniform1f(this.uniform("output", "u_shadowLift"), profile.shadowLift);
-    this.gl.uniform1f(this.uniform("output", "u_vignette"), 0.38);
+    this.gl.uniform1f(this.uniform("output", "u_vignette"), this.visualPreset.vignette);
     this.gl.uniform1f(this.uniform("output", "u_time"), time);
     this.gl.uniform1f(this.uniform("output", "u_scale"), 1);
     this.gl.uniform2f(this.uniform("output", "u_resolution"), width, height);
@@ -630,7 +679,7 @@ class DynamicBackgroundRenderer {
     const now = performance.now();
     const dt = Math.max(0, Math.min(0.1, (now - this.lastFrameTime) / 1000));
     this.lastFrameTime = now;
-    this.accumulatedTime += dt * 1.8;
+    this.accumulatedTime += dt * this.visualPreset.animationSpeed;
     this.render(this.accumulatedTime, now);
   }
 
@@ -638,7 +687,7 @@ class DynamicBackgroundRenderer {
     if (!this.isPlaying || this.contextLost) return;
     const dt = Math.max(0, Math.min(0.1, (timestamp - this.lastFrameTime) / 1000));
     this.lastFrameTime = timestamp;
-    this.accumulatedTime += dt * 1.8;
+    this.accumulatedTime += dt * this.visualPreset.animationSpeed;
     this.render(this.accumulatedTime, timestamp);
     this.animationId = requestAnimationFrame(this.renderLoop);
   };
@@ -648,6 +697,11 @@ class DynamicBackgroundRenderer {
     this.isPlaying = true;
     this.lastFrameTime = performance.now();
     this.animationId = requestAnimationFrame(this.renderLoop);
+  }
+
+  setPreset(preset: DynamicBackgroundPreset) {
+    this.visualPreset = DYNAMIC_PRESETS[preset];
+    this.renderFrame();
   }
 
   stop() {
@@ -827,14 +881,20 @@ const updatePlayback = () => {
   }
 };
 
+const visualPreset = computed(() => DYNAMIC_PRESETS[props.preset]);
+const rootStyle = computed(() => ({
+  "--dynamic-canvas-opacity": visualPreset.value.canvasOpacity.toFixed(3),
+}));
+
 const compositionStyle = computed(() => {
   const profile = artworkProfile.value;
+  const preset = visualPreset.value;
   return {
     "--dynamic-primary": profile.primary.join(", "),
     "--dynamic-secondary": profile.secondary.join(", "),
     "--dynamic-focus-x": `${clamp(props.lyricFocus, 0, 100)}%`,
-    "--dynamic-focal-dim": profile.focalDim.toFixed(3),
-    "--dynamic-edge-color": profile.edgeColorStrength.toFixed(3),
+    "--dynamic-focal-dim": (profile.focalDim * preset.focalDim).toFixed(3),
+    "--dynamic-edge-color": (profile.edgeColorStrength * preset.edgeColor).toFixed(3),
   };
 });
 
@@ -851,6 +911,7 @@ const createRenderer = () => {
       void loadArtwork(fallbackCover.value);
     },
   });
+  renderer.value.setPreset(props.preset);
 };
 
 const setFallbackArtwork = (source: string) => {
@@ -954,6 +1015,10 @@ watch(
   (album) => void loadArtwork(album || DEFAULT_COVER),
 );
 watch(() => props.playing, updatePlayback);
+watch(
+  () => props.preset,
+  (preset) => renderer.value?.setPreset(preset),
+);
 
 onBeforeUnmount(() => {
   imageRequest += 1;
@@ -971,7 +1036,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="dynamic-background" :class="{ 'is-ready': webglReady }" :style="compositionStyle">
+  <div
+    class="dynamic-background"
+    :class="{ 'is-ready': webglReady }"
+    :style="[rootStyle, compositionStyle]"
+  >
     <div
       v-for="(layer, index) in fallbackLayers"
       :key="index"
@@ -1021,7 +1090,7 @@ onBeforeUnmount(() => {
 }
 
 .dynamic-background.is-ready .dynamic-canvas {
-  opacity: 0.75;
+  opacity: var(--dynamic-canvas-opacity);
 }
 
 .dynamic-background.is-ready .dynamic-fallback {

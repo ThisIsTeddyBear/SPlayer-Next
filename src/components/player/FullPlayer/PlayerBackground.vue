@@ -150,6 +150,7 @@ onBeforeUnmount(() => {
         :playing="status.isPlaying"
         :lyric-focus="dynamicLyricFocus"
         :transition-profile="dynamicTransitionProfile"
+        :preset="settings.player.dynamicBackgroundPreset"
       />
     </div>
   </Transition>
