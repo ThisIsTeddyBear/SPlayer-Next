@@ -11,6 +11,16 @@ const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1_000;
 const FETCH_TIMEOUT_MS = 6_000;
 
+class GoogleTranslateResponseError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = "GoogleTranslateResponseError";
+  }
+}
+
 /** 判断文本是否完全由拉丁字符、数字和常见标点组成。 */
 const isPurelyLatinScript = (text: string): boolean =>
   // 需要涵盖 ASCII 控制字符以保持既有拉丁文本判断不变。
@@ -26,19 +36,47 @@ const fetchWithTimeout = (url: string): Promise<Response> => {
   return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timeoutId));
 };
 
+/** 读取 Google Translate 响应，并将 HTML 错误页与 JSON 负载区分开。 */
+const readGoogleTranslateResponse = async (response: Response): Promise<unknown[][][]> => {
+  const contentType = response.headers.get("content-type") || "unknown content type";
+  const body = await response.text();
+  const responseInfo = `HTTP ${response.status} (${contentType})`;
+
+  if (!response.ok) {
+    throw new GoogleTranslateResponseError(
+      `Google Translate returned ${responseInfo}`,
+      response.status === 429 || response.status >= 500,
+    );
+  }
+
+  if (body.trimStart().startsWith("<")) {
+    throw new GoogleTranslateResponseError(
+      `Google Translate returned HTML instead of JSON (${responseInfo})`,
+      false,
+    );
+  }
+
+  try {
+    return JSON.parse(body) as unknown[][][];
+  } catch {
+    throw new GoogleTranslateResponseError(
+      `Google Translate returned invalid JSON (${responseInfo})`,
+      false,
+    );
+  }
+};
+
 const romanizeLine = async (text: string): Promise<string | undefined> => {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
     try {
       const url = `${GOOGLE_TRANSLATE_ENDPOINT}?client=gtx&sl=auto&tl=en&dt=rm&q=${encodeURIComponent(text)}`;
       const response = await fetchWithTimeout(url);
-      const data = (await response.json()) as unknown[][][];
+      const data = await readGoogleTranslateResponse(response);
       const reading = data?.[0]?.[0]?.[3];
       return typeof reading === "string" && reading.trim() ? reading.trim() : undefined;
     } catch (error) {
-      if (attempt + 1 === MAX_RETRIES) {
-        systemLog.warn("[romanization] Google Translate request failed", error);
-        return undefined;
-      }
+      if (error instanceof GoogleTranslateResponseError && !error.retryable) throw error;
+      if (attempt + 1 === MAX_RETRIES) throw error;
       await delay(RETRY_DELAY_MS * 2 ** attempt);
     }
   }
@@ -53,10 +91,16 @@ const romanizeLine = async (text: string): Promise<string | undefined> => {
  */
 export const romanizeLines = async (input: unknown): Promise<Record<string, string>> => {
   const lines = Array.isArray(input)
-    ? input.filter(
-        (line): line is string =>
-          typeof line === "string" && line.length <= MAX_LINE_LENGTH && !isPurelyLatinScript(line),
-      )
+    ? [
+        ...new Set(
+          input.filter(
+            (line): line is string =>
+              typeof line === "string" &&
+              line.length <= MAX_LINE_LENGTH &&
+              !isPurelyLatinScript(line),
+          ),
+        ),
+      ]
     : [];
   const cached = getCachedRomanizations(lines);
   const pending = lines.filter((line) => !cached[line]);
@@ -69,11 +113,19 @@ export const romanizeLines = async (input: unknown): Promise<Record<string, stri
     );
   }
 
-  for (const line of pending) {
-    const reading = await romanizeLine(line);
-    if (reading) {
-      result[line] = reading;
-      generated[line] = reading;
+  for (const [index, line] of pending.entries()) {
+    try {
+      const reading = await romanizeLine(line);
+      if (reading) {
+        result[line] = reading;
+        generated[line] = reading;
+      }
+    } catch (error) {
+      systemLog.warn(
+        `[romanization] Google Translate unavailable; stopped after a failed request (additional requests avoided: ${pending.length - index - 1})`,
+        error,
+      );
+      break;
     }
   }
 
