@@ -79,15 +79,16 @@ const bootstrapPlayback = async (): Promise<void> => {
   }
 };
 
-// 初始化程序
+// Initialize application
 router.isReady().then(async () => {
-  // 挂载应用
+  // Mount application
   app.mount("#app");
-  // 淡出加载动画
+  // Start playback bootstrap service immediately
+  void bootstrapPlayback().catch(console.error);
+  // Fade out splash screen
   await Promise.all([splashMinElapsed, nextPaintedFrame()]);
   removeSplash();
-  setTimeout(() => bootstrapPlayback().catch(console.error), SPLASH_FADE_MS);
-  // 初始化快捷键
+  // Initialize hotkeys
   useHotkeyStore()
     .init()
     .then(installHotkeyManager)

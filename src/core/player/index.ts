@@ -359,10 +359,23 @@ export const recoverFromSourceFailure = async (): Promise<void> => {
   }
 };
 
+/** Indicates whether cold-start playback restoration is in progress */
+let isRestoringLastTrack = false;
+/** Queued play intent during cold-start restoration */
+let pendingPlayAfterRestore = false;
+
 export const play = async (): Promise<void> => {
   const status = useStatusStore();
-  if (status.state === "stopped" && status.currentTrack) {
+  if (isRestoringLastTrack) {
+    pendingPlayAfterRestore = true;
+    return;
+  }
+  if ((status.state === "stopped" || status.state === "idle") && status.currentTrack) {
+    const memoryPos = status.position;
     await loadTrack(status.currentTrack, status.currentPlaybackContext);
+    if (useSettingsStore().system.player.rememberLastTrack && memoryPos > 0) {
+      await seek(memoryPos);
+    }
     return;
   }
   const prev = status.state;
@@ -378,6 +391,10 @@ export const play = async (): Promise<void> => {
 
 export const togglePlay = (): void => {
   const status = useStatusStore();
+  if (isRestoringLastTrack) {
+    pendingPlayAfterRestore = !pendingPlayAfterRestore;
+    return;
+  }
   if (status.isPlaying) {
     pause();
   } else {
@@ -963,25 +980,41 @@ export const restoreLastTrack = async (): Promise<void> => {
     status.state = "idle";
     return;
   }
+  isRestoringLastTrack = true;
+  pendingPlayAfterRestore = false;
   const lastPosition = status.position;
   media.setTrack(lastTrack);
   media.setPlaybackContext(status.currentPlaybackContext);
   lyricLoader.beginLoad();
-  const loaded = await loadTrackSourceWithFallback(
-    lastTrack,
-    status.currentPlaybackContext,
-    settings.system.player.autoPlay,
-    () => true,
-  );
-  if (loaded.status === "loaded" && loaded.result.ok) {
-    if (settings.system.player.rememberLastTrack && lastPosition > 0) {
-      await seek(lastPosition);
+  try {
+    const loaded = await loadTrackSourceWithFallback(
+      lastTrack,
+      status.currentPlaybackContext,
+      settings.system.player.autoPlay,
+      () => true,
+    );
+    if (loaded.status === "loaded" && loaded.result.ok) {
+      if (settings.system.player.rememberLastTrack && lastPosition > 0) {
+        await seek(lastPosition);
+      }
+      if (loaded.resolved.cacheRequest) {
+        cacheScheduler.schedule(lastTrack.id, loaded.resolved.cacheRequest);
+      }
+      if (pendingPlayAfterRestore) {
+        pendingPlayAfterRestore = false;
+        await play();
+      }
+    } else {
+      status.state = "idle";
+      // Retain remembered position on restore failure to avoid reset to 0
+      if (lastPosition > 0) {
+        status.position = lastPosition;
+        playback.setCurrentTime(lastPosition);
+      }
     }
-    if (loaded.resolved.cacheRequest) {
-      cacheScheduler.schedule(lastTrack.id, loaded.resolved.cacheRequest);
-    }
-  } else {
-    status.state = "idle";
+  } finally {
+    isRestoringLastTrack = false;
+    pendingPlayAfterRestore = false;
   }
 };
 
