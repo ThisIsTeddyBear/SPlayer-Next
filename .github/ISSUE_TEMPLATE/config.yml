@@ -1,11 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Feature requests
-    url: https://github.com/SPlayer-Dev/SPlayer-Next/discussions/new?category=ideas
-    about: Start feature proposals and general questions in Discussions.
   - name: General discussion
     url: https://github.com/SPlayer-Dev/SPlayer-Next/discussions
-    about: Use Issues for bugs. Start feature proposals and general questions in Discussions.
+    about: Ask questions, share ideas, and discuss with the community.
   - name: How to ask good questions
     url: https://www.catb.org/~esr/faqs/smart-questions.html
     about: Please read this guide before opening an Issue.
