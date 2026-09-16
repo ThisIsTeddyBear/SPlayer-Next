@@ -1,21 +1,28 @@
 import type { LyricWord } from "@shared/types/lyrics";
 
-const CJK_RE = /^[\p{Unified_Ideograph}\u0800-\u9FFC]+$/u;
+const CJK_RE = /^[\p{Unified_Ideograph}぀-ヿ]+$/u;
 
 /**
- * 判断字符串是否全部为 CJK（中日韩统一表意文字）
+ * Determine whether a string consists entirely of CJK characters
+ * @param char - String to test
+ * @returns Whether all characters are CJK
  */
 export const isCJK = (char: string): boolean => CJK_RE.test(char);
 
 const hasSegmenter = typeof Intl !== "undefined" && typeof Intl.Segmenter !== "undefined";
 
+/** Word boundary segmenter singleton */
+let wordSegmenter: Intl.Segmenter | undefined;
+
 /**
- * 根据时间比例创建一个歌词原子
- * @param word - 文字内容
- * @param romanWord - 罗马音/拼音
- * @param obscene - 是否为脏话
- * @param startTime - 起始时间
- * @param endTime - 结束时间
+ * Create a lyric atom with proportional timing
+ * @param word - Word text content
+ * @param romanWord - Romanization/pinyin text
+ * @param obscene - Whether the word is flagged as profane
+ * @param startTime - Start time in milliseconds
+ * @param endTime - End time in milliseconds
+ * @param endsWithSpace - Whether the syllable is followed by whitespace
+ * @param emptyBeat - Empty beat count
  */
 const makeAtom = (
   word: string,
@@ -23,17 +30,24 @@ const makeAtom = (
   obscene: boolean,
   startTime: number,
   endTime: number,
-): LyricWord => ({ word, romanWord, startTime, endTime, obscene });
+  endsWithSpace?: boolean,
+  emptyBeat?: number,
+): LyricWord => ({
+  word,
+  romanWord,
+  startTime,
+  endTime,
+  obscene,
+  ...(endsWithSpace ? { endsWithSpace: true } : {}),
+  ...(emptyBeat !== undefined ? { emptyBeat } : {}),
+});
 
 /**
- * 将歌词单词列表重新分组：CJK 字符逐字拆分，并通过 Intl.Segmenter 进行多语言分词。
+ * Regroup lyric words: split multi-character CJK words character-by-character,
+ * and group phonetic tokens by language word boundaries using Intl.Segmenter.
  *
- * 处理流程：
- * 1. 按空格拆分每个单词，CJK 多字词再逐字拆开，按比例分配时间
- * 2. 若浏览器支持 Intl.Segmenter，将原子按词边界重新分组
- *
- * @param words - 原始歌词单词数组
- * @returns 分组后的单词/单词组数组，单元素为 LyricWord，多元素组为 LyricWord[]
+ * @param words - Raw lyric word array
+ * @returns Regrouped array of single words or word groups
  */
 export const chunkAndSplitLyricWords = (words: LyricWord[]): (LyricWord | LyricWord[])[] => {
   const atoms: LyricWord[] = [];
@@ -42,8 +56,10 @@ export const chunkAndSplitLyricWords = (words: LyricWord[]): (LyricWord | LyricW
     const content = w.word.trim();
     const romanWord = w.romanWord ?? "";
     const obscene = w.obscene ?? false;
+    const endsWithSpace = w.endsWithSpace ?? false;
+    const emptyBeat = w.emptyBeat;
 
-    // 空白或含 ruby 注音的单词直接保留
+    // Retain whitespace-only or ruby-annotated words directly
     if (content.length === 0 || (w.ruby?.length ?? 0) > 0) {
       atoms.push({ ...w });
       continue;
@@ -54,25 +70,41 @@ export const chunkAndSplitLyricWords = (words: LyricWord[]): (LyricWord | LyricW
     const duration = w.endTime - w.startTime;
     let offset = 0;
 
-    for (const part of parts) {
+    for (let pIdx = 0; pIdx < parts.length; pIdx++) {
+      const part = parts[pIdx];
+      const isLastPart = pIdx === parts.length - 1;
       if (!part.trim()) {
         const t = w.startTime + (offset / totalLen) * duration;
-        atoms.push(makeAtom(part, "", obscene, t, t));
+        atoms.push(makeAtom(part, "", obscene, t, t, isLastPart && endsWithSpace, emptyBeat));
         continue;
       }
 
       if (isCJK(part) && part.length > 1 && romanWord.trim().length === 0) {
-        // CJK 多字词逐字拆分，均分时间
+        // Multi-character CJK: split character by character with evenly divided duration
         const charDur = duration / totalLen;
-        for (const char of part) {
+        for (let cIdx = 0; cIdx < part.length; cIdx++) {
+          const char = part[cIdx];
+          const isLastChar = isLastPart && cIdx === part.length - 1;
           const t = w.startTime + (offset / totalLen) * duration;
-          atoms.push(makeAtom(char, "", obscene, t, t + charDur));
+          atoms.push(
+            makeAtom(char, "", obscene, t, t + charDur, isLastChar && endsWithSpace, emptyBeat),
+          );
           offset++;
         }
       } else {
         const t = w.startTime + (offset / totalLen) * duration;
         const partDur = (part.length / totalLen) * duration;
-        atoms.push(makeAtom(part, romanWord, obscene, t, t + partDur));
+        atoms.push(
+          makeAtom(
+            part,
+            romanWord,
+            obscene,
+            t,
+            t + partDur,
+            isLastPart && endsWithSpace,
+            emptyBeat,
+          ),
+        );
         offset += part.length;
       }
     }
@@ -80,16 +112,69 @@ export const chunkAndSplitLyricWords = (words: LyricWord[]): (LyricWord | LyricW
 
   if (!hasSegmenter) return atoms;
 
-  // 利用 Intl.Segmenter 按词边界重新分组
+  // Split into runs separated by natural word boundaries (whitespace)
+  // to avoid merging Western words across spaces
+  const runs: LyricWord[][] = [];
+  let currentRun: LyricWord[] = [];
+
+  for (let i = 0; i < atoms.length; i++) {
+    const atom = atoms[i];
+    currentRun.push(atom);
+    if (i === atoms.length - 1 || hasWordBoundaryBetween(atom, atoms[i + 1])) {
+      runs.push(currentRun);
+      currentRun = [];
+    }
+  }
+
+  wordSegmenter ??= new Intl.Segmenter(undefined, { granularity: "word" });
+  const result: (LyricWord | LyricWord[])[] = [];
+
+  for (const run of runs) {
+    if (run.length === 1) {
+      result.push(run[0]);
+    } else {
+      result.push(...groupAtomsBySegmenter(run, wordSegmenter));
+    }
+  }
+
+  return result;
+};
+
+/**
+ * Determine whether a natural word boundary exists between two adjacent atoms
+ * @param current - Current atom
+ * @param next - Next atom
+ * @returns Whether a boundary exists
+ */
+const hasWordBoundaryBetween = (current: LyricWord, next?: LyricWord): boolean => {
+  if (current.endsWithSpace || /\s$/.test(current.word) || !current.word.trim()) {
+    return true;
+  }
+  if (next && (/^\s/.test(next.word) || !next.word.trim())) {
+    return true;
+  }
+  return false;
+};
+
+/**
+ * Group continuous whitespace-free atoms using Intl.Segmenter
+ * @param atoms - Continuous atoms array
+ * @param segmenter - Segmenter instance
+ * @returns Regrouped array
+ */
+const groupAtomsBySegmenter = (
+  atoms: LyricWord[],
+  segmenter: Intl.Segmenter,
+): (LyricWord | LyricWord[])[] => {
   const fullText = atoms.map((a) => a.word).join("");
-  const segments = new Intl.Segmenter(undefined, { granularity: "word" });
+  const segments = segmenter.segment(fullText);
   const result: (LyricWord | LyricWord[])[] = [];
   let atomIdx = 0;
   let actual = 0;
   let expected = 0;
   let group: LyricWord[] = [];
 
-  for (const seg of segments.segment(fullText)) {
+  for (const seg of segments) {
     expected += seg.segment.length;
 
     while (actual < expected && atomIdx < atoms.length) {
@@ -99,16 +184,15 @@ export const chunkAndSplitLyricWords = (words: LyricWord[]): (LyricWord | LyricW
     }
 
     if (actual === expected) {
-      // 将前导空白从分组中提出
       while (group.length > 1 && !group[0].word.trim()) {
-        result.push(group.shift()!);
+        const leading = group.shift();
+        if (leading) result.push(leading);
       }
       result.push(group.length === 1 ? group[0] : group);
       group = [];
     }
   }
 
-  // 处理剩余原子
   while (atomIdx < atoms.length) {
     result.push(atoms[atomIdx++]);
   }
@@ -119,17 +203,16 @@ export const chunkAndSplitLyricWords = (words: LyricWord[]): (LyricWord | LyricW
   return result;
 };
 
-/** 匹配字母或数字字符（Unicode 全语言支持） */
+/** Match letter or digit Unicode characters */
 const LETTER_OR_DIGIT_RE = /[\p{L}\p{N}]/u;
 
 /**
- * 判断两个相邻文本之间是否需要插入空格
+ * Determine whether a space should be inserted between two adjacent texts
+ * CJK characters do not need spaces; non-CJK alphanumeric boundaries require spaces.
  *
- * CJK 字符之间不需要空格，非 CJK 的字母/数字之间需要空格。
- *
- * @param prevText - 前一个文本
- * @param nextText - 后一个文本
- * @returns 是否需要空格
+ * @param prevText - Preceding text
+ * @param nextText - Following text
+ * @returns Whether a space is needed
  */
 export const needsSpaceBetween = (prevText: string, nextText: string): boolean => {
   if (!prevText || !nextText) return false;

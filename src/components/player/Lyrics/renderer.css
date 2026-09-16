@@ -1,3 +1,5 @@
+/* ---- Container ---- */
+
 .lp-root {
   position: relative;
   width: 100%;
@@ -17,7 +19,7 @@
   padding-right: var(--lp-padding-x, 1em);
 }
 
-/* ---- 歌词行 ---- */
+/* ---- Lyric Lines ---- */
 
 .lp-line {
   position: absolute;
@@ -27,7 +29,7 @@
   box-sizing: border-box;
   padding: var(--lp-line-padding, 0.4em 1em);
   color: var(--lp-singer-color, var(--lp-color, #fff));
-  font-size: inherit;
+  font-size: var(--lp-font-size, inherit);
   font-weight: inherit;
   transform-origin: left;
   opacity: 1;
@@ -41,29 +43,50 @@
     transform-origin: right;
     color: var(--lp-singer-color, var(--lp-duet-color, var(--lp-color, #fff)));
   }
-
-  /* 背景行（和声） */
-  &.bg {
-    font-size: var(--lp-bg-font-size, 0.75em);
-    padding-left: calc(1em / 0.75);
-    padding-right: calc(1em / 0.75);
-    transform-origin: left top;
-    opacity: 0.0001;
-    transition: opacity 0.25s;
-
-    &.active {
-      opacity: var(--lp-bg-active-opacity, 0.4);
-      transition: opacity 0.5s 0.25s;
-    }
-  }
 }
 
-.lp-line.align-center {
+/* Host line with background vocal: allow overlay beyond line bounds */
+.lp-line.has-bg {
+  contain: none;
+}
+
+/* Background vocal overlay: nested above/below host line */
+.lp-line-bg {
+  --p: clamp(0, var(--lp-bg-progress, 0), 1);
+  position: absolute;
+  inset-inline: 0;
+  margin: 0;
+  padding-inline: inherit;
+  box-sizing: border-box;
+  font-size: var(--lp-bg-font-size, 0.75em);
+  line-height: var(--lp-line-height, 1.25);
+  color: var(--lp-singer-color, inherit);
+  text-align: inherit;
+  pointer-events: none;
+  user-select: none;
+  opacity: calc(var(--p) * var(--lp-bg-active-opacity, 0.4));
+}
+
+/* Below host: settles into host when collapsed, sinks downward when expanded */
+.lp-line-bg:not(.above) {
+  top: 100%;
+  transform: translateY(calc((var(--p) - 1) * var(--lp-bg-tuck, 0.85em)));
+}
+
+/* Above host: settles into host when collapsed, floats upward when expanded */
+.lp-line-bg.above {
+  bottom: 100%;
+  transform: translateY(calc((1 - var(--p)) * var(--lp-bg-tuck, 0.85em)));
+}
+
+.lp-line.align-center,
+.lp-line-bg.align-center {
   text-align: center;
   transform-origin: center;
 }
 
-.lp-line.align-end {
+.lp-line.align-end,
+.lp-line-bg.align-end {
   text-align: end;
   transform-origin: right;
 }
@@ -76,19 +99,19 @@
   margin-inline: auto;
 }
 
-/* ---- 内容包裹层（主歌词 + 副歌词） ---- */
+/* ---- Content Wrapper (Main Lyrics + Sub Lyrics) ---- */
 
 .lp-content {
   position: relative;
   width: fit-content;
   max-width: 100%;
 
-  /* 悬停背景层 */
+  /* Hover background indicator */
   &::before {
     content: "";
     position: absolute;
-    inset: -0.05em -0.4em -0.25em;
-    border-radius: 8px;
+    inset: var(--lp-hover-inset, -0.09em -0.45em -0.21em);
+    border-radius: var(--lp-hover-radius, 8px);
     background-color: var(
       --lp-hover-bg,
       color-mix(in srgb, var(--lp-color, #fff) 14%, transparent)
@@ -103,117 +126,25 @@
   }
 }
 
-.lp-line.duet.bg {
-  transform-origin: right top;
-}
-
 .lp-line.duet .lp-content {
   margin-left: auto;
 }
 
-/* ---- 对唱左右分栏 ---- */
-
-.lp-has-duet {
-  --lp-duet-indent: 15%;
-}
-
-.lp-has-duet .lp-line:not(.bg):not(.duet) {
-  padding-inline-end: var(--lp-duet-indent);
-}
-
-.lp-has-duet .lp-line.duet:not(.bg) {
-  padding-inline-start: var(--lp-duet-indent);
-}
-
-@media (max-width: 600px) {
-  .lp-has-duet {
-    --lp-duet-indent: 8%;
-  }
-}
-
-.lp-credit {
-  opacity: var(--lp-credit-opacity, 0.3);
-  pointer-events: auto !important; /* 启用交互并阻止点击穿透到下方的普通歌词行上 */
-  z-index: 10 !important; /* 提升层级，防止被普通歌词行（尤其是最后一行）遮挡和阻断点击 */
-  background: none !important;
-  background-color: transparent !important;
-  box-shadow: none !important;
-  border: none !important;
-  outline: none !important;
-}
-
-.lp-credit:hover,
-.lp-credit:active {
-  background: none !important;
-  background-color: transparent !important;
-  box-shadow: none !important;
-  border: none !important;
-  outline: none !important;
-}
-
-.lp-credit:empty {
-  display: none;
-}
-
-/* ---- 主文本 ---- */
-
-.lp-main {
-  position: relative;
-  max-width: 100%;
-  word-break: normal;
-  overflow-wrap: break-word;
-  pointer-events: auto;
-  overflow: visible;
-
-  & > span {
-    display: inline-block;
-    white-space: pre-wrap;
-    vertical-align: bottom;
-  }
-
-  /* 强调单词包裹层（逐字符拆分的容器） */
-  & > span.lp-emp-wrapper {
-    display: inline-block;
-    white-space: pre;
-    vertical-align: bottom;
-    /* 为缩放/辉光溢出预留空间，负 margin 抵消布局影响 */
-    padding: 1em;
-    margin: -1em;
-
-    & > span {
-      display: inline-block;
-      padding: 1em;
-      margin: -1em;
-    }
-  }
-}
-
-.lp-main:lang(zh) {
-  font-family: var(--lyric-font-zh, inherit);
-}
-
-.lp-main:lang(ja) {
-  font-family: var(--lyric-font-ja, inherit);
-}
-
-.lp-main:lang(ko) {
-  font-family: var(--lyric-font-ko, inherit);
-}
-
-.lp-main:lang(und-Latn) {
-  font-family: var(--lyric-font-latin, inherit);
-}
-
-/* ---- 副文本（翻译/音译） ---- */
+/* ---- Sub Text (Translation / Romanization) ---- */
 
 .lp-sub {
   font-size: var(--lp-sub-font-size, max(0.5em, 10px));
   line-height: var(--lp-sub-line-height, 1.5em);
-  opacity: calc(var(--pass, 1) * var(--lp-sub-opacity, 0.3));
   color: var(--lp-sub-color, inherit);
+  opacity: var(--lp-sub-inactive-opacity, var(--da, 0.2));
+  transition: opacity 0.35s ease;
 }
 
-/* ---- 间奏圆点 ---- */
+.lp-line.active .lp-sub {
+  opacity: var(--lp-sub-active-opacity, var(--lp-sub-opacity, 0.35));
+}
+
+/* ---- Interlude Dots ---- */
 
 .lp-dots {
   position: absolute;
@@ -236,6 +167,179 @@
     background-color: var(--lp-color, #fff);
   }
 }
+
+/* ---- Main Text ---- */
+
+.lp-main {
+  position: relative;
+  max-width: 100%;
+  word-break: normal;
+  overflow-wrap: break-word;
+  pointer-events: auto;
+  overflow: visible;
+  line-height: var(--lp-line-height, 1.25);
+
+  & > span {
+    display: inline-block;
+    white-space: pre-wrap;
+    vertical-align: middle;
+  }
+
+  ruby {
+    ruby-position: over;
+    ruby-align: center;
+
+    & rt {
+      font-size: var(--lp-ruby-font-size, 0.5em);
+      line-height: var(--lp-ruby-line-height, 1em);
+      color: var(--lp-ruby-color, inherit);
+      text-align: center;
+    }
+  }
+
+  /* Word romanization wrapper */
+  & > span.lp-word-roman {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    vertical-align: bottom;
+    text-align: center;
+    margin-inline-end: var(--lp-word-roman-gap, 0.3em);
+
+    &:last-child {
+      margin-inline-end: 0;
+    }
+
+    &:first-child {
+      align-items: flex-start;
+      text-align: left;
+    }
+  }
+
+  /* Word emphasis wrapper */
+  & > span.lp-emp-wrapper {
+    display: inline-block;
+    white-space: pre;
+    vertical-align: middle;
+    /* Extra padding for scale/glow overflow, negative margin offsets layout impact */
+    padding: 1em;
+    margin: -1em;
+
+    &.lp-word-roman {
+      display: inline-flex;
+      vertical-align: bottom;
+      margin-inline-end: calc(-1em + var(--lp-word-roman-gap, 0.3em));
+
+      &:last-child {
+        margin-inline-end: -1em;
+      }
+    }
+
+    & > span {
+      display: inline-block;
+      padding: 1em;
+      margin: -1em;
+    }
+  }
+
+  .lp-word-text {
+    display: inline-block;
+    white-space: pre;
+    text-align: inherit;
+  }
+
+  .lp-roman-word {
+    display: block;
+    font-size: var(--lp-roman-font-size, 0.5em);
+    line-height: var(--lp-roman-line-height, 1.35);
+    padding-bottom: 0.12em;
+    font-weight: 500;
+    color: var(--lp-roman-color, inherit);
+    opacity: var(--lp-roman-opacity, 0.75);
+    white-space: nowrap;
+    user-select: none;
+    pointer-events: none;
+    text-align: inherit;
+  }
+
+  .lp-emp-chars {
+    display: inline-block;
+    white-space: pre;
+    text-align: inherit;
+  }
+}
+
+.lp-main:lang(zh) {
+  font-family: var(--lyric-font-zh, inherit);
+}
+
+.lp-main:lang(ja) {
+  font-family: var(--lyric-font-ja, inherit);
+}
+
+.lp-main:lang(ko) {
+  font-family: var(--lyric-font-ko, inherit);
+}
+
+.lp-main:lang(und-Latn) {
+  font-family: var(--lyric-font-latin, inherit);
+}
+
+/* ---- Duet Layout ---- */
+
+.lp-has-duet {
+  --lp-duet-indent: 15%;
+}
+
+.lp-has-duet .lp-line:not(.bg):not(.duet) {
+  padding-inline-end: var(--lp-duet-indent);
+}
+
+.lp-has-duet .lp-line.duet:not(.bg) {
+  padding-inline-start: var(--lp-duet-indent);
+}
+
+@media (max-width: 600px) {
+  .lp-has-duet {
+    --lp-duet-indent: 8%;
+  }
+}
+
+/* ---- Credit / Bottom Line ---- */
+
+.lp-credit {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--lp-line-padding, 0.4em 1em);
+  color: var(--lp-color, #fff);
+  font-size: var(--lp-font-size, inherit);
+  opacity: var(--lp-credit-opacity, 0.3);
+  pointer-events: auto !important;
+  z-index: 10 !important;
+  background: none !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  outline: none !important;
+}
+
+.lp-credit:hover,
+.lp-credit:active {
+  background: none !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  outline: none !important;
+}
+
+.lp-credit:empty {
+  display: none;
+}
+
+/* ---- Hover Interactions ---- */
 
 @media (hover: hover) and (pointer: fine) {
   .lp-line:not(.bg) .lp-content {

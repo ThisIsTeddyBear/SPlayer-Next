@@ -9,27 +9,27 @@ import "./renderer.css";
 
 const props = withDefaults(
   defineProps<{
-    /** 歌词行数据数组 */
+    /** Array of lyric lines */
     lyricLines: LyricLine[];
-    /** 是否正在播放（默认 true） */
+    /** Whether audio is currently playing */
     playing?: boolean;
-    /** 激活行在容器中的对齐位置 [0 ~ 1] */
+    /** Viewport alignment position of active line [0 ~ 1] */
     alignPosition?: number;
-    /** 逐字掩码渐变宽度比例 */
+    /** Word mask gradient fade width ratio */
     wordFadeWidth?: number;
-    /** 是否隐藏已播放行 */
+    /** Whether to hide passed lines */
     hidePassedLines?: boolean;
-    /** 是否启用逐行模糊效果 */
+    /** Whether to enable per-line blur effect */
     enableBlur?: boolean;
-    /** 是否显示翻译歌词 */
+    /** Whether to display translation lyrics */
     showTranslation?: boolean;
-    /** 是否显示逐行音译 */
+    /** Whether to display line-level romanization */
     showLineRomanization?: boolean;
-    /** 是否显示逐词音译 */
+    /** Whether to display word-level romanization */
     showWordRomanization?: boolean;
-    /** 挂载时的初始播放时间（毫秒） */
+    /** Initial playback time in milliseconds */
     initialTime?: number;
-    /** 是否正在选择歌词行校准时间 */
+    /** Whether user is currently selecting a line for timing sync */
     syncPicking?: boolean;
   }>(),
   {
@@ -47,7 +47,7 @@ const props = withDefaults(
 );
 
 interface Emits {
-  /** 点击歌词行进行播放进度跳转 */
+  /** Triggered on lyric line click for playback seek */
   (e: "seek", timeMs: number): void;
 }
 
@@ -60,22 +60,22 @@ const wrapperRef = ref<HTMLDivElement | null>(null);
 const playerRef = ref<CoreLyricPlayer>();
 const bottomLineEl = ref<HTMLElement>();
 const clockInitialized = ref(false);
-// 播放器是否已初始化完成
+// Whether player has finished initialization
 const initialized = ref(false);
 const contentVisible = ref(false);
-// 父组件的冻结标志
+// Parent component freeze flag
 const isFrozen = ref(false);
-// 冻结期间缓存的待应用歌词
+// Buffered lyrics during freeze
 let pendingLyrics: LyricLine[] | null = null;
-// 页面隐藏状态的响应式跟踪
+// Page visibility tracking
 const isPageHidden = ref(false);
-// 之前隐藏的标记，用于检测从隐藏恢复的时刻
+// Previous hidden flag to detect resume moment
 const isPreviousHidden = ref(false);
 
 const nextFrame = (): Promise<void> =>
   new Promise((resolve) => requestAnimationFrame(() => resolve()));
 
-// 处理多语言显隐及音译偏好的本地高效清洗
+// Clean lyrics based on translation and romanization preferences
 const processedLyrics = computed(() => {
   if (!props.lyricLines) return [];
   return props.lyricLines.map((line) => {
@@ -97,7 +97,7 @@ const processedLyrics = computed(() => {
   });
 });
 
-// 行点击事件回调
+// Line click event handler
 const handleLineClick = (e: Event) => {
   const amllEvent = e as Event & { line?: { getLine: () => { startTime?: number } } };
   const lineData = amllEvent.line?.getLine();
@@ -107,7 +107,7 @@ const handleLineClick = (e: Event) => {
   }
 };
 
-// 为所有主歌词行设置 html lang 属性
+// Set html lang attribute on all main lyric lines
 const processLyricLanguage = (player = playerRef.value) => {
   const lyricGroups = player?.currentLyricGroups;
   if (!Array.isArray(lyricGroups) || lyricGroups.length === 0) return;
@@ -128,7 +128,7 @@ const processLyricLanguage = (player = playerRef.value) => {
   }
 };
 
-/** 同步播放器配置 */
+/** Synchronize player configuration options */
 const syncPlayerOptions = (player = playerRef.value): void => {
   if (!player) return;
   player.setAlignPosition(props.alignPosition);
@@ -161,20 +161,18 @@ const { resume: resumeRaf, pause: pauseRaf } = useRafFn(
   { immediate: false },
 );
 
-// 页面隐藏时停止渲染循环，恢复时校准时间线
+// Stop render loop on page hide and calibrate timeline on restore
 const handleVisibility = () => {
   const hidden = document.hidden;
-  isPageHidden.value = hidden; // 更新响应式隐藏状态
+  isPageHidden.value = hidden;
   if (hidden) {
     pauseRaf();
     playerRef.value?.pause();
     isPreviousHidden.value = true;
   } else if (isPreviousHidden.value && !isFrozen.value && playerRef.value) {
-    // 从隐藏恢复：校准 Core 内部时钟到当前播放位置，避免逐词效果从头开始
     const currentTime = getCurrentTime() + status.lyricOffsetMs;
     playerRef.value.setCurrentTime(currentTime, true);
     isPreviousHidden.value = false;
-    // 恢复后根据当前状态决定 resume/pause（由 watchEffect 处理，这里只需确保 state sync）
   }
 };
 
@@ -246,12 +244,11 @@ onUnmounted(() => {
   }
 });
 
-// 同步播放/冻结状态到 Core 及渲染循环
+// Synchronize play and freeze state with Core and render loop
 watchEffect(() => {
   const player = playerRef.value;
   if (!player || !initialized.value) return;
 
-  // 首次运行时校准一次（避免重复）
   if (!clockInitialized.value) {
     player.update(0);
     clockInitialized.value = true;
@@ -259,10 +256,9 @@ watchEffect(() => {
 
   const playing = props.playing;
   const frozen = isFrozen.value;
-  const hidden = isPageHidden.value; // 使用响应式隐藏状态
+  const hidden = isPageHidden.value;
 
   if (!frozen && !hidden) {
-    // 只要未冻结且可见，就持续运行 RAF 维持渲染（即使暂停也要保持画面）
     resumeRaf();
     if (playing) {
       player.resume();
@@ -294,7 +290,6 @@ watch(
   () => syncPlayerOptions(),
 );
 
-// 监听处理完的歌词数据变动
 watch(processedLyrics, (newLyrics) => {
   if (!playerRef.value) return;
   if (!initialized.value || isFrozen.value) {
@@ -306,7 +301,6 @@ watch(processedLyrics, (newLyrics) => {
   }
 });
 
-// 监听歌词优化配置变动并更新 Core
 watch(
   () => ({
     cleanUnintentionalOverlaps: settings.lyric.amllCleanUnintentionalOverlaps,
@@ -328,17 +322,14 @@ watch(
   { deep: true },
 );
 
-// 主播放器事件驱动的时间同步接口
 const setCurrentTime = (time: number, isSeek?: boolean) => {
   playerRef.value?.setCurrentTime(time, isSeek);
 };
 
-// 隐藏界面或休眠时调用
 const freeze = () => {
   isFrozen.value = true;
 };
 
-// 恢复播放和滚动测量
 const resume = () => {
   if (!initialized.value) {
     isFrozen.value = false;

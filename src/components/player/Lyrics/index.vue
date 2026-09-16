@@ -3,95 +3,92 @@ import type { LyricLine } from "@shared/types/lyrics";
 import { LyricRenderer } from "./engine";
 import type { SpringParams } from "./engine/spring";
 import { DEFAULTS } from "./engine/constants";
-import { applyScrollPreroll } from "./utils/scroll-preroll";
 import "./renderer.css";
 
 const props = withDefaults(
   defineProps<{
-    /** 歌词行数据数组 */
+    /** Array of lyric lines */
     lyricLines: LyricLine[];
-    /** 是否正在播放（默认 true） */
+    /** Whether audio is currently playing */
     playing?: boolean;
     /**
-     * 激活行在容器中的对齐位置
-     * @range 0 ~ 1（0 = 顶部，1 = 底部）
+     * Viewport alignment position of active line
+     * @range 0 ~ 1 (0 = top, 1 = bottom)
      * @default 0.35
      */
     alignPosition?: number;
     /**
-     * 逐字掩码渐变宽度比例（相对于文字高度）
-     * @range 0 ~ 1（0 = 硬切，1 = 全字高渐变）
+     * Word mask fade width ratio (relative to character height)
+     * @range 0 ~ 1
      * @default 0.5
      */
     wordFadeWidth?: number;
-    /** 弹簧物理参数（mass / damping / stiffness / soft） */
+    /** Spring physics parameters */
     springConfig?: Partial<SpringParams>;
     /**
-     * 用户滚动后自动回弹到激活行的延迟时间
-     * @unit 毫秒
+     * User scroll reset delay in ms
      * @default 5000
      */
     scrollResetDelay?: number;
     /**
-     * 触发间奏圆点动画的最小间隔时长
-     * @unit 毫秒
+     * Minimum gap in ms to trigger interlude dots
      * @default 4000
      */
     minInterludeGap?: number;
     /**
-     * 间奏圆点呼吸动画的目标周期
-     * @unit 毫秒
+     * Interlude breathing cycle in ms
      * @default 1500
      */
     breatheCycleTarget?: number;
     /**
-     * 透明度增加速度（行被激活时）
-     * @range 值越大过渡越快
-     * @default 50
+     * Alpha attack speed on line activation
+     * @default 16
      */
     alphaAttackSpeed?: number;
     /**
-     * 透明度衰减速度（行取消激活时）
-     * @range 值越大过渡越快
+     * Alpha release speed on line deactivation
      * @default 7
      */
     alphaReleaseSpeed?: number;
     /**
-     * 非激活行的基础透明度
-     * @range 0 ~ 1（0 = 完全透明，1 = 不透明）
+     * Inactive line base alpha
      * @default 0.2
      */
     inactiveAlpha?: number;
-    /**
-     * 是否隐藏已播放行
-     * @default false
-     */
+    /** Whether to hide passed lines */
     hidePassedLines?: boolean;
-    /**
-     * 是否启用逐行模糊效果
-     * @default false
-     */
+    /** Whether to enable per-line blur */
     enableBlur?: boolean;
-    /**
-     * 是否启用逐字高亮效果
-     * @default true
-     */
+    /** Whether to enable word-level highlight */
     enableWordHighlight?: boolean;
-    /**
-     * 是否启用逐字上浮动画
-     * @default false
-     */
+    /** Whether to enable character float animation */
     enableFloatAnimation?: boolean;
+    /** Whether to enable line scale effect */
+    enableScale?: boolean;
     /**
-     * 是否启用强调效果（缩放 + 辉光 + 正弦浮动）
+     * Whether to enable syllable emphasis effect
      * @default false
      */
     enableEmphasizeEffect?: boolean;
-    /** 是否显示翻译歌词 @default true */
+    /** Whether to show translation lyrics */
     showTranslation?: boolean;
-    /** 是否显示音译歌词 @default true */
+    /** Whether to show romanization lyrics */
     showRomanization?: boolean;
-    /** 挂载时的初始播放时间（毫秒）@default 0 */
+    /** Whether to show word-level romanization */
+    showWordRomanization?: boolean;
+    /** Whether to show ruby annotations */
+    showRuby?: boolean;
+    /** Whether to always position background vocals below main line */
+    bgAlwaysBelow?: boolean;
+    /** Whether to enable scroll preroll */
+    enableScrollPreroll?: boolean;
+    /** Minimum duration in ms to trigger syllable emphasis */
+    emphasizeMinDuration?: number;
+    /** Seek backward threshold in ms */
+    seekBackwardThreshold?: number;
+    /** Seek forward threshold in ms */
+    seekForwardThreshold?: number;
+    /** Initial playback time in ms upon mounting */
     initialTime?: number;
   }>(),
   {
@@ -108,15 +105,23 @@ const props = withDefaults(
     enableBlur: DEFAULTS.enableBlur,
     enableWordHighlight: DEFAULTS.enableWordHighlight,
     enableFloatAnimation: DEFAULTS.enableFloatAnimation,
+    enableScale: DEFAULTS.enableScale,
     enableEmphasizeEffect: DEFAULTS.enableEmphasizeEffect,
     showTranslation: true,
     showRomanization: true,
+    showWordRomanization: DEFAULTS.showWordRomanization,
+    showRuby: DEFAULTS.showRuby,
+    bgAlwaysBelow: DEFAULTS.bgAlwaysBelow,
+    enableScrollPreroll: DEFAULTS.enableScrollPreroll,
+    emphasizeMinDuration: DEFAULTS.emphasizeMinDuration,
+    seekBackwardThreshold: DEFAULTS.seekBackwardThreshold,
+    seekForwardThreshold: DEFAULTS.seekForwardThreshold,
     initialTime: 0,
   },
 );
 
 interface Emits {
-  /** 用户点击歌词行时触发，参数为该行起始时间（毫秒），用于跳转播放进度 */
+  /** Triggered when user clicks on a lyric line, returns line start time in ms */
   (e: "seek", timeMs: number): void;
 }
 
@@ -125,17 +130,13 @@ const emit = defineEmits<Emits>();
 const containerRef = ref<HTMLElement>();
 const bottomLineEl = ref<HTMLElement>();
 let renderer: LyricRenderer | null = null;
-/** 冻结状态标志 */
 let isFrozen = false;
-/** 冻结期间收到的待应用歌词（父容器 display:none 时无法测量，需延迟） */
 let pendingLyrics: LyricLine[] | null = null;
 
 /**
- * 推送当前播放时间（毫秒）
+ * Push current playback time in milliseconds.
  *
- * 由外部播放器在每帧或定时器中调用，驱动歌词滚动与逐字高亮动画。
- *
- * @param time - 当前播放时间（毫秒）
+ * @param time - Current playback time in ms
  */
 const setCurrentTime = (time: number) => {
   renderer?.setCurrentTime(time);
@@ -145,9 +146,9 @@ const freeze = () => {
   isFrozen = true;
   renderer?.freeze();
 };
+
 const resume = () => {
   isFrozen = false;
-  // 应用冻结期间缓冲的歌词变更
   if (pendingLyrics) {
     renderer?.setLyrics(pendingLyrics);
     pendingLyrics = null;
@@ -173,7 +174,7 @@ onMounted(() => {
     renderer.setCurrentTime(props.initialTime);
   }
   if (props.lyricLines.length > 0) {
-    renderer.setLyrics(applyScrollPreroll(props.lyricLines));
+    renderer.setLyrics(props.lyricLines);
   }
   bottomLineEl.value = renderer.getBottomLineElement();
 });
@@ -183,13 +184,11 @@ onUnmounted(() => {
   renderer = null;
 });
 
-/** 重建歌词 DOM（应用滚动预滚后的克隆数据） */
 const rebuildLyrics = (): void => {
-  const prepared = applyScrollPreroll(props.lyricLines);
   if (isFrozen) {
-    pendingLyrics = prepared;
+    pendingLyrics = props.lyricLines;
   } else {
-    renderer?.setLyrics(prepared);
+    renderer?.setLyrics(props.lyricLines);
   }
 };
 
@@ -263,38 +262,64 @@ watch(
   (v) => renderer?.setConfig({ enableWordHighlight: v }),
 );
 
-// 上浮/强调开关变化需要重建 DOM（影响 span 结构和动画创建）
 watch(
   () => props.enableFloatAnimation,
-  (v) => {
-    renderer?.setConfig({ enableFloatAnimation: v });
-    rebuildLyrics();
-  },
+  (v) => renderer?.setConfig({ enableFloatAnimation: v }),
+);
+
+watch(
+  () => props.enableScale,
+  (v) => renderer?.setConfig({ enableScale: v }),
 );
 
 watch(
   () => props.enableEmphasizeEffect,
-  (v) => {
-    renderer?.setConfig({ enableEmphasizeEffect: v });
-    rebuildLyrics();
-  },
+  (v) => renderer?.setConfig({ enableEmphasizeEffect: v }),
 );
 
-// 翻译/音译开关变化需要重建 DOM（影响 sub 行的创建）
 watch(
   () => props.showTranslation,
-  (v) => {
-    renderer?.setConfig({ showTranslation: v });
-    rebuildLyrics();
-  },
+  (v) => renderer?.setConfig({ showTranslation: v }),
 );
 
 watch(
   () => props.showRomanization,
-  (v) => {
-    renderer?.setConfig({ showRomanization: v });
-    rebuildLyrics();
-  },
+  (v) => renderer?.setConfig({ showRomanization: v }),
+);
+
+watch(
+  () => props.showWordRomanization,
+  (v) => renderer?.setConfig({ showWordRomanization: v }),
+);
+
+watch(
+  () => props.showRuby,
+  (v) => renderer?.setConfig({ showRuby: v }),
+);
+
+watch(
+  () => props.bgAlwaysBelow,
+  (v) => renderer?.setConfig({ bgAlwaysBelow: v }),
+);
+
+watch(
+  () => props.enableScrollPreroll,
+  (v) => renderer?.setConfig({ enableScrollPreroll: v }),
+);
+
+watch(
+  () => props.emphasizeMinDuration,
+  (v) => renderer?.setConfig({ emphasizeMinDuration: v }),
+);
+
+watch(
+  () => props.seekBackwardThreshold,
+  (v) => renderer?.setConfig({ seekBackwardThreshold: v }),
+);
+
+watch(
+  () => props.seekForwardThreshold,
+  (v) => renderer?.setConfig({ seekForwardThreshold: v }),
 );
 </script>
 

@@ -1,39 +1,92 @@
 /**
- * 歌词渲染引擎 — 歌词行 DOM 构建
+ * Lyric rendering engine — Lyric line DOM construction
+ * Main lines are the primary layout unit; background lines are nested inside their
+ * host main line's `.lp-line` container as absolute floats, forming a single geometric unit.
  */
 
 import type { LyricLine } from "@shared/types/lyrics";
-import { buildWordSpans, type WordMeasurement, type WordAnimTarget } from "./word-builder";
+import {
+  buildWordSpans,
+  type WordAnimTarget,
+  type WordBuildOptions,
+  type WordMeasurement,
+} from "./word-builder";
 
-/** 行 DOM 构建选项 */
-export interface LineBuildOptions {
-  /** 是否启用强调效果（影响 span 结构） */
-  enableEmphasizeEffect: boolean;
-  /** 是否显示翻译歌词 */
+/** Line DOM build options */
+export interface LineBuildOptions extends WordBuildOptions {
+  /** Whether to display translation lyrics */
   showTranslation: boolean;
-  /** 是否显示音译歌词 */
+  /** Whether to display romanized lyrics */
   showRomanization: boolean;
+  /** Whether to display per-word romanization */
+  showWordRomanization: boolean;
+  /** Whether background lines are always placed below the main line */
+  bgAlwaysBelow: boolean;
 }
 
-/** 行 DOM 构建结果 */
+/** Line DOM build output result */
 export interface LineBuildResult {
-  /** 每行对应的 DOM 元素 */
+  /** Line DOM elements: main lines are `.lp-line`, background lines are `.lp-line-bg` floats inside */
   lineElements: HTMLDivElement[];
-  /** 每行的单词测量数据（用于 CSS mask 计算） */
   wordMeasurements: WordMeasurement[][];
-  /** 每行的动画目标描述（懒创建动画的依据） */
   lineAnimTargets: WordAnimTarget[][];
-  /** 标记背景人声行是否应置于主行上方 */
+  /** Whether the background line is placed above the main line */
   isBgAbove: boolean[];
-  /** 装载所有行元素的文档片段 */
   fragment: DocumentFragment;
 }
 
+/** Build a single `.lp-main` word layer and populate measurement and animation targets */
+const buildMainLayer = (
+  line: LyricLine,
+  mainDiv: HTMLDivElement,
+  options: LineBuildOptions,
+  isStatic: boolean,
+  showWordRoman: boolean,
+): { measurements: WordMeasurement[]; animTargets: WordAnimTarget[] } => {
+  if (isStatic) {
+    mainDiv.appendChild(document.createTextNode(line.words.map((w) => w.word).join("")));
+    // Add uniform mask to static lines so --ba affects opacity identically to word-by-word lines
+    mainDiv.style.setProperty(
+      "mask-image",
+      "linear-gradient(rgba(0,0,0,var(--ba)),rgba(0,0,0,var(--ba)))",
+    );
+    return { measurements: [], animTargets: [] };
+  }
+  const result = buildWordSpans(line.words, mainDiv, {
+    enableEmphasizeEffect: options.enableEmphasizeEffect,
+    emphasizeMinDuration: options.emphasizeMinDuration ?? 1000,
+    showRuby: options.showRuby,
+    showWordRoman,
+  });
+  return { measurements: result.measurements, animTargets: result.animTargets };
+};
+
+/** Append `.lp-sub` secondary text (translation / romanization) */
+const appendSubs = (
+  container: HTMLElement,
+  line: LyricLine,
+  options: LineBuildOptions,
+  showLineRoman: boolean,
+) => {
+  if (options.showTranslation && line.translatedLyric) {
+    const subDiv = document.createElement("div");
+    subDiv.className = "lp-sub";
+    subDiv.textContent = line.translatedLyric;
+    container.appendChild(subDiv);
+  }
+  if (showLineRoman) {
+    const subDiv = document.createElement("div");
+    subDiv.className = "lp-sub";
+    subDiv.textContent = line.romanLyric;
+    container.appendChild(subDiv);
+  }
+};
+
 /**
- * 构建全部歌词行的 DOM 元素与关联元数据
- * @param lines - 歌词行数组
- * @param options - 构建选项
- * @returns 行元素、测量数据、动画目标与置顶背景行标记
+ * Construct DOM elements and associated metadata for all lyric lines
+ * @param lines - Lyric lines array (background lines follow their main line)
+ * @param options - Build options
+ * @returns Built line elements, measurements, animation targets, and placement flags
  */
 export const buildLineElements = (
   lines: LyricLine[],
@@ -45,91 +98,115 @@ export const buildLineElements = (
   const lineAnimTargets: WordAnimTarget[][] = new Array(lineCount);
   const isBgAbove: boolean[] = new Array(lineCount).fill(false);
   const singerLanes = new Map<string, number>();
-  // 是否视为逐字
+
   const hasMultiWordLine = lines.some((line) => line.words.length > 1);
 
-  // 背景人声行：首词早于主行则置于主行上方
+  // Background vocal lines: placed above if starting earlier than main, unless bgAlwaysBelow is set
   for (let i = 1; i < lineCount; i++) {
     const bg = lines[i];
-    if (!bg.isBG) continue;
-    let mainIdx = i - 1;
-    while (mainIdx >= 0 && lines[mainIdx].isBG) mainIdx--;
-    const main = lines[mainIdx];
-    if (!main) continue;
+    const main = lines[i - 1];
+    if (!bg?.isBG || main?.isBG) continue;
     const bgStart = bg.words[0]?.startTime ?? bg.startTime;
     const mainStart = main.words[0]?.startTime ?? main.startTime;
-    isBgAbove[i] = bgStart < mainStart;
+    isBgAbove[i] = !options.bgAlwaysBelow && bgStart < mainStart;
   }
 
   const fragment = document.createDocumentFragment();
+  // Most recent main line element for hosting subsequent background lines
+  let hostingMain: HTMLDivElement | null = null;
+
   for (let i = 0; i < lineCount; i++) {
     const line = lines[i];
-    const lineEl = document.createElement("div");
-    const alignment = line.alignment ?? (line.isDuet ? "end" : "start");
-    lineEl.className = [
-      "lp-line",
+    if (!line) continue;
+
+    const hasWordRoman = line.words.some((w) => Boolean(w.romanWord?.trim()));
+    const showWordRomanForLine = options.showWordRomanization && hasWordRoman;
+    const showLineRomanForLine =
+      options.showRomanization && Boolean(line.romanLyric) && !showWordRomanForLine;
+    const isStatic =
+      (line.words.length === 0 || (line.words.length === 1 && !hasMultiWordLine)) &&
+      !showWordRomanForLine &&
+      !(options.showRuby && line.words[0]?.ruby?.length);
+
+    // Main line (or background line degraded to main when no hosting main line exists)
+    if (!line.isBG || !hostingMain) {
+      const lineEl = document.createElement("div");
+      const alignment = line.alignment ?? (line.isDuet ? "end" : "start");
+      lineEl.className = [
+        "lp-line",
+        line.isDuet ? "duet" : "",
+        `align-${alignment}`,
+        line.singerRole ? `role-${line.singerRole}` : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      if (line.singerId) {
+        let lane = singerLanes.get(line.singerId);
+        if (lane === undefined) {
+          lane = singerLanes.size;
+          singerLanes.set(line.singerId, lane);
+        }
+        lineEl.style.setProperty("--lp-singer-color", `rgb(var(--s-cover-singer-${lane % 6}))`);
+        lineEl.dataset.singer = line.singerName || line.singerId;
+      }
+
+      const mainDiv = document.createElement("div");
+      mainDiv.className = "lp-main";
+      if (line.language) mainDiv.lang = line.language;
+
+      const built = buildMainLayer(line, mainDiv, options, isStatic, showWordRomanForLine);
+      wordMeasurements[i] = built.measurements;
+      lineAnimTargets[i] = built.animTargets;
+
+      const contentDiv = document.createElement("div");
+      contentDiv.className = "lp-content";
+      contentDiv.appendChild(mainDiv);
+      appendSubs(contentDiv, line, options, showLineRomanForLine);
+
+      lineEl.appendChild(contentDiv);
+      lineElements[i] = lineEl;
+      fragment.appendChild(lineEl);
+      hostingMain = lineEl;
+      continue;
+    }
+
+    // Background line nested inside host main line
+    const bgEl = document.createElement("div");
+    const bgAlignment = line.alignment ?? (line.isDuet ? "end" : "start");
+    bgEl.className = [
+      "lp-line-bg",
+      isBgAbove[i] ? "above" : "",
       line.isDuet ? "duet" : "",
-      line.isBG ? "bg" : "",
-      `align-${alignment}`,
+      `align-${bgAlignment}`,
       line.singerRole ? `role-${line.singerRole}` : "",
     ]
       .filter(Boolean)
       .join(" ");
+
     if (line.singerId) {
       let lane = singerLanes.get(line.singerId);
       if (lane === undefined) {
         lane = singerLanes.size;
         singerLanes.set(line.singerId, lane);
       }
-      lineEl.style.setProperty("--lp-singer-color", `rgb(var(--s-cover-singer-${lane % 6}))`);
-      lineEl.dataset.singer = line.singerName || line.singerId;
-    }
-    const mainDiv = document.createElement("div");
-    mainDiv.className = "lp-main";
-
-    // 为主歌词行设置 lang 属性，便于浏览器选择正确字体与排版
-    if (line.language) mainDiv.lang = line.language;
-
-    // 行歌词是否静态（≤1 个单词，无逐字动画）
-    const isStatic = line.words.length === 0 || (line.words.length === 1 && !hasMultiWordLine);
-
-    if (isStatic) {
-      mainDiv.appendChild(document.createTextNode(line.words.map((w) => w.word).join("")));
-      // 给静态行也加统一 mask，让 --ba 对其生效，与逐字行透明度一致
-      mainDiv.style.setProperty(
-        "mask-image",
-        "linear-gradient(rgba(0,0,0,var(--ba)),rgba(0,0,0,var(--ba)))",
-      );
-      wordMeasurements[i] = [];
-      lineAnimTargets[i] = [];
-    } else {
-      // 构建单词 span + 动画目标描述
-      const result = buildWordSpans(line.words, mainDiv, options.enableEmphasizeEffect);
-      wordMeasurements[i] = result.measurements;
-      lineAnimTargets[i] = result.animTargets;
+      bgEl.style.setProperty("--lp-singer-color", `rgb(var(--s-cover-singer-${lane % 6}))`);
+      bgEl.dataset.singer = line.singerName || line.singerId;
     }
 
-    // 内容包裹层
-    const contentDiv = document.createElement("div");
-    contentDiv.className = "lp-content";
-    contentDiv.appendChild(mainDiv);
+    const bgMainDiv = document.createElement("div");
+    bgMainDiv.className = "lp-main";
+    if (line.language) bgMainDiv.lang = line.language;
 
-    if (options.showTranslation && line.translatedLyric) {
-      const subDiv = document.createElement("div");
-      subDiv.className = "lp-sub";
-      subDiv.textContent = line.translatedLyric;
-      contentDiv.appendChild(subDiv);
-    }
-    if (options.showRomanization && line.romanLyric) {
-      const subDiv = document.createElement("div");
-      subDiv.className = "lp-sub";
-      subDiv.textContent = line.romanLyric;
-      contentDiv.appendChild(subDiv);
-    }
+    const built = buildMainLayer(line, bgMainDiv, options, isStatic, showWordRomanForLine);
+    wordMeasurements[i] = built.measurements;
+    lineAnimTargets[i] = built.animTargets;
+    bgEl.appendChild(bgMainDiv);
+    appendSubs(bgEl, line, options, showLineRomanForLine);
 
-    lineEl.appendChild(contentDiv);
-    lineElements[i] = lineEl;
-    fragment.appendChild(lineEl);
+    hostingMain.classList.add("has-bg");
+    hostingMain.appendChild(bgEl);
+    lineElements[i] = bgEl;
   }
 
   return { lineElements, wordMeasurements, lineAnimTargets, isBgAbove, fragment };

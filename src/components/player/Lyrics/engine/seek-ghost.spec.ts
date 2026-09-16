@@ -1,13 +1,13 @@
 /**
- * 歌词引擎 seek 后行位置回归测试
- *
- * 模拟快速长距离拖动进度条，检验所有行最终是否严格顺序排布（无重叠 / 残留伪影）
+ * Lyric engine post-seek line position regression tests.
+ * Simulates rapid long-distance progress bar scrubbing to verify that all lines settle in strict sequential order
+ * with no overlaps or lingering ghost artifacts.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LyricRenderer } from "./index";
 import type { LyricLine } from "@shared/types/lyrics";
 
-/** 手动步进的 rAF 队列 */
+/** Manually stepped rAF queue */
 let rafQueue: { id: number; cb: (t: number) => void }[] = [];
 let rafNextId = 0;
 let frameClock = 0;
@@ -27,8 +27,8 @@ const makeLines = (count: number): LyricLine[] => {
       startTime: start,
       endTime: start + 2800,
       words: [
-        { word: `词${i}a`, startTime: start, endTime: start + 1400 },
-        { word: `词${i}b`, startTime: start + 1400, endTime: start + 2800 },
+        { word: `word${i}a`, startTime: start, endTime: start + 1400 },
+        { word: `word${i}b`, startTime: start + 1400, endTime: start + 2800 },
       ],
       translatedLyric: "",
       romanLyric: "",
@@ -51,9 +51,9 @@ const VIEW_HEIGHT = 800;
 const LINE_HEIGHT = 40;
 
 /**
- * 校验视口内无残留伪影：
- * - 可见行之间不重叠
- * - 可见行的 DOM 位置必须与弹簧当前位置一致（未同步的行必须已被移出视口）
+ * Verify there are no visible ghost lines in viewport:
+ * - Visible lines do not overlap
+ * - DOM position of visible lines must match current spring position (unsynced lines must be culled outside viewport)
  */
 const expectNoVisibleGhost = (renderer: LyricRenderer) => {
   const engine = renderer as unknown as {
@@ -67,7 +67,7 @@ const expectNoVisibleGhost = (renderer: LyricRenderer) => {
     const domY = match ? Number.parseFloat(match[1]) : Number.NaN;
     const springY = engine.positionSprings[i].getCurrentPosition();
     if (Math.abs(domY - springY) > 1 && domY > -LINE_HEIGHT && domY < VIEW_HEIGHT) {
-      offenders.push(`行${i} DOM=${domY} 残留在视口内（弹簧=${springY.toFixed(1)}）`);
+      offenders.push(`Line ${i} DOM=${domY} lingering in viewport (spring=${springY.toFixed(1)})`);
     }
     if (domY > -LINE_HEIGHT && domY < VIEW_HEIGHT) visible.push(domY);
   }
@@ -80,7 +80,7 @@ const expectNoVisibleGhost = (renderer: LyricRenderer) => {
       overlaps.push(`${visible[i - 1]} ~ ${visible[i]}`);
     }
   }
-  expect(overlaps, `可见行重叠: ${overlaps.join(", ")}`).toHaveLength(0);
+  expect(overlaps, `Visible lines overlap: ${overlaps.join(", ")}`).toHaveLength(0);
 };
 
 const runToSettle = (renderer: LyricRenderer, frames = 2000) => {
@@ -88,7 +88,7 @@ const runToSettle = (renderer: LyricRenderer, frames = 2000) => {
   expect(renderer).toBeTruthy();
 };
 
-describe("歌词引擎 seek 后布局", () => {
+describe("LyricRenderer layout after seek", () => {
   beforeEach(() => {
     rafQueue = [];
     rafNextId = 0;
@@ -110,12 +110,12 @@ describe("歌词引擎 seek 后布局", () => {
     );
   });
 
-  it("快速长距离前进拖动后无重叠", () => {
+  it("no overlap after fast long-distance forward scrub", () => {
     const container = createContainer();
     const renderer = new LyricRenderer(container, { playing: true });
     renderer.setLyrics(makeLines(400));
 
-    // 正常播放一段时间，让入场动画与首行激活完成
+    // Play normally for a short duration so entrance animation and first line activate
     let time = 0;
     for (let i = 0; i < 600; i++) {
       time += 30;
@@ -123,7 +123,7 @@ describe("歌词引擎 seek 后布局", () => {
       stepFrame();
     }
 
-    // 快速长距离拖动：每帧跨越约 200 行（600s）
+    // Fast long-distance forward jump: ~200 lines per frame (600s)
     for (let jump = 0; jump < 2; jump++) {
       time += 600000;
       renderer.setCurrentTime(time);
@@ -135,7 +135,7 @@ describe("歌词引擎 seek 后布局", () => {
     renderer.dispose();
   });
 
-  it("快速长距离回退拖动后无重叠", () => {
+  it("no overlap after fast long-distance backward scrub", () => {
     const container = createContainer();
     const renderer = new LyricRenderer(container, { playing: true });
     renderer.setLyrics(makeLines(400));
@@ -158,7 +158,7 @@ describe("歌词引擎 seek 后布局", () => {
     renderer.dispose();
   });
 
-  it("慢速拖动（未触发 seek 阈值）后无重叠", () => {
+  it("no overlap after slow scrub (below seek threshold)", () => {
     const container = createContainer();
     const renderer = new LyricRenderer(container, { playing: true });
     renderer.setLyrics(makeLines(400));
@@ -170,7 +170,7 @@ describe("歌词引擎 seek 后布局", () => {
       stepFrame();
     }
 
-    // 每帧 1500ms，低于 2000ms 的 seek 阈值，走激活/停用路径
+    // 1500ms per frame, below the 2000ms seek threshold, exercises activation/deactivation path
     for (let i = 0; i < 40; i++) {
       time += 1500;
       renderer.setCurrentTime(time);

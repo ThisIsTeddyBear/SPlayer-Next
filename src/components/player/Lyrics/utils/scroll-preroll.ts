@@ -1,23 +1,43 @@
 import type { LyricLine } from "@shared/types/lyrics";
 
-/** 与前一行无重叠时的提前量（毫秒），与 AMLL tryAdvanceStartTime 的调校值一致 */
-const ADVANCE_NO_OVERLAP = 600;
-/** 与前一行有重叠时的提前量（毫秒） */
-const ADVANCE_OVERLAP = 400;
-/** 有重叠时的提前边界：前一行时长的比例位置 */
-const OVERLAP_BOUNDARY_RATIO = 0.3;
+/** Scroll pre-roll optimization options */
+export interface ScrollPrerollOptions {
+  /** Advance time when there is no overlap with the previous line in milliseconds. Default: 600 */
+  advanceNoOverlap: number;
+  /** Advance time when overlapping with the previous line in milliseconds. Default: 400 */
+  advanceOverlap: number;
+  /** Overlap boundary ratio relative to the previous line's duration (0-1). Default: 0.3 */
+  overlapBoundaryRatio: number;
+}
+
+/** Default scroll pre-roll configuration */
+export const DEFAULT_SCROLL_PREROLL_OPTIONS: Required<ScrollPrerollOptions> = {
+  advanceNoOverlap: 600,
+  advanceOverlap: 400,
+  overlapBoundaryRatio: 0.3,
+};
 
 /**
- * 滚动预滚：提前行开始时间，让滚动渲染器在开唱前先把视野滚到位
+ * Scroll pre-roll: advances each line's start time slightly ahead of time
+ * so the renderer smoothly scrolls the target line into view before singing begins.
  *
- * 判定一律基于各行的原始时间（修改不影响后续行的判定）。
- * 相互重叠的连续主行（对唱段）合并为组，无重叠行的提前边界取组的最晚结束时间，
- * 避免把行提前进还在演唱中的对唱组。
+ * Decisions are strictly based on the lines' original timestamps. Overlapping consecutive
+ * main lines (e.g., duet sections) are grouped together to prevent advancing into an active group.
  *
- * @param sourceLines - 规范化后的歌词行数组
- * @returns 应用预滚后的克隆行数组
+ * @param sourceLines - Normalized lyric line array
+ * @param options - Custom advance amounts and boundary ratios
+ * @returns Cloned line array with pre-roll applied
  */
-export const applyScrollPreroll = (sourceLines: readonly LyricLine[]): LyricLine[] => {
+export const applyScrollPreroll = (
+  sourceLines: readonly LyricLine[],
+  options?: Partial<ScrollPrerollOptions>,
+): LyricLine[] => {
+  const advanceNoOverlap =
+    options?.advanceNoOverlap ?? DEFAULT_SCROLL_PREROLL_OPTIONS.advanceNoOverlap;
+  const advanceOverlap = options?.advanceOverlap ?? DEFAULT_SCROLL_PREROLL_OPTIONS.advanceOverlap;
+  const overlapBoundaryRatio =
+    options?.overlapBoundaryRatio ?? DEFAULT_SCROLL_PREROLL_OPTIONS.overlapBoundaryRatio;
+
   const lines = sourceLines.map((line) => ({ ...line }));
 
   let prevLineStartTime = 0;
@@ -39,26 +59,25 @@ export const applyScrollPreroll = (sourceLines: readonly LyricLine[]): LyricLine
     if (hasPrevLine) {
       const hadGap = originalStartTime >= prevLineEndTime;
       if (hadGap) {
-        advance = ADVANCE_NO_OVERLAP;
+        advance = advanceNoOverlap;
         boundary = prevGroupEndTime;
       } else {
-        advance = ADVANCE_OVERLAP;
-        boundary =
-          prevLineStartTime + (prevLineEndTime - prevLineStartTime) * OVERLAP_BOUNDARY_RATIO;
+        advance = advanceOverlap;
+        boundary = prevLineStartTime + (prevLineEndTime - prevLineStartTime) * overlapBoundaryRatio;
       }
     } else {
-      advance = ADVANCE_NO_OVERLAP;
+      advance = advanceNoOverlap;
       boundary = 0;
     }
 
     const newStart = Math.max(boundary, originalStartTime - advance);
     if (newStart < line.startTime) line.startTime = newStart;
 
-    // 配对背景行随主行一起提前
+    // Paired background lines advance alongside their main line, but not later than their original onset
     const bg = lines[lineIdx + 1];
-    if (bg?.isBG) bg.startTime = line.startTime;
+    if (bg?.isBG) bg.startTime = Math.min(bg.startTime, line.startTime);
 
-    // 更新重叠组：与上一组时间相交则并入，否则另起一组
+    // Update overlapping group: merge if overlapping with previous group, else start fresh
     if (
       hasPrevLine &&
       originalStartTime < prevGroupEndTime &&

@@ -1,79 +1,116 @@
-/**
- * 歌词渲染引擎
- * 类型定义与默认配置
- */
-
 import type { SpringParams } from "./spring";
+import { DEFAULT_SCROLL_PREROLL_OPTIONS, type ScrollPrerollOptions } from "../utils/scroll-preroll";
 
+export type { ScrollPrerollOptions } from "../utils/scroll-preroll";
+
+/**
+ * Lyric rendering engine default configuration constants
+ */
 export const DEFAULTS = {
-  /** 用户滚动后自动回弹的延迟时间（毫秒） */
+  /** Delay before auto-resetting scroll position to active line (ms) */
   scrollResetDelay: 5000,
-  /** 触发间奏动画的最小间隔时长（毫秒） */
+  /** Minimum duration to trigger instrumental interlude breathing dots (ms) */
   minInterludeGap: 4000,
-  /** 间奏圆点呼吸动画的目标周期（毫秒） */
+  /** Target cycle duration for interlude breathing dots animation (ms) */
   breatheCycleTarget: 1500,
-  /** 透明度增加速度（激活时） */
-  alphaAttackSpeed: 50,
-  /** 透明度衰减速度（取消激活时） */
+  /** Opacity increase rate on line activation */
+  alphaAttackSpeed: 16,
+  /** Opacity decrease rate on line deactivation */
   alphaReleaseSpeed: 7,
-  /** 非激活行的基础透明度 */
+  /** Base opacity for inactive lines */
   inactiveAlpha: 0.2,
-  /** 激活行在容器中的对齐位置（0~1） */
+  /** Vertical anchor alignment position of active line in container (0-1) */
   alignPosition: 0.35,
-  /** 逐字掩码渐变宽度比例 */
+  /** Proportional width of the word gradient fade mask */
   wordFadeWidth: 0.5,
-  /** 是否隐藏已播放行 */
+  /** Whether to hide passed lyric lines */
   hidePassedLines: false,
-  /** 是否启用逐行模糊效果 */
+  /** Whether to enable dynamic per-line blur effect */
   enableBlur: false,
-  /** 是否启用逐字高亮效果 */
+  /** Whether to enable word-by-word karaoke highlight */
   enableWordHighlight: true,
-  /** 是否启用逐字上浮动画 */
+  /** Whether to enable word floating upward animation */
   enableFloatAnimation: false,
-  /** 是否启用强调效果：缩放 + 辉光 + 正弦浮动 */
+  /** Whether to enable line scaling (inactive lines scaled down slightly) */
+  enableScale: true,
+  /** Whether to enable long syllable emphasis (scale + glow + sine float) */
   enableEmphasizeEffect: false,
-  /** 是否显示翻译歌词 */
+  /** Minimum duration threshold for long syllable emphasis in ms */
+  emphasizeMinDuration: 1000,
+  /** Whether to display translation lyrics */
   showTranslation: true,
-  /** 是否显示音译歌词 */
+  /** Whether to display romanized lyrics */
   showRomanization: true,
+  /** Whether to display per-word romanization subtitles */
+  showWordRomanization: false,
+  /** Whether to display ruby pronunciation annotations */
+  showRuby: false,
+  /** Whether background lines are always placed below the main line */
+  bgAlwaysBelow: false,
+  /** Whether to enable scroll pre-roll optimization */
+  enableScrollPreroll: true,
+  /** Fine-tuning options for scroll pre-roll */
+  scrollPrerollOptions: DEFAULT_SCROLL_PREROLL_OPTIONS,
+  /** Backward seek detection threshold in ms */
+  seekBackwardThreshold: 100,
+  /** Forward seek detection threshold in ms */
+  seekForwardThreshold: 2000,
 };
 
-/** 渲染器配置 */
+/** Lyric renderer configuration options */
 export interface RendererConfig {
-  /** 激活行在容器中的对齐位置（0~1，0.35 表示距顶部 35%） */
+  /** Vertical anchor alignment position of active line in container (0-1) */
   alignPosition: number;
-  /** 是否正在播放 */
+  /** Whether playback is active */
   playing: boolean;
-  /** 弹簧物理参数 */
+  /** Spring physics parameters */
   springConfig: Partial<SpringParams>;
-  /** 逐字掩码渐变宽度比例 */
+  /** Proportional width of the word gradient fade mask */
   wordFadeWidth: number;
-  /** 用户滚动后自动回弹的延迟时间（毫秒，默认 5000） */
+  /** Delay before auto-resetting scroll position to active line in ms */
   scrollResetDelay: number;
-  /** 触发间奏动画的最小间隔时长（毫秒，默认 4000） */
+  /** Minimum duration to trigger instrumental interlude animation in ms */
   minInterludeGap: number;
-  /** 间奏圆点呼吸动画的目标周期（毫秒，默认 1500） */
+  /** Target cycle duration for interlude breathing dots animation in ms */
   breatheCycleTarget: number;
-  /** 透明度增加速度（激活时，默认 50） */
+  /** Opacity increase rate on line activation */
   alphaAttackSpeed: number;
-  /** 透明度衰减速度（取消激活时，默认 7） */
+  /** Opacity decrease rate on line deactivation */
   alphaReleaseSpeed: number;
-  /** 非激活行的基础透明度（默认 0.2） */
+  /** Base opacity for inactive lines */
   inactiveAlpha: number;
-  /** 是否隐藏已播放行（默认 false） */
+  /** Whether to hide passed lyric lines */
   hidePassedLines: boolean;
-  /** 是否启用逐行模糊效果（默认 false） */
+  /** Whether to enable per-line distance blur */
   enableBlur: boolean;
-  /** 是否启用逐字高亮效果（默认 true） */
+  /** Whether to enable word-by-word karaoke highlight */
   enableWordHighlight: boolean;
-  /** 是否启用逐字上浮动画（默认 true） */
+  /** Whether to enable word floating upward animation */
   enableFloatAnimation: boolean;
-  /** 是否启用强调效果：缩放 + 辉光 + 正弦浮动（默认 true） */
+  /** Whether to enable line scaling */
+  enableScale: boolean;
+  /** Whether to enable long syllable emphasis */
   enableEmphasizeEffect: boolean;
-  /** 是否显示翻译歌词（默认 true） */
+  /** Minimum duration threshold for long syllable emphasis in ms */
+  emphasizeMinDuration: number;
+  /** Whether to display translation lyrics */
   showTranslation: boolean;
-  /** 是否显示音译歌词（默认 true） */
+  /** Whether to display romanized lyrics */
   showRomanization: boolean;
-  /** 歌词行点击回调（传入该行起始时间，用于跳转播放进度） */
+  /** Whether to display per-word romanization subtitles */
+  showWordRomanization: boolean;
+  /** Whether to display ruby pronunciation annotations */
+  showRuby: boolean;
+  /** Whether background lines are always placed below the main line */
+  bgAlwaysBelow: boolean;
+  /** Whether to enable scroll pre-roll */
+  enableScrollPreroll: boolean;
+  /** Scroll pre-roll parameters */
+  scrollPrerollOptions: Partial<ScrollPrerollOptions>;
+  /** Backward seek detection threshold in ms */
+  seekBackwardThreshold: number;
+  /** Forward seek detection threshold in ms */
+  seekForwardThreshold: number;
+  /** Line click callback handler */
   onLineClick?: (timeMs: number) => void;
 }

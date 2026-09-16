@@ -39,6 +39,10 @@ export interface LyricWord extends LyricSpan {
   obscene?: boolean;
   ruby?: LyricSpan[];
   synthetic?: boolean;
+  /** Whether this syllable is immediately followed by a space (for Western typesetting & karaoke) */
+  endsWithSpace?: boolean;
+  /** Number of empty beats (for count-in animations) */
+  emptyBeat?: number;
 }
 
 export interface LyricLine {

@@ -1,62 +1,77 @@
 /**
- * 歌词渲染引擎 — 单词 span 构建与掩码测量
+ * Word span construction, ruby markup, and CSS mask measurements
  */
 
-import { chunkAndSplitLyricWords } from "../utils/split-words";
-import type { LyricLine, LyricWord } from "@shared/types/lyrics";
-import { needsSpaceBetween } from "../utils/split-words";
+import type { LyricLine, LyricSpan, LyricWord } from "@shared/types/lyrics";
+import { chunkAndSplitLyricWords, needsSpaceBetween } from "../utils/split-words";
 import { shouldChunkEmphasize } from "./emphasize";
 
-/** 单个歌词单词的 DOM 元素与测量数据 */
+/** Measurement data for a single word DOM element */
 export interface WordMeasurement {
-  /** 对应的 span 元素 */
+  /** Target HTML span element */
   element: HTMLSpanElement;
-  /** 歌词单词数据 */
+  /** Associated lyric word data */
   word: LyricWord;
-  /** 元素宽度（px） */
+  /** Rendered element width (px) */
   width: number;
-  /** 渐变区域宽度（px） */
+  /** Fade gradient region width (px) */
   fadeWidth: number;
 }
 
-/** 描述一个需要动画的单词（用于懒创建动画） */
+/** Animation target descriptor for line animation manager */
 export interface WordAnimTarget {
-  /** 应用 float 动画的元素 */
   element: HTMLElement;
-  /** 时间数据 */
   word: LyricWord;
-  /** 是否为强调词 */
   isEmphasize: boolean;
-  /** 强调词的字符级 span（非强调词为空数组） */
   charElements: HTMLElement[];
-  /** 是否为行末单词 */
   isLastWord: boolean;
 }
 
-/** buildWordSpans 的返回结果 */
+/** Return result of buildWordSpans */
 export interface BuildResult {
   measurements: WordMeasurement[];
-  /** 懒创建动画所需的目标描述 */
   animTargets: WordAnimTarget[];
 }
 
+/** Word construction options */
+export interface WordBuildOptions {
+  /** Whether to enable sustained syllable emphasis effect */
+  enableEmphasizeEffect: boolean;
+  /** Minimum duration threshold for emphasis in ms */
+  emphasizeMinDuration: number;
+  /** Whether to render ruby pronunciation annotations */
+  showRuby: boolean;
+  /** Whether to render per-word romanization */
+  showWordRoman?: boolean;
+}
+
 /**
- * 构建单词 span 元素并添加到主容器（纯 DOM 构建，不创建动画）
+ * Construct word span elements and append them to the main line container
+ * @param words - Raw lyric words array
+ * @param mainDiv - Target host element
+ * @param options - Build options
+ * @returns Measurement data and animation targets
  */
 export const buildWordSpans = (
   words: LyricWord[],
   mainDiv: HTMLDivElement,
-  enableEmphasize = true,
+  options: WordBuildOptions,
 ): BuildResult => {
+  const {
+    enableEmphasizeEffect: enableEmphasize,
+    emphasizeMinDuration,
+    showRuby,
+    showWordRoman = false,
+  } = options;
   const chunks = chunkAndSplitLyricWords(words);
   const measurements: WordMeasurement[] = [];
   const animTargets: WordAnimTarget[] = [];
 
   const hasWhitespaceInfo = chunks.some((chunk) => {
     if (Array.isArray(chunk)) {
-      return chunk.some((word) => word.word !== word.word.trim());
+      return chunk.some((word) => word.word !== word.word.trim() || word.endsWithSpace);
     }
-    return chunk.word !== chunk.word.trim();
+    return chunk.word !== chunk.word.trim() || chunk.endsWithSpace;
   });
 
   const nonEmptyChunks: (LyricWord | LyricWord[])[] = chunks.filter((c) =>
@@ -68,7 +83,8 @@ export const buildWordSpans = (
     let previousText = "";
     for (const chunk of chunks) {
       const atoms = Array.isArray(chunk) ? chunk : [chunk];
-      const isEmp = enableEmphasize && atoms.length > 0 && shouldChunkEmphasize(atoms);
+      const isEmp =
+        enableEmphasize && atoms.length > 0 && shouldChunkEmphasize(atoms, emphasizeMinDuration);
       const isLast = chunk === lastChunk;
 
       const firstText = atoms[0]?.word.trim();
@@ -77,22 +93,12 @@ export const buildWordSpans = (
       }
 
       if (isEmp) {
-        buildEmphasizedChunk(atoms, mainDiv, measurements, animTargets, isLast);
+        buildEmphasizedChunk(atoms, mainDiv, measurements, animTargets, isLast, showWordRoman);
       } else {
         for (const atom of atoms) {
           const text = atom.word.trim();
           if (!text) continue;
-          const span = document.createElement("span");
-          span.textContent = text;
-          mainDiv.appendChild(span);
-          measurements.push({ element: span, word: atom, width: 0, fadeWidth: 0 });
-          animTargets.push({
-            element: span,
-            word: atom,
-            isEmphasize: false,
-            charElements: [],
-            isLastWord: false,
-          });
+          appendWordSpan(atom, mainDiv, measurements, animTargets, showRuby, showWordRoman);
         }
       }
       const lastAtom = atoms[atoms.length - 1];
@@ -101,13 +107,13 @@ export const buildWordSpans = (
     return { measurements, animTargets };
   }
 
-  // 正常路径
+  // Normal path with explicit spaces or endsWithSpace markers
   let previousText = "";
 
   for (const chunk of chunks) {
     if (Array.isArray(chunk)) {
       const mergedText = chunk.map((word) => word.word).join("");
-      const isEmp = enableEmphasize && shouldChunkEmphasize(chunk);
+      const isEmp = enableEmphasize && shouldChunkEmphasize(chunk, emphasizeMinDuration);
       const isLast = chunk === lastChunk;
 
       if (mergedText.trimStart() !== mergedText) {
@@ -117,24 +123,19 @@ export const buildWordSpans = (
       }
 
       if (isEmp) {
-        buildEmphasizedChunk(chunk, mainDiv, measurements, animTargets, isLast);
+        buildEmphasizedChunk(chunk, mainDiv, measurements, animTargets, isLast, showWordRoman);
       } else {
-        for (const word of chunk) {
-          const span = document.createElement("span");
-          span.textContent = word.word;
-          mainDiv.appendChild(span);
-          measurements.push({ element: span, word, width: 0, fadeWidth: 0 });
-          animTargets.push({
-            element: span,
-            word,
-            isEmphasize: false,
-            charElements: [],
-            isLastWord: false,
-          });
+        for (let wIdx = 0; wIdx < chunk.length; wIdx++) {
+          const word = chunk[wIdx];
+          appendWordSpan(word, mainDiv, measurements, animTargets, showRuby, showWordRoman);
+          if (word.endsWithSpace && wIdx < chunk.length - 1) {
+            mainDiv.appendChild(document.createTextNode(" "));
+          }
         }
       }
 
-      if (mergedText.trimEnd() !== mergedText) {
+      const lastWord = chunk[chunk.length - 1];
+      if (mergedText.trimEnd() !== mergedText || lastWord?.endsWithSpace) {
         mainDiv.appendChild(document.createTextNode(" "));
         previousText = "";
       } else {
@@ -145,7 +146,7 @@ export const buildWordSpans = (
       previousText = "";
     } else {
       const text = chunk.word;
-      const isEmp = enableEmphasize && shouldChunkEmphasize([chunk]);
+      const isEmp = enableEmphasize && shouldChunkEmphasize([chunk], emphasizeMinDuration);
       const isLast = chunk === lastChunk;
 
       if (text.trimStart() !== text) {
@@ -155,22 +156,12 @@ export const buildWordSpans = (
       }
 
       if (isEmp) {
-        buildEmphasizedChunk([chunk], mainDiv, measurements, animTargets, isLast);
+        buildEmphasizedChunk([chunk], mainDiv, measurements, animTargets, isLast, showWordRoman);
       } else {
-        const span = document.createElement("span");
-        span.textContent = text.trim();
-        mainDiv.appendChild(span);
-        measurements.push({ element: span, word: chunk, width: 0, fadeWidth: 0 });
-        animTargets.push({
-          element: span,
-          word: chunk,
-          isEmphasize: false,
-          charElements: [],
-          isLastWord: false,
-        });
+        appendWordSpan(chunk, mainDiv, measurements, animTargets, showRuby, showWordRoman);
       }
 
-      if (text.trimEnd() !== text) {
+      if (text.trimEnd() !== text || chunk.endsWithSpace) {
         mainDiv.appendChild(document.createTextNode(" "));
         previousText = "";
       } else {
@@ -182,19 +173,112 @@ export const buildWordSpans = (
 };
 
 /**
- * 构建强调单词 chunk（纯 DOM，不创建动画）
+ * Create a standard word span (with optional ruby annotations and word romanization)
+ * @param word - Word data
+ * @param mainDiv - Target container
+ * @param measurements - Output measurements array
+ * @param animTargets - Output animation targets array
+ * @param showRuby - Whether to render ruby markup
+ * @param showWordRoman - Whether to render per-word romanization
  */
-function buildEmphasizedChunk(
+const appendWordSpan = (
+  word: LyricWord,
+  mainDiv: HTMLDivElement,
+  measurements: WordMeasurement[],
+  animTargets: WordAnimTarget[],
+  showRuby: boolean,
+  showWordRoman: boolean,
+) => {
+  const span = document.createElement("span");
+  const ruby = showRuby ? word.ruby : undefined;
+
+  if (showWordRoman) {
+    span.className = "lp-word-roman";
+
+    const textEl = document.createElement("span");
+    textEl.className = "lp-word-text";
+    if (ruby?.length) {
+      buildRubyContent(textEl, word.word, ruby);
+    } else {
+      textEl.textContent = word.word;
+    }
+    span.appendChild(textEl);
+
+    const romanEl = document.createElement("span");
+    romanEl.className = "lp-roman-word";
+    const romanText = word.romanWord?.trim();
+    romanEl.textContent = romanText && romanText.length > 0 ? romanText : "\u00A0";
+    span.appendChild(romanEl);
+  } else {
+    if (ruby?.length) {
+      buildRubyContent(span, word.word, ruby);
+    } else {
+      span.textContent = word.word;
+    }
+  }
+
+  mainDiv.appendChild(span);
+  measurements.push({ element: span, word, width: 0, fadeWidth: 0 });
+  animTargets.push({
+    element: span,
+    word,
+    isEmphasize: false,
+    charElements: [],
+    isLastWord: false,
+  });
+};
+
+/**
+ * Construct ruby furigana/pronunciation content
+ * When ruby spans count matches character count, pair 1:1; otherwise annotate entire word
+ * @param span - Host word span
+ * @param text - Base text
+ * @param ruby - Ruby annotation spans array
+ */
+const buildRubyContent = (span: HTMLSpanElement, text: string, ruby: LyricSpan[]) => {
+  const chars = Array.from(text);
+  const validRuby = ruby.filter((r) => r.word.trim());
+  if (validRuby.length === chars.length) {
+    for (let i = 0; i < chars.length; i++) {
+      const rubyEl = document.createElement("ruby");
+      rubyEl.textContent = chars[i];
+      const rt = document.createElement("rt");
+      rt.textContent = validRuby[i].word;
+      rubyEl.appendChild(rt);
+      span.appendChild(rubyEl);
+    }
+  } else {
+    const rubyEl = document.createElement("ruby");
+    rubyEl.textContent = text;
+    const rt = document.createElement("rt");
+    rt.textContent = validRuby.map((r) => r.word).join("");
+    rubyEl.appendChild(rt);
+    span.appendChild(rubyEl);
+  }
+};
+
+/**
+ * Construct emphasized word chunk
+ * @param atoms - Grouped atoms before merging
+ * @param mainDiv - Target host element
+ * @param measurements - Output measurements array
+ * @param animTargets - Output animation targets array
+ * @param isLastWord - Whether this is the last word of the line
+ * @param showWordRoman - Whether to render per-word romanization
+ */
+const buildEmphasizedChunk = (
   atoms: LyricWord[],
   mainDiv: HTMLDivElement,
   measurements: WordMeasurement[],
   animTargets: WordAnimTarget[],
   isLastWord: boolean,
-) {
+  showWordRoman: boolean,
+) => {
   const mergedWord: LyricWord = {
     word: atoms.map((a) => a.word).join(""),
     startTime: Math.min(...atoms.map((a) => a.startTime)),
     endTime: Math.max(...atoms.map((a) => a.endTime)),
+    endsWithSpace: atoms[atoms.length - 1]?.endsWithSpace,
   };
   const trimmed = mergedWord.word.trim();
 
@@ -202,11 +286,32 @@ function buildEmphasizedChunk(
   wrapper.className = "lp-emp-wrapper";
 
   const charElements: HTMLElement[] = [];
-  for (const char of trimmed) {
-    const charSpan = document.createElement("span");
-    charSpan.textContent = char;
-    wrapper.appendChild(charSpan);
-    charElements.push(charSpan);
+  if (showWordRoman) {
+    wrapper.classList.add("lp-word-roman");
+
+    const charsContainer = document.createElement("span");
+    charsContainer.className = "lp-emp-chars";
+    for (const char of trimmed) {
+      const charSpan = document.createElement("span");
+      charSpan.textContent = char;
+      charsContainer.appendChild(charSpan);
+      charElements.push(charSpan);
+    }
+    wrapper.appendChild(charsContainer);
+
+    const romanEl = document.createElement("span");
+    romanEl.className = "lp-roman-word";
+    const romanParts = atoms.map((a) => a.romanWord?.trim()).filter(Boolean);
+    const romanText = romanParts.length > 0 ? romanParts.join(" ") : "";
+    romanEl.textContent = romanText.length > 0 ? romanText : "\u00A0";
+    wrapper.appendChild(romanEl);
+  } else {
+    for (const char of trimmed) {
+      const charSpan = document.createElement("span");
+      charSpan.textContent = char;
+      wrapper.appendChild(charSpan);
+      charElements.push(charSpan);
+    }
   }
 
   mainDiv.appendChild(wrapper);
@@ -218,23 +323,25 @@ function buildEmphasizedChunk(
     charElements,
     isLastWord,
   });
-}
+};
 
 /**
- * 测量所有单词的宽度并设置 CSS 掩码
+ * Measure all word dimensions and apply CSS masks with read-write separation
+ * Batch reads all DOM dimensions in pass 1 (single reflow),
+ * then writes all mask CSS properties in pass 2 (zero reflows).
  *
- * 采用读写分离策略：第一遍批量读取所有 DOM 尺寸（触发一次回流），
- * 第二遍批量写入所有 CSS mask 样式（零回流），避免逐词读写交替导致的 N 次强制回流。
+ * @param wordMeasurements - Word measurements per line
+ * @param fadeRatio - Mask fade gradient width ratio
+ * @param lines - Lyric lines array providing line start timestamps
  */
 export const measureAndApplyWordMasks = (
   wordMeasurements: WordMeasurement[][],
   fadeRatio: number,
   lines?: LyricLine[],
 ) => {
-  // 临时存储每个 measurement 的 padding，供第二遍使用
   const paddings: number[][] = new Array(wordMeasurements.length);
 
-  // ===== 第一遍：批量读取 DOM 尺寸（一次回流） =====
+  // Batch read DOM dimensions (single reflow)
   for (let i = 0; i < wordMeasurements.length; i++) {
     const lineMeasurements = wordMeasurements[i];
     if (!lineMeasurements) {
@@ -254,7 +361,7 @@ export const measureAndApplyWordMasks = (
     }
   }
 
-  // ===== 第二遍：批量写入 CSS mask 样式（零回流） =====
+  // Batch write CSS mask styles (zero reflows)
   for (let i = 0; i < wordMeasurements.length; i++) {
     const lineMeasurements = wordMeasurements[i];
     const lineStart = lines?.[i]?.startTime ?? 0;
@@ -273,9 +380,12 @@ export const measureAndApplyWordMasks = (
       const wordData = measurement.word;
       const totalMaskWidth = elementWidth + gradientWidth;
       const wordDuration = Math.abs(wordData.endTime - wordData.startTime) || 1;
-      // preRoll：在 startTime 之前提前开始扫动，让相邻词亮区衔接而非硬切
+      // Pre-roll: start sweep slightly before startTime so adjacent words connect seamlessly
       const preRoll = Math.min(80, wordDuration * 0.3);
-      const adjustedStart = Math.max(lineStart, wordData.startTime - preRoll);
+      const adjustedStart = Math.min(
+        wordData.startTime,
+        Math.max(lineStart, wordData.startTime - preRoll),
+      );
       const adjustedDuration = Math.max(1, wordData.endTime - adjustedStart);
       const startPos = padding - totalMaskWidth;
       const endPos = padding;
@@ -284,9 +394,13 @@ export const measureAndApplyWordMasks = (
         ? `clamp(${startPos}px,calc(${startPos}px + (var(--t,${lineStart}) - ${adjustedStart}) * ${speed}px),${endPos}px) 0px,left top`
         : `${startPos}px 0px,left top`;
       const style = measurement.element.style;
+      style.setProperty("-webkit-mask-image", maskImage);
+      style.setProperty("-webkit-mask-size", maskSize);
+      style.setProperty("-webkit-mask-repeat", "repeat-y");
+      style.setProperty("-webkit-mask-position", maskPosition);
       style.setProperty("mask-image", maskImage);
       style.setProperty("mask-size", maskSize);
-      style.setProperty("mask-repeat", "no-repeat");
+      style.setProperty("mask-repeat", "repeat-y");
       style.setProperty("mask-position", maskPosition);
     }
   }
