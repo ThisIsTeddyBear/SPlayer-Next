@@ -4,6 +4,7 @@ import { useThemeStore } from "@/stores/theme";
 import { useCopyText } from "@/composables/useCopyText";
 import { toast } from "@/composables/useToast";
 import { createLyricPoster } from "@/utils/lyric/poster";
+import { getLineRomaji, getLineText } from "@shared/utils/lyrics";
 
 const props = defineProps<{ open: boolean }>();
 
@@ -14,24 +15,24 @@ const media = useMediaStore();
 const theme = useThemeStore();
 const { copy } = useCopyText();
 
-/** 复制内容过滤项 */
+/** Copy filter options */
 type CopyFilter = "translation" | "romaji" | "emptyLine" | "songName" | "artist";
 
-/** 选中的过滤项（默认开启翻译/音译/歌名/歌手，空行默认关闭） */
+/** Selected filter items */
 const selectedFilters = ref<CopyFilter[]>(["translation", "romaji", "songName", "artist"]);
 
-/** 选中的歌词行索引 */
+/** Selected lyric line indices */
 const selectedLines = ref<number[]>([]);
 
-/** 展示用歌词行 */
+/** Display lyric lines */
 const displayLyrics = computed(() =>
   media.parsedLyric
     .filter((line) => !line.isBG)
     .map((line, index) => ({
       index,
-      text: line.words.map((word) => word.word).join(""),
+      text: getLineText(line),
       translation: line.translatedLyric || "",
-      romaji: line.romanLyric || line.words.map((word) => word.romanWord ?? "").join(""),
+      romaji: getLineRomaji(line),
       duet: line.isDuet,
     })),
 );

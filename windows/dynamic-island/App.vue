@@ -9,6 +9,7 @@ import { useNowPlayingSync } from "@windows/shared/composables/useNowPlayingSync
 import { useDragWindow } from "./composables/useDragWindow";
 import { isMac } from "@/utils/config";
 import { formatArtists } from "@shared/utils/track";
+import { getLineText } from "@shared/utils/lyrics";
 
 const config = reactive<DynamicIslandSettings>({
   scale: 1,
@@ -113,7 +114,7 @@ let phase: "idle" | "shrinking" | "expanding" = "idle";
 
 let hasPainted = false;
 
-const lineText = (line: LyricLine): string => line.words.map((w) => w.word).join("");
+const lineText = (line: LyricLine): string => getLineText(line);
 
 const computeSubText = (idx: number, line: LyricLine | null): string => {
   if (config.showTranslation && line?.translatedLyric) return line.translatedLyric;

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { LyricLine } from "@shared/types/lyrics";
-import { LyricPlayer as CoreLyricPlayer } from "@applemusic-like-lyrics/core";
+import {
+  LyricPlayer as CoreLyricPlayer,
+  type LyricLineMouseEvent,
+} from "@applemusic-like-lyrics/core";
 import { useSettingsStore } from "@/stores/settings";
 import { useStatusStore } from "@/stores/status";
 import { getCurrentTime } from "@/services/playback";
@@ -87,6 +90,9 @@ const processedLyrics = computed(() => {
     if (line.words) {
       newLine.words = line.words.map((word) => {
         const newWord = { ...word };
+        if (word.endsWithSpace && !word.word.endsWith(" ")) {
+          newWord.word = word.word + " ";
+        }
         if (!props.showWordRomanization) {
           delete newWord.romanWord;
         }
@@ -98,8 +104,8 @@ const processedLyrics = computed(() => {
 });
 
 // Line click event handler
-const handleLineClick = (e: Event) => {
-  const amllEvent = e as Event & { line?: { getLine: () => { startTime?: number } } };
+const handleLineClick = (event: Event) => {
+  const amllEvent = event as LyricLineMouseEvent;
   const lineData = amllEvent.line?.getLine();
   if (lineData && typeof lineData.startTime === "number") {
     emit("seek", lineData.startTime);

@@ -3,6 +3,7 @@
  */
 
 import type { LyricLine } from "@shared/types/lyrics";
+import { getLineText } from "@shared/utils/lyrics";
 import {
   buildWordSpans,
   type WordAnimTarget,
@@ -104,7 +105,7 @@ export const buildLineElements = (
       !(options.showRuby && line.words[0]?.ruby?.length);
 
     if (isStatic) {
-      mainDiv.appendChild(document.createTextNode(line.words.map((w) => w.word).join("")));
+      mainDiv.appendChild(document.createTextNode(getLineText(line)));
       mainDiv.style.setProperty(
         "mask-image",
         "linear-gradient(rgba(0,0,0,var(--ba)),rgba(0,0,0,var(--ba)))",
