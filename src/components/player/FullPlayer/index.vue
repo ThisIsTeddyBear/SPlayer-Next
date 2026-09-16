@@ -374,7 +374,6 @@ const toggleLyric = (): void => {
                 :enable-emphasize-effect="settings.lyric.enableEmphasizeEffect"
                 :show-translation="settings.lyric.showTranslation"
                 :show-romanization="settings.lyric.showRomanization"
-                :show-word-romanization="settings.lyric.amllShowWordRomanization"
                 @seek="handleLyricSeek"
               >
                 <template #bottom>

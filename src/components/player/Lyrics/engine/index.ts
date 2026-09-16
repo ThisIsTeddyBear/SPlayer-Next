@@ -63,10 +63,6 @@ export class LyricRenderer {
 
   /** Cached line heights */
   private lineHeights: Float64Array = new Float64Array(0);
-  /** Background vocal expand progress (0 collapsed -> 1 expanded) */
-  private bgExpandValues: Float64Array = new Float64Array(0);
-  /** Write cache for --lp-bg-progress */
-  private cachedBgKeys: string[] = [];
   /** Whether background line is positioned above host main line */
   private isBgAbove: boolean[] = [];
   /** Container dimensions */
@@ -187,8 +183,6 @@ export class LyricRenderer {
   private showTranslation = DEFAULTS.showTranslation;
   /** Show romanization */
   private showRomanization = DEFAULTS.showRomanization;
-  /** Show word-level romanization */
-  private showWordRomanization = DEFAULTS.showWordRomanization;
   /** Show ruby annotations */
   private showRuby = DEFAULTS.showRuby;
   /** Always keep background vocal below main line */
@@ -350,7 +344,9 @@ export class LyricRenderer {
         continue;
       }
       consecutiveBgCount++;
-      if (i === 0 || consecutiveBgCount > 1) line.isBG = false;
+      if (i === 0 || (consecutiveBgCount > 1 && line.singerRole !== "background")) {
+        line.isBG = false;
+      }
     }
 
     syncMainAndBackgroundLines(clonedLines);
@@ -407,8 +403,6 @@ export class LyricRenderer {
 
     // Initialize caches
     this.lineHeights = new Float64Array(lineCount);
-    this.bgExpandValues = new Float64Array(lineCount);
-    this.cachedBgKeys = new Array(lineCount).fill("");
     this.cachedTransforms = new Array(lineCount).fill("");
     this.lineWillChange = new Array(lineCount).fill(false);
     this.lineCulled = new Array(lineCount).fill(false);
@@ -426,7 +420,6 @@ export class LyricRenderer {
       emphasizeMinDuration: this.emphasizeMinDuration,
       showTranslation: this.showTranslation,
       showRomanization: this.showRomanization,
-      showWordRomanization: this.showWordRomanization,
       showRuby: this.showRuby,
       bgAlwaysBelow: this.bgAlwaysBelow,
     });
@@ -461,11 +454,6 @@ export class LyricRenderer {
 
     // Initial layout and entrance animation
     this.handleSeek(seekTime);
-    for (let i = 1; i < this.lines.length; i++) {
-      if (!this.lines[i]?.isBG) continue;
-      this.bgExpandValues[i] = this.activeLineSet.has(i) ? 1 : 0;
-    }
-    this.syncBgProgress();
     this.calculateLayout(true);
     this.playEntranceAnimation(this.containerHeight * 0.6);
     this.needsFullSync = true;
@@ -563,13 +551,6 @@ export class LyricRenderer {
       this.showRomanization = config.showRomanization;
       domRebuildNeeded = true;
     }
-    if (
-      config.showWordRomanization != null &&
-      config.showWordRomanization !== this.showWordRomanization
-    ) {
-      this.showWordRomanization = config.showWordRomanization;
-      domRebuildNeeded = true;
-    }
     if (config.showRuby != null && config.showRuby !== this.showRuby) {
       this.showRuby = config.showRuby;
       domRebuildNeeded = true;
@@ -635,7 +616,6 @@ export class LyricRenderer {
       emphasizeMinDuration: this.emphasizeMinDuration,
       showTranslation: this.showTranslation,
       showRomanization: this.showRomanization,
-      showWordRomanization: this.showWordRomanization,
       showRuby: this.showRuby,
       bgAlwaysBelow: this.bgAlwaysBelow,
     });
@@ -671,13 +651,12 @@ export class LyricRenderer {
     this.cachedAlphaKeys.fill("");
     this.cachedBlurKeys.fill("");
     this.cachedPassKeys.fill("");
-    this.cachedBgKeys.fill("");
     this.cachedTimeString = "";
 
     const lineCount = this.lines.length;
     for (let i = 0; i < lineCount; i++) {
       const lineEl = this.lineElements[i];
-      if (!lineEl || this.lines[i].isBG) continue;
+      if (!lineEl) continue;
       const y = this.positionSprings[i]?.getCurrentPosition() ?? 0;
       const s = (this.scaleSprings[i]?.getCurrentPosition() ?? 100) / 100;
       const tf = `translateY(${y.toFixed(2)}px) scale(${s.toFixed(4)})`;
@@ -747,8 +726,8 @@ export class LyricRenderer {
 
       if (line.startTime <= currentTime && line.endTime > currentTime) {
         activated.push(i);
-        if (lines[i + 1]?.isBG) {
-          activated.push(i + 1);
+        for (let bgIdx = i + 1; lines[bgIdx]?.isBG; bgIdx++) {
+          activated.push(bgIdx);
           bgTransition = true;
         }
       }
@@ -765,8 +744,8 @@ export class LyricRenderer {
 
       if (line.startTime > currentTime || line.endTime <= currentTime) {
         deactivated.add(lineIdx);
-        if (lines[lineIdx + 1]?.isBG) {
-          deactivated.add(lineIdx + 1);
+        for (let bgIdx = lineIdx + 1; lines[bgIdx]?.isBG; bgIdx++) {
+          deactivated.add(bgIdx);
           bgTransition = true;
         }
       }
@@ -816,10 +795,10 @@ export class LyricRenderer {
         this.activeLineSet.add(i);
         this.lineElements[i]?.classList.add("active");
         this.activateLineAnimations(i, targetTime);
-        if (lines[i + 1]?.isBG) {
-          this.activeLineSet.add(i + 1);
-          this.lineElements[i + 1]?.classList.add("active");
-          this.activateLineAnimations(i + 1, targetTime);
+        for (let bgIdx = i + 1; lines[bgIdx]?.isBG; bgIdx++) {
+          this.activeLineSet.add(bgIdx);
+          this.lineElements[bgIdx]?.classList.add("active");
+          this.activateLineAnimations(bgIdx, targetTime);
         }
       }
     }
@@ -865,23 +844,6 @@ export class LyricRenderer {
         lineEl.style.setProperty("--pass", passKey);
       }
     }
-
-    for (let i = 1; i < this.lines.length; i++) {
-      if (!this.lines[i]?.isBG) continue;
-      this.bgExpandValues[i] = this.activeLineSet.has(i) ? 1 : 0;
-    }
-    this.syncBgProgress();
-  };
-
-  /** Write background vocal expand progress to overlay elements */
-  private syncBgProgress = () => {
-    for (let i = 1; i < this.lines.length; i++) {
-      if (!this.lines[i]?.isBG) continue;
-      const key = (this.bgExpandValues[i] || 0).toFixed(3);
-      if (this.cachedBgKeys[i] === key) continue;
-      this.cachedBgKeys[i] = key;
-      this.lineElements[i]?.style.setProperty("--lp-bg-progress", key);
-    }
   };
 
   /**
@@ -913,23 +875,26 @@ export class LyricRenderer {
     let position = -this.userScrollOffset;
     let heightAccum = 0;
     for (let i = 0; i < targetIdx; i++) {
-      const line = lines[i];
-      if (!line || line.isBG) continue;
+      if (lines[i]?.isBG && !this.activeLineSet.has(i)) continue;
       heightAccum += this.lineHeights[i] || 40;
-      if (lines[i + 1]?.isBG && this.activeLineSet.has(i + 1)) {
-        heightAccum += this.lineHeights[i + 1] || 40;
-      }
     }
     position -= heightAccum;
     position += viewHeight * this.alignPosition - (this.lineHeights[targetIdx] || 40) / 2;
+    if (this.isBgAbove[targetIdx + 1] && this.activeLineSet.has(targetIdx + 1)) {
+      position -= this.lineHeights[targetIdx + 1] || 40;
+    }
 
     let cascadeDelay = 0;
     let baseDelay = syncImmediate || noCascade ? 0 : 50;
     let dotsInserted = false;
+    let pendingBgIdx = -1;
+    let pendingBgY = 0;
 
     for (let i = 0; i < lineCount; i++) {
+      const posSpring = this.positionSprings[i];
+      const scaleSpring = this.scaleSprings[i];
       const line = lines[i];
-      if (!line || line.isBG) continue;
+      if (!line) continue;
 
       if (!dotsInserted && interlude && i === interlude[2] + 1) {
         dotsInserted = true;
@@ -944,21 +909,26 @@ export class LyricRenderer {
       }
 
       const isActive = this.activeLineSet.has(i);
-      const targetScale = this.enableScale && !isActive ? 97 : 100;
-      const bg = lines[i + 1];
-      const bgOpen = bg?.isBG ? this.activeLineSet.has(i + 1) : false;
-      const bgH = bgOpen ? this.lineHeights[i + 1] || 40 : 0;
-      const lineY = position + (bgOpen && this.isBgAbove[i + 1] ? bgH : 0);
+      const targetScale =
+        !isActive && this.isPlaying ? (line.isBG ? 75 : this.enableScale ? 97 : 100) : 100;
+      const collapsedBG = line.isBG && !isActive;
 
-      if (bg?.isBG) {
-        const bgSpring = this.positionSprings[i + 1];
-        const bgY = this.isBgAbove[i + 1] ? lineY - bgH : lineY + (this.lineHeights[i] || 40);
-        if (syncImmediate) bgSpring.setPosition(bgY);
-        else bgSpring.setTargetPosition(bgY, cascadeDelay);
+      let lineY = position;
+      let advance = collapsedBG ? 0 : this.lineHeights[i] || 40;
+      if (i === pendingBgIdx) {
+        lineY = pendingBgY;
+        advance = 0;
+        pendingBgIdx = -1;
+      } else if (this.isBgAbove[i + 1]) {
+        const bgIdx = i + 1;
+        const bgH = this.lineHeights[bgIdx] || 40;
+        const bgSpace = this.activeLineSet.has(bgIdx) ? bgH : 0;
+        lineY = position + bgSpace;
+        pendingBgY = lineY - bgH;
+        pendingBgIdx = bgIdx;
+        advance = bgSpace + (this.lineHeights[i] || 40);
       }
 
-      const posSpring = this.positionSprings[i];
-      const scaleSpring = this.scaleSprings[i];
       if (syncImmediate) {
         posSpring.setPosition(lineY);
         scaleSpring.setPosition(targetScale);
@@ -967,10 +937,10 @@ export class LyricRenderer {
         scaleSpring.setTargetPosition(targetScale, cascadeDelay);
       }
 
-      position += (this.lineHeights[i] || 40) + bgH;
+      position += advance;
 
       if (position >= 0 && !this.isUserScrolling) {
-        cascadeDelay += baseDelay;
+        if (!line.isBG) cascadeDelay += baseDelay;
         if (i >= targetIdx) baseDelay /= 1.05;
       }
     }
@@ -987,7 +957,6 @@ export class LyricRenderer {
    */
   private playEntranceAnimation = (offset: number) => {
     for (let i = 0; i < this.positionSprings.length; i++) {
-      if (this.lines[i].isBG) continue;
       const posSpring = this.positionSprings[i];
       const scaleSpring = this.scaleSprings[i];
       const targetY = posSpring.getCurrentPosition();
@@ -1037,30 +1006,11 @@ export class LyricRenderer {
     const isFullSync = this.needsFullSync;
     this.needsFullSync = false;
 
-    if (this.entranceComplete) {
-      const bgFactor = 1 - Math.exp(-12 * ((deltaTime || 16) / 1000));
-      let bgDirty = false;
-      for (let i = 1; i < lineCount; i++) {
-        if (!this.lines[i]?.isBG) continue;
-        const target = this.activeLineSet.has(i) ? 1 : 0;
-        const cur = this.bgExpandValues[i];
-        if (Math.abs(target - cur) < 0.001) {
-          if (cur !== target) this.bgExpandValues[i] = target;
-          continue;
-        }
-        this.bgExpandValues[i] = cur + (target - cur) * bgFactor;
-        bgDirty = true;
-      }
-      if (bgDirty) this.syncBgProgress();
-    }
-
     for (let i = 0; i < lineCount; i++) {
       const posSpring = this.positionSprings[i];
       const scaleSpring = this.scaleSprings[i];
       posSpring.update(deltaTime);
       scaleSpring.update(deltaTime);
-
-      if (this.lines[i]?.isBG) continue;
 
       const yPos = posSpring.getCurrentPosition();
       const scale = scaleSpring.getCurrentPosition() / 100;

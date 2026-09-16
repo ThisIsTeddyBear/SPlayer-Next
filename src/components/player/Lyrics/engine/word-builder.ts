@@ -41,8 +41,6 @@ export interface WordBuildOptions {
   emphasizeMinDuration: number;
   /** Whether to render ruby pronunciation annotations */
   showRuby: boolean;
-  /** Whether to render per-word romanization */
-  showWordRoman?: boolean;
 }
 
 /**
@@ -57,12 +55,7 @@ export const buildWordSpans = (
   mainDiv: HTMLDivElement,
   options: WordBuildOptions,
 ): BuildResult => {
-  const {
-    enableEmphasizeEffect: enableEmphasize,
-    emphasizeMinDuration,
-    showRuby,
-    showWordRoman = false,
-  } = options;
+  const { enableEmphasizeEffect: enableEmphasize, emphasizeMinDuration, showRuby } = options;
   const chunks = chunkAndSplitLyricWords(words);
   const measurements: WordMeasurement[] = [];
   const animTargets: WordAnimTarget[] = [];
@@ -93,12 +86,12 @@ export const buildWordSpans = (
       }
 
       if (isEmp) {
-        buildEmphasizedChunk(atoms, mainDiv, measurements, animTargets, isLast, showWordRoman);
+        buildEmphasizedChunk(atoms, mainDiv, measurements, animTargets, isLast);
       } else {
         for (const atom of atoms) {
           const text = atom.word.trim();
           if (!text) continue;
-          appendWordSpan(atom, mainDiv, measurements, animTargets, showRuby, showWordRoman);
+          appendWordSpan(atom, mainDiv, measurements, animTargets, showRuby);
         }
       }
       const lastAtom = atoms[atoms.length - 1];
@@ -123,11 +116,11 @@ export const buildWordSpans = (
       }
 
       if (isEmp) {
-        buildEmphasizedChunk(chunk, mainDiv, measurements, animTargets, isLast, showWordRoman);
+        buildEmphasizedChunk(chunk, mainDiv, measurements, animTargets, isLast);
       } else {
         for (let wIdx = 0; wIdx < chunk.length; wIdx++) {
           const word = chunk[wIdx];
-          appendWordSpan(word, mainDiv, measurements, animTargets, showRuby, showWordRoman);
+          appendWordSpan(word, mainDiv, measurements, animTargets, showRuby);
           if (word.endsWithSpace && wIdx < chunk.length - 1) {
             mainDiv.appendChild(document.createTextNode(" "));
           }
@@ -156,9 +149,9 @@ export const buildWordSpans = (
       }
 
       if (isEmp) {
-        buildEmphasizedChunk([chunk], mainDiv, measurements, animTargets, isLast, showWordRoman);
+        buildEmphasizedChunk([chunk], mainDiv, measurements, animTargets, isLast);
       } else {
-        appendWordSpan(chunk, mainDiv, measurements, animTargets, showRuby, showWordRoman);
+        appendWordSpan(chunk, mainDiv, measurements, animTargets, showRuby);
       }
 
       if (text.trimEnd() !== text || chunk.endsWithSpace) {
@@ -173,13 +166,12 @@ export const buildWordSpans = (
 };
 
 /**
- * Create a standard word span (with optional ruby annotations and word romanization)
+ * Create a standard word span (with optional ruby annotations)
  * @param word - Word data
  * @param mainDiv - Target container
  * @param measurements - Output measurements array
  * @param animTargets - Output animation targets array
  * @param showRuby - Whether to render ruby markup
- * @param showWordRoman - Whether to render per-word romanization
  */
 const appendWordSpan = (
   word: LyricWord,
@@ -187,34 +179,14 @@ const appendWordSpan = (
   measurements: WordMeasurement[],
   animTargets: WordAnimTarget[],
   showRuby: boolean,
-  showWordRoman: boolean,
 ) => {
   const span = document.createElement("span");
   const ruby = showRuby ? word.ruby : undefined;
 
-  if (showWordRoman) {
-    span.className = "lp-word-roman";
-
-    const textEl = document.createElement("span");
-    textEl.className = "lp-word-text";
-    if (ruby?.length) {
-      buildRubyContent(textEl, word.word, ruby);
-    } else {
-      textEl.textContent = word.word;
-    }
-    span.appendChild(textEl);
-
-    const romanEl = document.createElement("span");
-    romanEl.className = "lp-roman-word";
-    const romanText = word.romanWord?.trim();
-    romanEl.textContent = romanText && romanText.length > 0 ? romanText : "\u00A0";
-    span.appendChild(romanEl);
+  if (ruby?.length) {
+    buildRubyContent(span, word.word, ruby);
   } else {
-    if (ruby?.length) {
-      buildRubyContent(span, word.word, ruby);
-    } else {
-      span.textContent = word.word;
-    }
+    span.textContent = word.word;
   }
 
   mainDiv.appendChild(span);
@@ -264,7 +236,6 @@ const buildRubyContent = (span: HTMLSpanElement, text: string, ruby: LyricSpan[]
  * @param measurements - Output measurements array
  * @param animTargets - Output animation targets array
  * @param isLastWord - Whether this is the last word of the line
- * @param showWordRoman - Whether to render per-word romanization
  */
 const buildEmphasizedChunk = (
   atoms: LyricWord[],
@@ -272,7 +243,6 @@ const buildEmphasizedChunk = (
   measurements: WordMeasurement[],
   animTargets: WordAnimTarget[],
   isLastWord: boolean,
-  showWordRoman: boolean,
 ) => {
   const mergedWord: LyricWord = {
     word: atoms.map((a) => a.word).join(""),
@@ -286,32 +256,11 @@ const buildEmphasizedChunk = (
   wrapper.className = "lp-emp-wrapper";
 
   const charElements: HTMLElement[] = [];
-  if (showWordRoman) {
-    wrapper.classList.add("lp-word-roman");
-
-    const charsContainer = document.createElement("span");
-    charsContainer.className = "lp-emp-chars";
-    for (const char of trimmed) {
-      const charSpan = document.createElement("span");
-      charSpan.textContent = char;
-      charsContainer.appendChild(charSpan);
-      charElements.push(charSpan);
-    }
-    wrapper.appendChild(charsContainer);
-
-    const romanEl = document.createElement("span");
-    romanEl.className = "lp-roman-word";
-    const romanParts = atoms.map((a) => a.romanWord?.trim()).filter(Boolean);
-    const romanText = romanParts.length > 0 ? romanParts.join(" ") : "";
-    romanEl.textContent = romanText.length > 0 ? romanText : "\u00A0";
-    wrapper.appendChild(romanEl);
-  } else {
-    for (const char of trimmed) {
-      const charSpan = document.createElement("span");
-      charSpan.textContent = char;
-      wrapper.appendChild(charSpan);
-      charElements.push(charSpan);
-    }
+  for (const char of trimmed) {
+    const charSpan = document.createElement("span");
+    charSpan.textContent = char;
+    wrapper.appendChild(charSpan);
+    charElements.push(charSpan);
   }
 
   mainDiv.appendChild(wrapper);

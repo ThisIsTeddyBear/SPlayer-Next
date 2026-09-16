@@ -45,48 +45,30 @@
   }
 }
 
-/* Host line with background vocal: allow overlay beyond line bounds */
-.lp-line.has-bg {
-  contain: none;
-}
-
-/* Background vocal overlay: nested above/below host line */
-.lp-line-bg {
-  --p: clamp(0, var(--lp-bg-progress, 0), 1);
-  position: absolute;
-  inset-inline: 0;
-  margin: 0;
-  padding-inline: inherit;
-  box-sizing: border-box;
+.lp-line.bg {
   font-size: var(--lp-bg-font-size, 0.75em);
-  line-height: var(--lp-line-height, 1.25);
-  color: var(--lp-singer-color, inherit);
-  text-align: inherit;
-  pointer-events: none;
-  user-select: none;
-  opacity: calc(var(--p) * var(--lp-bg-active-opacity, 0.4));
+  padding-left: calc(1em / 0.75);
+  padding-right: calc(1em / 0.75);
+  transform-origin: left top;
+  opacity: 0.0001;
+  transition: opacity 0.25s;
 }
 
-/* Below host: settles into host when collapsed, sinks downward when expanded */
-.lp-line-bg:not(.above) {
-  top: 100%;
-  transform: translateY(calc((var(--p) - 1) * var(--lp-bg-tuck, 0.85em)));
+.lp-line.bg.active {
+  opacity: var(--lp-bg-active-opacity, 0.4);
+  transition: opacity 0.5s 0.25s;
 }
 
-/* Above host: settles into host when collapsed, floats upward when expanded */
-.lp-line-bg.above {
-  bottom: 100%;
-  transform: translateY(calc((1 - var(--p)) * var(--lp-bg-tuck, 0.85em)));
+.lp-line.duet.bg {
+  transform-origin: right top;
 }
 
-.lp-line.align-center,
-.lp-line-bg.align-center {
+.lp-line.align-center {
   text-align: center;
   transform-origin: center;
 }
 
-.lp-line.align-end,
-.lp-line-bg.align-end {
+.lp-line.align-end {
   text-align: end;
   transform-origin: right;
 }
@@ -197,25 +179,6 @@
     }
   }
 
-  /* Word romanization wrapper */
-  & > span.lp-word-roman {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    vertical-align: bottom;
-    text-align: center;
-    margin-inline-end: var(--lp-word-roman-gap, 0.3em);
-
-    &:last-child {
-      margin-inline-end: 0;
-    }
-
-    &:first-child {
-      align-items: flex-start;
-      text-align: left;
-    }
-  }
-
   /* Word emphasis wrapper */
   & > span.lp-emp-wrapper {
     display: inline-block;
@@ -225,47 +188,11 @@
     padding: 1em;
     margin: -1em;
 
-    &.lp-word-roman {
-      display: inline-flex;
-      vertical-align: bottom;
-      margin-inline-end: calc(-1em + var(--lp-word-roman-gap, 0.3em));
-
-      &:last-child {
-        margin-inline-end: -1em;
-      }
-    }
-
     & > span {
       display: inline-block;
       padding: 1em;
       margin: -1em;
     }
-  }
-
-  .lp-word-text {
-    display: inline-block;
-    white-space: pre;
-    text-align: inherit;
-  }
-
-  .lp-roman-word {
-    display: block;
-    font-size: var(--lp-roman-font-size, 0.5em);
-    line-height: var(--lp-roman-line-height, 1.35);
-    padding-bottom: 0.12em;
-    font-weight: 500;
-    color: var(--lp-roman-color, inherit);
-    opacity: var(--lp-roman-opacity, 0.75);
-    white-space: nowrap;
-    user-select: none;
-    pointer-events: none;
-    text-align: inherit;
-  }
-
-  .lp-emp-chars {
-    display: inline-block;
-    white-space: pre;
-    text-align: inherit;
   }
 }
 

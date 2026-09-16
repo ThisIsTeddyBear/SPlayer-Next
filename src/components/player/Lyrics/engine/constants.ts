@@ -41,8 +41,6 @@ export const DEFAULTS = {
   showTranslation: true,
   /** Whether to display romanized lyrics */
   showRomanization: true,
-  /** Whether to display per-word romanization subtitles */
-  showWordRomanization: false,
   /** Whether to display ruby pronunciation annotations */
   showRuby: false,
   /** Whether background lines are always placed below the main line */
@@ -97,8 +95,6 @@ export interface RendererConfig {
   showTranslation: boolean;
   /** Whether to display romanized lyrics */
   showRomanization: boolean;
-  /** Whether to display per-word romanization subtitles */
-  showWordRomanization: boolean;
   /** Whether to display ruby pronunciation annotations */
   showRuby: boolean;
   /** Whether background lines are always placed below the main line */

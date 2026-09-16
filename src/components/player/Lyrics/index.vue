@@ -74,8 +74,6 @@ const props = withDefaults(
     showTranslation?: boolean;
     /** Whether to show romanization lyrics */
     showRomanization?: boolean;
-    /** Whether to show word-level romanization */
-    showWordRomanization?: boolean;
     /** Whether to show ruby annotations */
     showRuby?: boolean;
     /** Whether to always position background vocals below main line */
@@ -109,7 +107,6 @@ const props = withDefaults(
     enableEmphasizeEffect: DEFAULTS.enableEmphasizeEffect,
     showTranslation: true,
     showRomanization: true,
-    showWordRomanization: DEFAULTS.showWordRomanization,
     showRuby: DEFAULTS.showRuby,
     bgAlwaysBelow: DEFAULTS.bgAlwaysBelow,
     enableScrollPreroll: DEFAULTS.enableScrollPreroll,
@@ -285,11 +282,6 @@ watch(
 watch(
   () => props.showRomanization,
   (v) => renderer?.setConfig({ showRomanization: v }),
-);
-
-watch(
-  () => props.showWordRomanization,
-  (v) => renderer?.setConfig({ showWordRomanization: v }),
 );
 
 watch(
