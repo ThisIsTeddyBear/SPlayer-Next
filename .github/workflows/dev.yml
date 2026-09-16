@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - dev
+      - antigravity
     paths:
       - "src/**"
       - "electron/**"
