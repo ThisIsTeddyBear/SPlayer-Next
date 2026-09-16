@@ -14,6 +14,13 @@ export type CoverLayout = "default" | "fullscreen";
 export type TimeFormat = "current-total" | "remaining-total" | "current-remaining";
 
 /**
+ * Search page playback behavior
+ * - current: play current track only
+ * - all: play all results
+ */
+export type SearchPlayBehavior = "current" | "all";
+
+/**
  */
 export type LyricSourcePreference = Platform | "auto" | "self";
 
@@ -158,6 +165,8 @@ export interface PlayerSettings {
   snapToLyric: boolean;
   showLyricInBar: boolean;
   preloadNextTrack: boolean;
+  /** Search page playback behavior */
+  searchPlayBehavior: SearchPlayBehavior;
 }
 
 export interface AppearanceSettings {

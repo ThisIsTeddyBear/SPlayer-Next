@@ -1,10 +1,5 @@
 <script setup lang="ts">
-import type {
-  Artist,
-  PlaybackContext,
-  Track,
-  TrackSource,
-} from "@shared/types/player";
+import type { Artist, PlaybackContext, Track, TrackSource } from "@shared/types/player";
 import type { CollectionType } from "@/types/collection";
 import type { SortField } from "@/types/list";
 import { useMediaStore } from "@/stores/media";
@@ -71,13 +66,13 @@ const props = withDefaults(
 );
 
 const { t } = useI18n();
+const route = useRoute();
 const media = useMediaStore();
 const status = useStatusStore();
 const settings = useSettingsStore();
 const fav = useFavorite();
 
-const { isFloatingBar: isFloatingPlayerBar, PLAYER_BAR_GAP } =
-  useFloatingPlayerBar();
+const { isFloatingBar: isFloatingPlayerBar, PLAYER_BAR_GAP } = useFloatingPlayerBar();
 
 const textCollator = new Intl.Collator(undefined, {
   usage: "sort",
@@ -141,33 +136,26 @@ const filteredItems = computed(() => {
       .map((artist) => (artist.name ?? "").toLowerCase())
       .join(" ");
     const album = track.album?.name?.toLowerCase() ?? "";
-    return (
-      title.includes(query) || artists.includes(query) || album.includes(query)
-    );
+    return title.includes(query) || artists.includes(query) || album.includes(query);
   });
 });
 
 const sortedItems = computed(() => {
-  if (!props.enableSort || sortField.value === "none")
-    return filteredItems.value;
+  if (!props.enableSort || sortField.value === "none") return filteredItems.value;
   const result = [...filteredItems.value];
   const field = sortField.value;
   const direction = sortOrder.value === "asc" ? 1 : -1;
 
-  const toArtistText = (track: Track): string =>
-    track.artists.map((a) => a.name).join(" / ");
+  const toArtistText = (track: Track): string => track.artists.map((a) => a.name).join(" / ");
   const toAlbumText = (track: Track): string => track.album?.name ?? "";
   const toPathText = (track: Track): string => track.path ?? "";
 
   const compare = (a: Track, b: Track): number => {
     let value = 0;
     if (field === "title") value = textCollator.compare(a.title, b.title);
-    else if (field === "artist")
-      value = textCollator.compare(toArtistText(a), toArtistText(b));
-    else if (field === "album")
-      value = textCollator.compare(toAlbumText(a), toAlbumText(b));
-    else if (field === "path")
-      value = textCollator.compare(toPathText(a), toPathText(b));
+    else if (field === "artist") value = textCollator.compare(toArtistText(a), toArtistText(b));
+    else if (field === "album") value = textCollator.compare(toAlbumText(a), toAlbumText(b));
+    else if (field === "path") value = textCollator.compare(toPathText(a), toPathText(b));
     else if (field === "duration") value = a.duration - b.duration;
     else if (field === "size") value = (a.fileSize ?? 0) - (b.fileSize ?? 0);
     else if (field === "mtime") value = (a.mtime ?? 0) - (b.mtime ?? 0);
@@ -191,8 +179,7 @@ const playingIndex = computed(() => {
 const virtualListRef = shallowRef<SVirtualListExposed | null>(null);
 
 const scrollToPlaying = (): void => {
-  if (playingIndex.value >= 0)
-    virtualListRef.value?.scrollToIndex(playingIndex.value);
+  if (playingIndex.value >= 0) virtualListRef.value?.scrollToIndex(playingIndex.value);
 };
 
 const scrollTop = ref(0);
@@ -227,23 +214,20 @@ const tagEditorTrack = shallowRef<Track | null>(null);
 const { enqueue: enqueueDownload } = useDownload();
 
 const contextTrack = shallowRef<Track | undefined>();
-const { items: contextMenuItems, handleSelect: onContextMenu } = useTrackMenu(
-  contextTrack,
-  {
-    collectionType: props.collectionType,
-    canRemove: props.canRemove,
-    playbackContext: computed(() => props.playbackContext),
-    onAddToPlaylist: (track) => openPicker([track]),
-    onRemove: (track) => batch.requestDelete([track], "remove"),
-    onDeleteFile: (track) => batch.requestDelete([track], "file"),
-    onRemoveFromCloud: (track) => batch.requestDelete([track], "cloud"),
-    onEditTags: (track) => {
-      tagEditorTrack.value = track;
-      tagEditorOpen.value = true;
-    },
-    onDownload: (track, quality) => void enqueueDownload(track, { quality }),
+const { items: contextMenuItems, handleSelect: onContextMenu } = useTrackMenu(contextTrack, {
+  collectionType: props.collectionType,
+  canRemove: props.canRemove,
+  playbackContext: computed(() => props.playbackContext),
+  onAddToPlaylist: (track) => openPicker([track]),
+  onRemove: (track) => batch.requestDelete([track], "remove"),
+  onDeleteFile: (track) => batch.requestDelete([track], "file"),
+  onRemoveFromCloud: (track) => batch.requestDelete([track], "cloud"),
+  onEditTags: (track) => {
+    tagEditorTrack.value = track;
+    tagEditorOpen.value = true;
   },
-);
+  onDownload: (track, quality) => void enqueueDownload(track, { quality }),
+});
 
 const onListContextMenu = (event: MouseEvent): void => {
   const target = event.target as HTMLElement | null;
@@ -266,6 +250,20 @@ const onTrackTagsSaved = (updated: Track[]): void => {
 
 onActivated(batch.exit);
 
+/**
+ * Handle track double click to play
+ * @param item - Track item
+ * @param index - Index in list
+ */
+const onTrackDblClick = (item: Track, index: number): void => {
+  if (batch.active.value) return;
+  if (route.name === "search" && settings.player.searchPlayBehavior !== "all") {
+    void player.playNow(item, props.playbackContext);
+    return;
+  }
+  void player.playFrom(sortedItems.value, index, props.playbackContext);
+};
+
 defineExpose({
   enterBatch: batch.enter,
 });
@@ -277,10 +275,7 @@ defineExpose({
       <template #header>
         <div v-if="contextTrack">
           <div class="flex items-center gap-1.5 px-1 py-1">
-            <SImg
-              :src="contextTrack.cover"
-              class="size-9 rounded-md shrink-0"
-            />
+            <SImg :src="contextTrack.cover" class="size-9 rounded-md shrink-0" />
             <div class="flex-1 min-w-0">
               <div class="text-xs font-medium truncate">
                 {{ contextTrack.title }}
@@ -319,10 +314,7 @@ defineExpose({
               v-if="batch.active.value"
               class="flex items-center gap-2 pl-3 pr-3 mx-3 h-10 text-sm"
             >
-              <div
-                v-if="showIndex"
-                class="w-8 shrink-0 flex items-center justify-center"
-              >
+              <div v-if="showIndex" class="w-8 shrink-0 flex items-center justify-center">
                 <SCheckbox
                   :checked="batch.isAllSelected.value"
                   :indeterminate="batch.isPartial.value"
@@ -345,9 +337,7 @@ defineExpose({
                 :disabled="batch.selectedCount.value === 0"
                 @click="batch.invertSelection"
               >
-                <template #icon
-                  ><IconLucideArrowLeftRight class="size-3.5"
-                /></template>
+                <template #icon><IconLucideArrowLeftRight class="size-3.5" /></template>
                 <span>{{ t("songList.batch.invert") }}</span>
               </SButton>
               <SButton
@@ -356,9 +346,7 @@ defineExpose({
                 :disabled="batch.selectedCount.value === 0"
                 @click="batch.addToQueue"
               >
-                <template #icon
-                  ><IconLucideListEnd class="size-3.5"
-                /></template>
+                <template #icon><IconLucideListEnd class="size-3.5" /></template>
                 <span>{{ t("songList.batch.addToQueue") }}</span>
               </SButton>
               <SButton
@@ -368,9 +356,7 @@ defineExpose({
                 :disabled="batch.selectedCount.value === 0"
                 @click="batch.batchDownload"
               >
-                <template #icon
-                  ><IconLucideDownload class="size-3.5"
-                /></template>
+                <template #icon><IconLucideDownload class="size-3.5" /></template>
                 <span>{{ t("songList.batch.download") }}</span>
               </SButton>
               <SButton
@@ -380,12 +366,8 @@ defineExpose({
                 :disabled="batch.selectedCount.value === 0"
                 @click="openPicker(batch.selectedItems.value)"
               >
-                <template #icon
-                  ><IconLucideListPlus class="size-3.5"
-                /></template>
-                <span>{{
-                  t("collection.addTo", { type: t("collection.playlist") })
-                }}</span>
+                <template #icon><IconLucideListPlus class="size-3.5" /></template>
+                <span>{{ t("collection.addTo", { type: t("collection.playlist") }) }}</span>
               </SButton>
               <SButton
                 v-if="batch.canRemove.value"
@@ -394,9 +376,7 @@ defineExpose({
                 :disabled="batch.selectedCount.value === 0"
                 @click="batch.batchRemove"
               >
-                <template #icon
-                  ><IconLucideListMinus class="size-3.5"
-                /></template>
+                <template #icon><IconLucideListMinus class="size-3.5" /></template>
                 <span>
                   {{
                     t("collection.removeFrom", {
@@ -413,9 +393,7 @@ defineExpose({
                 :disabled="batch.selectedCount.value === 0"
                 @click="batch.batchRemoveFromCloud"
               >
-                <template #icon
-                  ><IconLucideCloudOff class="size-3.5"
-                /></template>
+                <template #icon><IconLucideCloudOff class="size-3.5" /></template>
                 <span>{{ t("cloud.removeAction") }}</span>
               </SButton>
               <SButton
@@ -439,10 +417,7 @@ defineExpose({
               v-else
               class="flex items-center gap-3 pl-3 pr-6 mx-3 h-10 text-sm text-on-surface-variant/60"
             >
-              <div
-                v-if="showIndex"
-                class="w-8 shrink-0 flex items-center justify-center"
-              >
+              <div v-if="showIndex" class="w-8 shrink-0 flex items-center justify-center">
                 <span>#</span>
               </div>
               <div class="flex-1 min-w-0">
@@ -467,40 +442,16 @@ defineExpose({
                       <span>{{ t("songList.sort.mode") }}</span>
                     </div>
                     <SRadioGroup v-model:value="sortField" size="small">
-                      <SRadio
-                        value="none"
-                        :label="t('songList.sort.default')"
-                      />
-                      <SRadio
-                        value="title"
-                        :label="t('songList.sort.byTitle')"
-                      />
-                      <SRadio
-                        value="artist"
-                        :label="t('songList.sort.byArtist')"
-                      />
-                      <SRadio
-                        value="album"
-                        :label="t('songList.sort.byAlbum')"
-                      />
+                      <SRadio value="none" :label="t('songList.sort.default')" />
+                      <SRadio value="title" :label="t('songList.sort.byTitle')" />
+                      <SRadio value="artist" :label="t('songList.sort.byArtist')" />
+                      <SRadio value="album" :label="t('songList.sort.byAlbum')" />
                       <SRadio value="path" :label="t('songList.sort.byPath')" />
-                      <SRadio
-                        value="duration"
-                        :label="t('songList.sort.byDuration')"
-                      />
+                      <SRadio value="duration" :label="t('songList.sort.byDuration')" />
                       <SRadio value="size" :label="t('songList.sort.bySize')" />
-                      <SRadio
-                        value="mtime"
-                        :label="t('songList.sort.byMtime')"
-                      />
-                      <SRadio
-                        value="ctime"
-                        :label="t('songList.sort.byCtime')"
-                      />
-                      <SRadio
-                        value="track"
-                        :label="t('songList.sort.byTrack')"
-                      />
+                      <SRadio value="mtime" :label="t('songList.sort.byMtime')" />
+                      <SRadio value="ctime" :label="t('songList.sort.byCtime')" />
+                      <SRadio value="track" :label="t('songList.sort.byTrack')" />
                     </SRadioGroup>
 
                     <div class="h-px bg-outline-variant/25" />
@@ -553,11 +504,7 @@ defineExpose({
                     : 'bg-surface-panel border-primary/12 hover:border-primary/30 hover:bg-on-surface/8 active:bg-on-surface/12'
               "
               @click="batch.active.value ? batch.toggle(item.id) : undefined"
-              @dblclick="
-                batch.active.value
-                  ? undefined
-                  : player.playFrom(sortedItems, index, props.playbackContext)
-              "
+              @dblclick="onTrackDblClick(item, index)"
               @contextmenu="contextTrack = item"
             >
               <div
@@ -621,18 +568,14 @@ defineExpose({
                       v-if="item.cloud"
                       class="size-3.5 shrink-0 self-center"
                       :class="
-                        playingId === item.id
-                          ? 'text-primary/60'
-                          : 'text-on-surface-variant/60'
+                        playingId === item.id ? 'text-primary/60' : 'text-on-surface-variant/60'
                       "
                     />
                     <span
                       v-if="item.comment && settings.preset.showSubtitle"
                       class="flex-1 min-w-0 text-base truncate"
                       :class="
-                        playingId === item.id
-                          ? 'text-primary/60'
-                          : 'text-on-surface-variant/60'
+                        playingId === item.id ? 'text-primary/60' : 'text-on-surface-variant/60'
                       "
                     >
                       ({{ item.comment }})
@@ -640,11 +583,7 @@ defineExpose({
                   </div>
                   <div
                     class="text-sm mt-1 truncate flex items-center gap-1"
-                    :class="
-                      playingId === item.id
-                        ? 'text-primary/70'
-                        : 'text-on-surface-variant'
-                    "
+                    :class="playingId === item.id ? 'text-primary/70' : 'text-on-surface-variant'"
                   >
                     <span
                       v-if="item.quality && !settings.preset.hideQualityTag"
@@ -670,10 +609,7 @@ defineExpose({
                       EP
                     </span>
                     <span class="truncate">
-                      <template
-                        v-for="(artist, i) in item.artists"
-                        :key="artist.id ?? i"
-                      >
+                      <template v-for="(artist, i) in item.artists" :key="artist.id ?? i">
                         <span
                           class="transition-opacity"
                           :class="
@@ -685,11 +621,7 @@ defineExpose({
                         >
                           {{ artist.name }}
                         </span>
-                        <span
-                          v-if="i < item.artists.length - 1"
-                          class="mx-0.5 opacity-50"
-                          >/</span
-                        >
+                        <span v-if="i < item.artists.length - 1" class="mx-0.5 opacity-50">/</span>
                       </template>
                       <span v-if="!item.artists?.length" class="opacity-50">
                         {{ t("playlist.unknownArtist") }}
@@ -701,17 +633,11 @@ defineExpose({
               <div
                 v-if="showAlbum"
                 class="flex-1 min-w-0 truncate text-sm"
-                :class="
-                  playingId === item.id ? 'text-primary/70' : 'text-on-surface'
-                "
+                :class="playingId === item.id ? 'text-primary/70' : 'text-on-surface'"
               >
                 <span
                   class="transition-opacity"
-                  :class="
-                    isAlbumLinkable(item)
-                      ? 'cursor-pointer hover:opacity-70'
-                      : 'opacity-50'
-                  "
+                  :class="isAlbumLinkable(item) ? 'cursor-pointer hover:opacity-70' : 'opacity-50'"
                   @click.stop="goAlbum(item)"
                 >
                   {{ item.album?.name || t("collection.unknownAlbum") }}
@@ -742,22 +668,14 @@ defineExpose({
               <div
                 v-if="showDuration"
                 class="w-16 shrink-0 text-center text-sm tabular-nums"
-                :class="
-                  playingId === item.id
-                    ? 'text-primary/60'
-                    : 'text-on-surface-variant'
-                "
+                :class="playingId === item.id ? 'text-primary/60' : 'text-on-surface-variant'"
               >
                 {{ formatTime(item.duration) }}
               </div>
               <div
                 v-if="showSize"
                 class="w-16 shrink-0 text-center text-sm tabular-nums"
-                :class="
-                  playingId === item.id
-                    ? 'text-primary/60'
-                    : 'text-on-surface-variant'
-                "
+                :class="playingId === item.id ? 'text-primary/60' : 'text-on-surface-variant'"
               >
                 {{ item.fileSize ? formatFileSize(item.fileSize) : "" }}
               </div>
@@ -810,13 +728,7 @@ defineExpose({
           v-if="playingIndex >= 0 && !batch.active.value"
           class="rounded-full bg-surface-panel backdrop-blur-2xl backdrop-saturate-150 shadow-lg border border-solid border-primary/10"
         >
-          <SButton
-            type="primary"
-            variant="bordered"
-            circle
-            :size="40"
-            @click="scrollToPlaying"
-          >
+          <SButton type="primary" variant="bordered" circle :size="40" @click="scrollToPlaying">
             <template #icon>
               <IconLucideLocate class="size-4.5" />
             </template>
@@ -827,19 +739,11 @@ defineExpose({
     <SDialog v-model:open="deleteConfirmOpen" :title="deleteDialogTitle">
       <p class="text-sm text-on-surface-variant">{{ deleteDialogContent }}</p>
       <template #footer>
-        <SButton variant="secondary" @click="batch.cancelDelete">{{
-          t("common.cancel")
-        }}</SButton>
-        <SButton type="error" @click="batch.confirmDelete">{{
-          t("common.confirm")
-        }}</SButton>
+        <SButton variant="secondary" @click="batch.cancelDelete">{{ t("common.cancel") }}</SButton>
+        <SButton type="error" @click="batch.confirmDelete">{{ t("common.confirm") }}</SButton>
       </template>
     </SDialog>
-    <PlaylistPickerDialog
-      v-model:open="pickerOpen"
-      :mode="pickerMode"
-      :tracks="pickerTracks"
-    />
+    <PlaylistPickerDialog v-model:open="pickerOpen" :mode="pickerMode" :tracks="pickerTracks" />
     <TagEditorDialog
       v-model:open="tagEditorOpen"
       :track="tagEditorTrack"

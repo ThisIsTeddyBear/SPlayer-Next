@@ -135,6 +135,7 @@ export const useSettingsStore = defineStore(
       snapToLyric: false,
       showLyricInBar: true,
       preloadNextTrack: false,
+      searchPlayBehavior: "current",
     });
 
     const preset = reactive<PresetSettings>({

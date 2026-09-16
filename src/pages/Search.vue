@@ -1,7 +1,7 @@
 <script setup lang="ts">
 defineOptions({ name: "SearchPage" });
 
-import type { Track } from "@shared/types/player";
+import type { PlaybackContext, Track } from "@shared/types/player";
 import type { CoverItem } from "@/types/artist";
 import SongList from "@/components/list/SongList.vue";
 import CoverList from "@/components/list/CoverList.vue";
@@ -295,6 +295,14 @@ const isEmptyResult = computed(() => {
   const state = states[activeTab.value];
   return state.loaded && state.items.length === 0;
 });
+
+/** Search page playback context */
+const playbackContext = computed<PlaybackContext>(() => ({
+  provider: "local",
+  originId: `search:local:${keyword.value}`,
+  originType: "page",
+  originName: keyword.value ? `${t("search.title")}: ${keyword.value}` : t("search.title"),
+}));
 </script>
 
 <template>
@@ -365,6 +373,7 @@ const isEmptyResult = computed(() => {
         v-if="activeTab === 'songs'"
         :items="states.songs.items"
         source="local"
+        :playback-context="playbackContext"
         :show-size="false"
         :has-more="states.songs.hasMore"
         :loading-more="states.songs.loadingMore"
