@@ -9,9 +9,7 @@ const update = useUpdateStore();
 
 /** release notes 渲染为 HTML */
 const notesHtml = computed(() =>
-  update.meta?.releaseNotes
-    ? renderSafeMarkdown(update.meta.releaseNotes)
-    : "",
+  update.meta?.releaseNotes ? renderSafeMarkdown(update.meta.releaseNotes) : "",
 );
 
 /** 发布日期（本地化，空/非法则不显示） */
@@ -28,6 +26,7 @@ const releaseDateText = computed(() => {
     :open="update.dialogOpen"
     :title="t('update.dialogTitle')"
     width="520px"
+    destroy-on-close
     @update:open="update.dialogOpen = $event"
   >
     <div class="flex flex-col gap-4">
