@@ -24,21 +24,22 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       has_new_commits: ${{ steps.check.outputs.has_new_commits }}
+      prev_sha: ${{ steps.check.outputs.prev_sha }}
     steps:
       - name: Check out dev branch
         uses: actions/checkout@v5
         with:
           ref: dev
-          fetch-depth: 0
 
       - name: Compare commit with latest nightly release
         id: check
         shell: bash
         run: |
-          NIGHTLY_TAG="v0.0.0-nightly"
+          NIGHTLY_TAG="nightly"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "Manual trigger, proceeding with build"
             echo "has_new_commits=true" >> "$GITHUB_OUTPUT"
+            echo "prev_sha=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -47,6 +48,7 @@ jobs:
 
           echo "Current dev commit: $CURRENT_DEV_SHA"
           echo "Previous nightly tag commit: $REMOTE_TAG_SHA"
+          echo "prev_sha=$REMOTE_TAG_SHA" >> "$GITHUB_OUTPUT"
 
           if [ -n "$REMOTE_TAG_SHA" ] && [ "$REMOTE_TAG_SHA" = "$CURRENT_DEV_SHA" ]; then
             echo "No new commits since last nightly build, skipping"
@@ -54,18 +56,6 @@ jobs:
           else
             echo "New commits detected, starting nightly multi-platform build"
             echo "has_new_commits=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Generate Check Summary
-        if: always()
-        shell: bash
-        run: |
-          if [ "${{ steps.check.outputs.has_new_commits }}" = "true" ]; then
-            echo "### 🔍 Nightly Build Check: New Commits Detected" >> $GITHUB_STEP_SUMMARY
-            echo "Triggered full multi-platform build matrix and rolling release." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### 🔍 Nightly Build Check: No New Commits" >> $GITHUB_STEP_SUMMARY
-            echo "No new commits on dev branch since last nightly release. Build skipped." >> $GITHUB_STEP_SUMMARY
           fi
 
   # Platform builds
@@ -118,14 +108,7 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            . -> target
-            native/audio-engine -> target
-            native/audio-capture -> target
-            native/media-ctrl -> target
-            native/taskbar-lyric -> target
-            native/taskbar-thumbnail -> target
-            native/opencc -> target
+          workspaces: ". -> target"
 
       # Linux: Install build and packaging dependencies
       - name: Install system dependencies (Linux)
@@ -148,7 +131,7 @@ jobs:
 
       # Install dependencies
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       # Generate dynamic incremental nightly version
       - name: Generate Nightly Version
@@ -195,34 +178,7 @@ jobs:
           name: SPlayer-Next-${{ matrix.target }}
           path: dist/*.*
 
-      # Generate Job Summary
-      - name: Generate Job Summary
-        if: always()
-        shell: bash
-        run: |
-          echo "### 📦 Build Artifacts - ${{ matrix.name }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| File | Format | Size |" >> $GITHUB_STEP_SUMMARY
-          echo "| :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
-          found=0
-          for f in dist/*; do
-            if [ -f "$f" ]; then
-              fname=$(basename "$f")
-              ext="${fname##*.}"
-              case "$ext" in
-                exe|dmg|zip|AppImage|deb|rpm|pacman|gz)
-                  fsize=$(ls -lh "$f" | awk '{print $5}')
-                  echo "| \`$fname\` | **$ext** | $fsize |" >> $GITHUB_STEP_SUMMARY
-                  found=1
-                  ;;
-              esac
-            fi
-          done
-          if [ "$found" -eq 0 ]; then
-            echo "| *(No package generated or build interrupted)* | - | - |" >> $GITHUB_STEP_SUMMARY
-          fi
-
-  # Merge multi-arch manifests and roll release to fixed tag v0.0.0-nightly
+  # Merge multi-arch manifests and roll release to fixed tag nightly
   release:
     name: Publish Nightly Release
     needs: [check-commits, build]
@@ -241,7 +197,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
@@ -253,21 +209,24 @@ jobs:
           VERSION="$(node -p "require('./package.json').version")"
           echo "APP_VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      # Prepare release assets
+      # Prepare release assets and run manifest unit tests
       - name: Prepare release assets
         shell: bash
         run: |
           npm install --no-save --prefix "$RUNNER_TEMP/jsyaml" js-yaml@4.1.0
           NODE_PATH="$RUNNER_TEMP/jsyaml/node_modules" \
+            node --test .github/scripts/prepare-release-assets.test.cjs
+          NODE_PATH="$RUNNER_TEMP/jsyaml/node_modules" \
             node .github/scripts/prepare-release-assets.cjs artifacts release-assets "$APP_VERSION"
           echo "Assets to publish:"
           ls -1 release-assets
 
-      # Rolling release to fixed tag v0.0.0-nightly
+      # Rolling release to fixed tag nightly
       - name: Publish or Update Nightly Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NIGHTLY_TAG: v0.0.0-nightly
+          NIGHTLY_TAG: nightly
+          PREV_COMMIT_SHA: ${{ needs.check-commits.outputs.prev_sha }}
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
@@ -280,71 +239,11 @@ jobs:
             gh release delete "$NIGHTLY_TAG" --repo "$GITHUB_REPOSITORY" --yes
           fi
 
-          COMMIT_MSG=$(git log -1 --pretty=%B | head -n 1)
-          COMMIT_HASH=$(git rev-parse --short HEAD)
-
-          cat > notes.md << 'EOF'
-          ⚡ **Daily Continuous Build (Nightly Build)**
-
-          - **Version**: `$APP_VERSION`
-          - **Latest Commit**: [`$COMMIT_HASH`](https://github.com/$GITHUB_REPOSITORY/commit/$COMMIT_HASH) - $COMMIT_MSG
-          - **Build Time**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          - **Platforms**: Windows (x64 / arm64), macOS (x64 / arm64), Linux (x64 / arm64)
-          - **Description**: Automated nightly build from `dev` branch for testing and verification. Switch client channel to `Nightly` to receive updates.
-          EOF
+          node scripts/gen-nightly-notes.cjs notes.md
 
           gh release create "$NIGHTLY_TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "SPlayer-Next Nightly Build ($APP_VERSION)" \
+            --title "v$APP_VERSION" \
             --notes-file notes.md \
             --prerelease \
             release-assets/*
-
-      # Generate Release Summary
-      - name: Generate Release Summary
-        if: success()
-        shell: bash
-        run: |
-          echo "## 🌙 SPlayer-Next Nightly Build Published" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Info |" >> $GITHUB_STEP_SUMMARY
-          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔖 **Version** | \`$APP_VERSION\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🏷️ **Release Tag** | [\`$NIGHTLY_TAG\`](https://github.com/$GITHUB_REPOSITORY/releases/tag/$NIGHTLY_TAG) |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔀 **Base Branch** | \`dev\` ([${COMMIT_HASH}](https://github.com/$GITHUB_REPOSITORY/commit/${COMMIT_HASH})) |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📝 **Commit Message** | $COMMIT_MSG |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🚀 Install Packages" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Platform & Arch | File | Size |" >> $GITHUB_STEP_SUMMARY
-          echo "| :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
-          for f in release-assets/*; do
-            if [ -f "$f" ]; then
-              fname=$(basename "$f")
-              ext="${fname##*.}"
-              case "$ext" in
-                exe|dmg|AppImage|deb|rpm|pacman|tar.gz)
-                  fsize=$(ls -lh "$f" | awk '{print $5}')
-                  plat="💻 Other"
-                  if [[ "$fname" =~ [wW]in|setup|portable|\.exe ]]; then
-                    plat="🪟 Windows"
-                  elif [[ "$fname" =~ [mM]ac|\.dmg ]]; then
-                    plat="🍎 macOS"
-                  elif [[ "$fname" =~ [lL]inux|\.AppImage|\.deb|\.rpm|\.pacman|\.tar\.gz ]]; then
-                    plat="🐧 Linux"
-                  fi
-                  echo "| $plat | [📥 \`$fname\`](https://github.com/$GITHUB_REPOSITORY/releases/download/$NIGHTLY_TAG/$fname) | $fsize |" >> $GITHUB_STEP_SUMMARY
-                  ;;
-              esac
-            fi
-          done
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔄 Auto Update Manifests" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Manifest File | Target | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "| :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
-          [ -f "release-assets/nightly.yml" ] && echo "| \`nightly.yml\` | Windows (x64 / arm64) | ✅ Ready |" >> $GITHUB_STEP_SUMMARY
-          [ -f "release-assets/nightly-mac.yml" ] && echo "| \`nightly-mac.yml\` | macOS (x64 / arm64) | ✅ Ready |" >> $GITHUB_STEP_SUMMARY
-          [ -f "release-assets/nightly-linux.yml" ] && echo "| \`nightly-linux.yml\` | Linux (x64) | ✅ Ready |" >> $GITHUB_STEP_SUMMARY
-          [ -f "release-assets/nightly-linux-arm64.yml" ] && echo "| \`nightly-linux-arm64.yml\` | Linux (arm64) | ✅ Ready |" >> $GITHUB_STEP_SUMMARY
-

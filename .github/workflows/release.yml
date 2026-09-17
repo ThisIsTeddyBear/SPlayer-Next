@@ -96,14 +96,7 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            . -> target
-            native/audio-engine -> target
-            native/audio-capture -> target
-            native/media-ctrl -> target
-            native/taskbar-lyric -> target
-            native/taskbar-thumbnail -> target
-            native/opencc -> target
+          workspaces: ". -> target"
 
       # Verify tag, version, and update channel
       - name: Verify release metadata
@@ -151,7 +144,7 @@ jobs:
 
       # Install project dependencies
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       # Build native architecture
       - name: Build ${{ matrix.name }}
@@ -190,33 +183,6 @@ jobs:
         with:
           name: SPlayer-Next-${{ matrix.name }}
           path: dist/*.*
-
-      # Generate Job Summary
-      - name: Generate Job Summary
-        if: always()
-        shell: bash
-        run: |
-          echo "### 📦 Build Artifacts - ${{ matrix.name }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| File | Format | Size |" >> $GITHUB_STEP_SUMMARY
-          echo "| :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
-          found=0
-          for f in dist/*; do
-            if [ -f "$f" ]; then
-              fname=$(basename "$f")
-              ext="${fname##*.}"
-              case "$ext" in
-                exe|dmg|zip|AppImage|deb|rpm|pacman|gz)
-                  fsize=$(ls -lh "$f" | awk '{print $5}')
-                  echo "| \`$fname\` | **$ext** | $fsize |" >> $GITHUB_STEP_SUMMARY
-                  found=1
-                  ;;
-              esac
-            fi
-          done
-          if [ "$found" -eq 0 ]; then
-            echo "| *(No package generated or build interrupted)* | - | - |" >> $GITHUB_STEP_SUMMARY
-          fi
 
   # Merge multi-arch update manifests and create GitHub Release
   release:
@@ -306,29 +272,3 @@ jobs:
               --draft \
               release-assets/*
           fi
-
-      # Generate Release Summary
-      - name: Generate Release Summary
-        if: success()
-        shell: bash
-        run: |
-          echo "## 🎉 SPlayer-Next Release Published" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Item | Info |" >> $GITHUB_STEP_SUMMARY
-          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔖 **Version** | \`$APP_VERSION\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🏷️ **Tag** | [\`$RELEASE_TAG\`](https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG) |" >> $GITHUB_STEP_SUMMARY
-          echo "| 📡 **Update Channel** | \`$UPDATE_CHANNEL\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Status | $([ "$UPDATE_CHANNEL" = "latest" ] && echo "Draft (Pending manual publish)" || echo "Prerelease") |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📦 Release Assets" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| File | Size |" >> $GITHUB_STEP_SUMMARY
-          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
-          for f in release-assets/*; do
-            if [ -f "$f" ]; then
-              fname=$(basename "$f")
-              fsize=$(ls -lh "$f" | awk '{print $5}')
-              echo "| \`$fname\` | $fsize |" >> $GITHUB_STEP_SUMMARY
-            fi
-          done
