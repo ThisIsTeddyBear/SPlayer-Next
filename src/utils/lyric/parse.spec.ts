@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { splitTrailingBackground } from "./bg";
 import { bestExternalIndex, detectFormat, parseLyric } from "./parse";
 
 describe("lyric parse", () => {
@@ -31,8 +32,8 @@ describe("lyric parse", () => {
     ]);
     expect(lines.map((line) => line.alignment)).toEqual([
       "start",
-      "center",
-      "center",
+      "start",
+      "start",
       "end",
       "center",
     ]);
@@ -40,6 +41,76 @@ describe("lyric parse", () => {
     expect(lines[1].singerName).toBe("Lead");
     expect(lines[3].isDuet).toBe(true);
     expect(lines[4].isDuet).toBe(false);
+  });
+
+  it("aligns background vocals to singer or parent alignment instead of forcing center", () => {
+    const lines = parseLyric(
+      {
+        content: `
+          <tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata">
+            <head><metadata>
+              <ttm:agent xml:id="lead" type="person"><ttm:name>Lead</ttm:name></ttm:agent>
+              <ttm:agent xml:id="reply" type="person"><ttm:name>Reply</ttm:name></ttm:agent>
+              <ttm:agent xml:id="choir" type="group"><ttm:name>Choir</ttm:name></ttm:agent>
+            </metadata></head>
+            <body><div>
+              <p begin="0s" end="2s" ttm:agent="reply">Duet line<span ttm:role="x-bg">Duet backing</span></p>
+              <p begin="2s" end="4s" ttm:agent="choir">Choir line<span ttm:role="x-bg">Choir backing</span></p>
+              <p begin="4s" end="6s" ttm:agent="lead">Lead line<span ttm:role="x-bg" ttm:agent="reply">Reply backing lead</span></p>
+              <p begin="6s" end="8s" ttm:agent="lead" tts:textAlign="center">Centered lead<span ttm:role="x-bg">Inherits center</span></p>
+            </div></body>
+          </tt>`,
+      },
+      "ttml",
+    );
+
+    // Duet line + Duet backing
+    expect(lines[0].alignment).toBe("end");
+    expect(lines[0].isDuet).toBe(true);
+    expect(lines[1].alignment).toBe("end");
+    expect(lines[1].isDuet).toBe(true);
+
+    // Choir line + Choir backing
+    expect(lines[2].alignment).toBe("center");
+    expect(lines[2].isDuet).toBe(false);
+    expect(lines[3].alignment).toBe("center");
+    expect(lines[3].isDuet).toBe(false);
+
+    // Lead line + Reply agent backing
+    expect(lines[4].alignment).toBe("start");
+    expect(lines[4].isDuet).toBe(false);
+    expect(lines[5].alignment).toBe("end");
+    expect(lines[5].isDuet).toBe(true);
+
+    // Centered lead line + inherited centered backing
+    expect(lines[6].alignment).toBe("center");
+    expect(lines[7].alignment).toBe("center");
+  });
+
+  it("preserves duet and alignment for heuristic split trailing background lyrics", () => {
+    const mainLine = {
+      words: [
+        { word: "Hello", startTime: 1000, endTime: 1500 },
+        { word: "(world)", startTime: 1500, endTime: 2000 },
+      ],
+      translatedLyric: "",
+      romanLyric: "",
+      startTime: 1000,
+      endTime: 2000,
+      isBG: false,
+      isDuet: true,
+      alignment: "end" as const,
+      singerId: "reply",
+      singerName: "Reply",
+    };
+
+    const bgLine = splitTrailingBackground(mainLine);
+    expect(bgLine).not.toBeNull();
+    expect(bgLine?.isBG).toBe(true);
+    expect(bgLine?.isDuet).toBe(true);
+    expect(bgLine?.alignment).toBe("end");
+    expect(bgLine?.singerId).toBe("reply");
+    expect(bgLine?.singerName).toBe("Reply");
   });
 
   it("根据内容识别常见歌词格式", () => {

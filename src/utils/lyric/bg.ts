@@ -89,6 +89,9 @@ export const splitTrailingBackground = (line: LyricLine, enabled = true): LyricL
     startTime: cleaned[0].startTime,
     endTime: cleaned[cleaned.length - 1].endTime,
     isBG: true,
-    isDuet: false,
+    isDuet: line.isDuet,
+    alignment: line.alignment,
+    singerId: line.singerId,
+    singerName: line.singerName,
   };
 };

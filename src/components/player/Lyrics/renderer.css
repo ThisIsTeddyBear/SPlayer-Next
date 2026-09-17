@@ -59,8 +59,13 @@
   transition: opacity 0.5s 0.25s;
 }
 
-.lp-line.duet.bg {
+.lp-line.duet.bg,
+.lp-line.align-end.bg {
   transform-origin: right top;
+}
+
+.lp-line.align-center.bg {
+  transform-origin: center top;
 }
 
 .lp-line.align-center {

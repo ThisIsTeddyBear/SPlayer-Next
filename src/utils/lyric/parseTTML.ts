@@ -2,7 +2,12 @@
  *
  */
 
-import type { LyricLine, LyricSingerRole, LyricWord } from "@shared/types/lyrics";
+import type {
+  LyricLine,
+  LyricLineAlignment,
+  LyricSingerRole,
+  LyricWord,
+} from "@shared/types/lyrics";
 import { parseTTMLTime } from "./timestamp";
 
 /**
@@ -321,10 +326,12 @@ export const parseTTML = (text: string, preferredLang = ""): LyricLine[] => {
     isDuet: boolean,
     parentKey: string | null,
     inheritedAgent = "",
+    parentAlignment?: LyricLineAlignment,
   ): void => {
     const begin = getAttr(el, "begin");
     const end = getAttr(el, "end");
-    const lineAgent = getAttr(el, "agent") || inheritedAgent;
+    const explicitAgent = getAttr(el, "agent");
+    const lineAgent = explicitAgent || inheritedAgent;
     const agent = lineAgent ? agents.get(lineAgent) : undefined;
     const isGroup = agent?.type === "group";
     const singerRole: LyricSingerRole = isBG
@@ -334,10 +341,23 @@ export const parseTTML = (text: string, preferredLang = ""): LyricLine[] => {
         : lineAgent && lineAgent !== mainAgent
           ? "response"
           : "lead";
-    const alignment =
+    const lineIsDuet = isGroup
+      ? false
+      : isBG
+        ? explicitAgent
+          ? lineAgent !== mainAgent
+          : isDuet
+        : singerRole === "response";
+    const alignment: LyricLineAlignment =
       normalizeAlignment(getAttr(el, "textAlign")) ??
       regionAlignments.get(getAttr(el, "region") || "") ??
-      (isBG || isGroup ? "center" : singerRole === "response" ? "end" : "start");
+      (explicitAgent
+        ? isGroup
+          ? "center"
+          : lineIsDuet
+            ? "end"
+            : "start"
+        : (parentAlignment ?? (isGroup ? "center" : lineIsDuet ? "end" : "start")));
 
     const line: LyricLine = {
       words: [],
@@ -348,7 +368,7 @@ export const parseTTML = (text: string, preferredLang = ""): LyricLine[] => {
       singerName: agent?.name || undefined,
       singerRole,
       alignment,
-      isDuet: isBG ? isDuet : singerRole === "response",
+      isDuet: lineIsDuet,
       startTime: begin ? parseTTMLTime(begin) : 0,
       endTime: end ? parseTTMLTime(end) : 0,
     };
@@ -396,7 +416,7 @@ export const parseTTML = (text: string, preferredLang = ""): LyricLine[] => {
         const role = getAttr(span, "role");
 
         if (role === "x-bg") {
-          parseParagraph(span, true, line.isDuet, itunesKey, lineAgent);
+          parseParagraph(span, true, line.isDuet, itunesKey, lineAgent, alignment);
           bgCount++;
         } else if (role === "x-translation") {
           transCandidates.push({
