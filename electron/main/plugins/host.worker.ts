@@ -52,8 +52,7 @@ const sanitizeForIpc = (value: unknown, depth = 0): unknown => {
         const cleaned = sanitizeForIpc((value as Record<string, unknown>)[key], depth + 1);
         if (cleaned !== undefined) out[key] = cleaned;
       }
-    } catch {
-    }
+    } catch {}
     return out;
   }
   return undefined;
@@ -333,8 +332,7 @@ const disposeRecord = (record: PluginContextRecord): void => {
   for (const ctrl of record.inflight.values()) {
     try {
       ctrl.abort();
-    } catch {
-    }
+    } catch {}
   }
   record.inflight.clear();
   for (const waiter of record.hostCallWaiters.values()) {
@@ -398,8 +396,28 @@ const loadPluginIntoContext = (spec: LoadSpec): void => {
       debug: splayer.log.debug,
       warn: splayer.log.warn,
       error: splayer.log.error,
+      group: splayer.log.info,
+      groupCollapsed: splayer.log.info,
+      groupEnd: (): void => {},
+      table: splayer.log.info,
+      dir: splayer.log.info,
+      dirxml: splayer.log.info,
+      trace: splayer.log.debug,
+      clear: (): void => {},
+      time: (_label?: string): void => {},
+      timeEnd: (_label?: string): void => {},
+      timeLog: (_label?: string, ..._data: unknown[]): void => {},
+      count: (_label?: string): void => {},
+      countReset: (_label?: string): void => {},
+      assert: (condition?: boolean, ...args: unknown[]): void => {
+        if (!condition) splayer.log.error(...args);
+      },
     },
   };
+
+  sandboxGlobal.globalThis = sandboxGlobal;
+  sandboxGlobal.window = sandboxGlobal;
+  sandboxGlobal.self = sandboxGlobal;
 
   installLxShim(
     sandboxGlobal,
@@ -421,8 +439,6 @@ const loadPluginIntoContext = (spec: LoadSpec): void => {
       rawScript: spec.source,
     },
   );
-
-  sandboxGlobal.globalThis = sandboxGlobal;
 
   const context = vm.createContext(sandboxGlobal, {
     name: `plugin:${spec.pluginId}`,
@@ -496,8 +512,7 @@ parentPort.on("message", async (event) => {
           for (const handler of handlers) {
             try {
               handler(msg.data);
-            } catch {
-            }
+            } catch {}
           }
         }
         return;
@@ -512,8 +527,7 @@ parentPort.on("message", async (event) => {
             for (const handler of handlers) {
               try {
                 handler(value);
-              } catch {
-              }
+              } catch {}
             }
           }
         }

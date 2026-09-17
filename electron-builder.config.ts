@@ -91,6 +91,12 @@ const config: Configuration = {
       filter: ["*.node"],
     },
   ],
+  extraFiles: [
+    {
+      from: "LICENSE",
+      to: "LICENSE",
+    },
+  ],
   win: {
     executableName: "SPlayer-Next",
     icon: "public/icons/logo.ico",
