@@ -180,7 +180,6 @@ export interface AppearanceSettings {
   sidebarKeepEmptyDivider: boolean;
   sidebarNameWithDivider: boolean;
   sidebarPlaylistOrder: SidebarPlaylistOrder;
-  showStatsInSidebar: boolean;
   showQualitySwitch: boolean;
   closeAction: "quit" | "hide";
   rememberCloseChoice: boolean;
