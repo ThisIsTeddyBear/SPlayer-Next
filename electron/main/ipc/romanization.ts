@@ -66,7 +66,11 @@ const readGoogleTranslateResponse = async (response: Response): Promise<unknown[
   }
 };
 
-const romanizeLine = async (text: string): Promise<string | undefined> => {
+const BATCH_SIZE = 15;
+const BATCH_DELIMITER = " | ";
+const BATCH_DELIMITER_REGEX = /\s*\|\s*/;
+
+const romanizeText = async (text: string): Promise<string | undefined> => {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
     try {
       const url = `${GOOGLE_TRANSLATE_ENDPOINT}?client=gtx&sl=auto&tl=en&dt=rm&q=${encodeURIComponent(text)}`;
@@ -82,6 +86,32 @@ const romanizeLine = async (text: string): Promise<string | undefined> => {
   }
 
   return undefined;
+};
+
+const romanizeLine = async (text: string): Promise<string | undefined> => romanizeText(text);
+
+/**
+ * 批量将多行歌词拼合并请求罗马音
+ * @param lines - 待转换的行数组
+ * @returns 成功返回映射字典；解析数量不匹配时返回 null 以便触发逐行降级
+ */
+const romanizeBatch = async (lines: string[]): Promise<Record<string, string> | null> => {
+  if (lines.length === 0) return {};
+  if (lines.length === 1) {
+    const reading = await romanizeLine(lines[0]);
+    return reading ? { [lines[0]]: reading } : {};
+  }
+  const queryText = lines.map((line) => line.replace(/\|/g, " ")).join(BATCH_DELIMITER);
+  const reading = await romanizeText(queryText);
+  if (!reading) return null;
+  const parts = reading.split(BATCH_DELIMITER_REGEX);
+  if (parts.length !== lines.length) return null;
+  const map: Record<string, string> = {};
+  for (let i = 0; i < lines.length; i++) {
+    const part = parts[i]?.trim();
+    if (part) map[lines[i]] = part;
+  }
+  return map;
 };
 
 /**
@@ -113,12 +143,27 @@ export const romanizeLines = async (input: unknown): Promise<Record<string, stri
     );
   }
 
-  for (const [index, line] of pending.entries()) {
+  let index = 0;
+  while (index < pending.length) {
+    const batch = pending.slice(index, index + BATCH_SIZE);
     try {
-      const reading = await romanizeLine(line);
-      if (reading) {
-        result[line] = reading;
-        generated[line] = reading;
+      const batchResult = await romanizeBatch(batch);
+      if (batchResult) {
+        for (const [line, reading] of Object.entries(batchResult)) {
+          result[line] = reading;
+          generated[line] = reading;
+        }
+        index += batch.length;
+      } else {
+        // 分割数量不匹配时降级为单行处理
+        for (const line of batch) {
+          const reading = await romanizeLine(line);
+          if (reading) {
+            result[line] = reading;
+            generated[line] = reading;
+          }
+          index += 1;
+        }
       }
     } catch (error) {
       systemLog.warn(

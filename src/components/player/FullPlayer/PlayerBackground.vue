@@ -49,6 +49,13 @@ const bgPlaying = computed(() => {
   return true;
 });
 
+// 动态背景播放态：仅在播放器展开且正在播放时渲染，收起时立即暂停 WebGL 循环
+const dynamicBgPlaying = computed(() => {
+  if (!status.isPlayerExpanded) return false;
+  if (!status.isPlaying && settings.player.playerBgFreezeOnPause) return false;
+  return status.isPlaying;
+});
+
 const dynamicLyricFocus = computed(() => {
   if (
     settings.player.coverLayout === "fullscreen" ||
@@ -147,7 +154,7 @@ onBeforeUnmount(() => {
     <div v-if="bgReady" class="absolute inset-0 overflow-hidden -z-1">
       <DynamicBackground
         :album="media.track?.cover || DEFAULT_COVER"
-        :playing="status.isPlaying"
+        :playing="dynamicBgPlaying"
         :lyric-focus="dynamicLyricFocus"
         :transition-profile="dynamicTransitionProfile"
         :preset="settings.player.dynamicBackgroundPreset"

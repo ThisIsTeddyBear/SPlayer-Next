@@ -87,6 +87,50 @@ describe("Google Translate romanization", () => {
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("batches multiple non-latin lines into a single delimited query", async () => {
+    const line1 = "\u0924\u0941\u092e\u0915\u094b \u092d\u0940 \u0939\u0948 \u0916\u092c\u0930";
+    const line2 =
+      "\u092e\u0948\u0902 \u0924\u0941\u092e\u0938\u0947 \u092a\u094d\u092f\u093e\u0930";
+    mocks.fetch.mockResolvedValue(
+      new Response(
+        JSON.stringify([[[null, null, null, "tumko bhi hai khabar | main tumse pyaar"]]]),
+      ),
+    );
+
+    const res = await romanizeLines([line1, line2]);
+    expect(res).toEqual({
+      [line1]: "tumko bhi hai khabar",
+      [line2]: "main tumse pyaar",
+    });
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(mocks.fetch.mock.calls[0][0]).toContain(encodeURIComponent(`${line1} | ${line2}`));
+  });
+
+  it("falls back to single-line requests when batched delimiter count does not match", async () => {
+    const line1 = "\u0924\u0941\u092e\u0915\u094b \u092d\u0940 \u0939\u0948 \u0916\u092c\u0930";
+    const line2 =
+      "\u092e\u0948\u0902 \u0924\u0941\u092e\u0938\u0947 \u092a\u094d\u092f\u093e\u0930";
+    // First call (batch): returns unmatched reading without delimiter
+    // Second & third calls (fallback): return individual readings
+    mocks.fetch
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([[[null, null, null, "unmatched reading without pipe"]]])),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([[[null, null, null, "tumko bhi hai khabar"]]])),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([[[null, null, null, "main tumse pyaar"]]])),
+      );
+
+    const res = await romanizeLines([line1, line2]);
+    expect(res).toEqual({
+      [line1]: "tumko bhi hai khabar",
+      [line2]: "main tumse pyaar",
+    });
+    expect(mocks.fetch).toHaveBeenCalledTimes(3);
+  });
+
   it("registers the renderer-only IPC handler", () => {
     registerRomanizationIpc();
     expect(mocks.handle).toHaveBeenCalledWith("lyrics:romanize", expect.any(Function));

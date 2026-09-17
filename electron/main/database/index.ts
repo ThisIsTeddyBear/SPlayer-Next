@@ -24,6 +24,9 @@ export const initDatabase = (): void => {
   fs.mkdirSync(databaseDir, { recursive: true });
   db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
+  db.pragma("synchronous = NORMAL");
+  db.pragma("cache_size = -64000");
+  db.pragma("temp_store = MEMORY");
 
   // lyric_cache 是纯缓存表：如果老 DB 里的 schema 跟当前代码期望的不一致，直接丢重建
   const cols = db.prepare("PRAGMA table_info(lyric_cache)").all() as { name: string }[];
@@ -58,6 +61,39 @@ export const initDatabase = (): void => {
     );
     CREATE INDEX IF NOT EXISTS idx_tracks_title ON tracks(title);
     CREATE INDEX IF NOT EXISTS idx_tracks_album ON tracks(album);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts USING fts5(
+      id UNINDEXED,
+      title,
+      artist,
+      album,
+      tokenize = 'unicode61'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS tracks_ai AFTER INSERT ON tracks BEGIN
+      INSERT INTO tracks_fts(id, title, artist, album)
+      VALUES (
+        new.id,
+        new.title,
+        COALESCE((SELECT group_concat(json_extract(value, '$.name'), ' ') FROM json_each(new.artists)), ''),
+        COALESCE(json_extract(new.album, '$.name'), '')
+      );
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS tracks_ad AFTER DELETE ON tracks BEGIN
+      DELETE FROM tracks_fts WHERE id = old.id;
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS tracks_au AFTER UPDATE ON tracks BEGIN
+      DELETE FROM tracks_fts WHERE id = old.id;
+      INSERT INTO tracks_fts(id, title, artist, album)
+      VALUES (
+        new.id,
+        new.title,
+        COALESCE((SELECT group_concat(json_extract(value, '$.name'), ' ') FROM json_each(new.artists)), ''),
+        COALESCE(json_extract(new.album, '$.name'), '')
+      );
+    END;
 
     CREATE TABLE IF NOT EXISTS account_sessions (
       platform TEXT PRIMARY KEY,

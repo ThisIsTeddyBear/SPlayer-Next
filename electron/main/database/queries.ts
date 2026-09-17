@@ -221,9 +221,39 @@ export const deleteTracksByPaths = (paths: string[]): void => {
   tx();
 };
 
-/** 模糊搜索曲目（title / artists / album） */
+/** 将用户查询词转为安全且支持前缀匹配的 FTS5 查询表达式 */
+export const sanitizeFts5Query = (query: string): string => {
+  const tokens = query.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return "";
+  return tokens.map((token) => `"${token.replace(/"/g, '""')}"*`).join(" ");
+};
+
+/** 模糊搜索曲目（优先基于 FTS5 全文索引匹配，无结果或异常时自动降级为 LIKE 模糊搜索） */
 export const searchTracks = (query: string): Track[] => {
-  const escaped = query.replace(/[%_\\]/g, "\\$&");
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const ftsPattern = sanitizeFts5Query(trimmed);
+  if (ftsPattern) {
+    try {
+      const ftsRows = getDb()
+        .prepare(
+          `SELECT t.* FROM tracks t
+           JOIN tracks_fts f ON t.id = f.id
+           WHERE tracks_fts MATCH ? AND ${excludeCueContainer("t.path")}
+           ORDER BY rank`,
+        )
+        .all(ftsPattern) as TrackRow[];
+
+      if (ftsRows.length > 0) {
+        return ftsRows.map(rowToTrack);
+      }
+    } catch {
+      // FTS 语法解析异常或虚拟表尚未就绪时降级回退
+    }
+  }
+
+  const escaped = trimmed.replace(/[%_\\]/g, "\\$&");
   const pattern = `%${escaped}%`;
   const rows = getDb()
     .prepare(
