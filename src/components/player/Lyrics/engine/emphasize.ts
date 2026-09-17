@@ -7,6 +7,7 @@
  */
 
 import type { LyricWord } from "@shared/types/lyrics";
+import { splitGraphemes } from "@shared/utils/lyrics";
 import { isCJK } from "../utils/split-words";
 
 const FRAME_COUNT = 32;
@@ -25,6 +26,8 @@ const empEasing = (x: number): number =>
 const scaleMatrix3dCSS = (s: number): string =>
   `matrix3d(${s},0,0,0,0,${s},0,0,0,0,${s},0,0,0,0,1)`;
 
+const LETTER_OR_DIGIT_RE = /[\p{L}\p{N}]/u;
+
 /**
  * Determine whether a word satisfies the duration threshold for emphasis
  * @param word - Lyric word
@@ -34,8 +37,10 @@ export const shouldEmphasize = (word: LyricWord, minDuration = 1000): boolean =>
   const duration = word.endTime - word.startTime;
   if (duration < minDuration) return false;
   if (isCJK(word.word)) return true;
-  const len = word.word.trim().length;
-  return len > 1 && len <= 7;
+  const trimmed = word.word.trim();
+  if (!trimmed || !LETTER_OR_DIGIT_RE.test(trimmed)) return false;
+  const len = splitGraphemes(trimmed).length;
+  return len >= 1 && len <= 7;
 };
 
 /**

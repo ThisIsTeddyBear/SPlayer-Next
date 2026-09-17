@@ -27,13 +27,13 @@
   left: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: var(--lp-line-padding, 0.4em 1em);
+  padding: var(--lp-line-padding, 0.5em 1em);
   color: var(--lp-singer-color, var(--lp-color, #fff));
   font-size: var(--lp-font-size, inherit);
   font-weight: inherit;
   transform-origin: left;
   opacity: 1;
-  contain: content;
+  contain: layout style;
   pointer-events: none;
   --ba: 0.2;
   --da: 0.2;
@@ -164,12 +164,18 @@
   overflow-wrap: break-word;
   pointer-events: auto;
   overflow: visible;
-  line-height: var(--lp-line-height, 1.25);
+  line-height: var(--lp-line-height, 1.35);
+  padding: 0.2em 0;
+  margin: -0.2em 0;
 
   & > span {
     display: inline-block;
     white-space: pre-wrap;
     vertical-align: middle;
+    padding-top: 0.25em;
+    padding-bottom: 0.25em;
+    margin-top: -0.25em;
+    margin-bottom: -0.25em;
   }
 
   ruby {

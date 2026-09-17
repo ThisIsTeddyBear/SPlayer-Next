@@ -3,6 +3,7 @@
  */
 
 import type { LyricLine, LyricSpan, LyricWord } from "@shared/types/lyrics";
+import { splitGraphemes } from "@shared/utils/lyrics";
 import { chunkAndSplitLyricWords, needsSpaceBetween } from "../utils/split-words";
 import { shouldChunkEmphasize } from "./emphasize";
 
@@ -208,7 +209,7 @@ const appendWordSpan = (
  * @param ruby - Ruby annotation spans array
  */
 const buildRubyContent = (span: HTMLSpanElement, text: string, ruby: LyricSpan[]) => {
-  const chars = Array.from(text);
+  const chars = splitGraphemes(text);
   const validRuby = ruby.filter((r) => r.word.trim());
   if (validRuby.length === chars.length) {
     for (let i = 0; i < chars.length; i++) {
@@ -256,7 +257,7 @@ const buildEmphasizedChunk = (
   wrapper.className = "lp-emp-wrapper";
 
   const charElements: HTMLElement[] = [];
-  for (const char of trimmed) {
+  for (const char of splitGraphemes(trimmed)) {
     const charSpan = document.createElement("span");
     charSpan.textContent = char;
     wrapper.appendChild(charSpan);

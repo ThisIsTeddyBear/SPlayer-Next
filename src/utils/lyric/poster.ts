@@ -1,4 +1,5 @@
 import type { Track } from "@shared/types/player";
+import { splitGraphemes } from "@shared/utils/lyrics";
 import { hexToRgb } from "@/utils/color";
 
 /** 海报中的一行歌词 */
@@ -83,7 +84,7 @@ const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
   const lines: string[] = [];
   let line = "";
   const breakByChar = (token: string): void => {
-    for (const char of token) {
+    for (const char of splitGraphemes(token)) {
       if (line && ctx.measureText(line + char).width > maxWidth) {
         lines.push(line);
         line = "";
