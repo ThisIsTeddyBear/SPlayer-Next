@@ -39,7 +39,7 @@ const createFixture = (root, version, channel) => {
   }
 };
 
-test("正式版生成 latest、beta 和 alpha 的完整更新清单", () => {
+test("Stable generates complete update manifests for latest, beta, and alpha", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "splayer-release-stable-"));
   try {
     const src = path.join(root, "artifacts");
@@ -59,7 +59,7 @@ test("正式版生成 latest、beta 和 alpha 的完整更新清单", () => {
   }
 });
 
-test("Beta 版生成 beta 和 alpha 清单", () => {
+test("Beta generates beta and alpha manifests", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "splayer-release-beta-"));
   try {
     const src = path.join(root, "artifacts");
@@ -74,7 +74,7 @@ test("Beta 版生成 beta 和 alpha 清单", () => {
   }
 });
 
-test("Alpha 版只发布 alpha 清单", () => {
+test("Alpha only publishes alpha manifest", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "splayer-release-alpha-"));
   try {
     const src = path.join(root, "artifacts");
@@ -89,6 +89,22 @@ test("Alpha 版只发布 alpha 清单", () => {
   }
 });
 
-test("拒绝未支持的预发布通道", () => {
-  assert.throws(() => resolveChannel("1.3.0-rc.1"), /不支持的预发布版本格式/);
+test("Nightly only publishes nightly manifest", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "splayer-release-nightly-"));
+  try {
+    const src = path.join(root, "artifacts");
+    const out = path.join(root, "out");
+    createFixture(src, "1.4.0-nightly.270", "nightly");
+    prepareReleaseAssets(src, out, "1.4.0-nightly.270");
+    assert.equal(fs.existsSync(path.join(out, "nightly.yml")), true);
+    assert.equal(fs.existsSync(path.join(out, "alpha.yml")), false);
+    assert.equal(fs.existsSync(path.join(out, "beta.yml")), false);
+    assert.equal(fs.existsSync(path.join(out, "latest.yml")), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("Reject unsupported prerelease channel", () => {
+  assert.throws(() => resolveChannel("1.3.0-rc.1"), /Unsupported prerelease version format/);
 });

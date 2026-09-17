@@ -13,11 +13,16 @@ const fileAssociations = [...SUPPORTED_AUDIO_EXTENSIONS].map((extension) => {
 });
 
 const packageVersion = JSON.parse(readFileSync("package.json", "utf8")).version as string;
-const prereleaseChannel = /-(alpha|beta)(?:\.|$)/.exec(packageVersion)?.[1];
+const prereleaseChannel = /-(alpha|beta|nightly)(?:\.|$)/.exec(packageVersion)?.[1];
 const inferredUpdateChannel = prereleaseChannel ?? "latest";
 const updateChannel = process.env.UPDATE_CHANNEL ?? inferredUpdateChannel;
 
-if (updateChannel !== "latest" && updateChannel !== "beta" && updateChannel !== "alpha") {
+if (
+  updateChannel !== "latest" &&
+  updateChannel !== "beta" &&
+  updateChannel !== "alpha" &&
+  updateChannel !== "nightly"
+) {
   throw new Error(`Unsupported update channel: ${updateChannel}`);
 }
 if (packageVersion.includes("-") && !prereleaseChannel) {

@@ -1706,10 +1706,11 @@
     },
     "updateChannel": {
       "label": "Update Channel",
-      "description": "Choose Stable, Beta preview, or Alpha experimental updates",
+      "description": "Choose between Stable, Beta preview, Alpha internal, or Nightly updates",
       "stable": "Stable",
       "beta": "Beta Preview",
-      "alpha": "Alpha Experimental"
+      "alpha": "Alpha Experimental",
+      "nightly": "Nightly Build"
     },
     "checkUpdate": {
       "label": "Check for Updates",

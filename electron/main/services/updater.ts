@@ -1,5 +1,5 @@
 import electronUpdater, { type UpdateInfo } from "electron-updater";
-import { shell } from "electron";
+import { app, shell } from "electron";
 import { sendToMain } from "@main/utils/broadcast";
 import { store } from "@main/store";
 import { isDev, isMac, isPortable, isAppX } from "@main/utils/config";
@@ -10,30 +10,30 @@ import type { UpdateChannel } from "@shared/types/settings";
 const { autoUpdater } = electronUpdater;
 
 /**
- * 是否支持内置下载安装
- * AppX 由 Store 管理更新，Mac/Portable 无自动安装能力
+ * Whether in-app download and installation is supported
+ * AppX updates are managed by the Windows Store; Mac/Portable do not support auto-installation
  */
 const canSelfInstall = !isMac && !isPortable && !isAppX;
 
-/** Releases 页 */
+/** Releases page URL */
 const RELEASES_URL = "https://github.com/SPlayer-Dev/SPlayer-Next/releases";
 
-/** Microsoft Store 更新页 */
+/** Microsoft Store updates URL */
 const STORE_UPDATES_URL = "ms-windows-store://updates";
 
-/** 定时检查间隔（6 小时） */
+/** Scheduled check interval (6 hours) */
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
-/** 本次检查是否由用户手动触发 */
+/** Whether current check was triggered manually by user */
 let manualCheck = false;
 
-/** 进行中的检查 Promise */
+/** In-flight check Promise */
 let currentCheck: Promise<unknown> | null = null;
 
-/** 当前检查结束后需要执行的检查 */
-let pendingCheck: { manual: boolean; allowDowngrade: boolean } | null = null;
+/** Pending check queued during an in-flight check */
+let pendingCheck: { manual: boolean } | null = null;
 
-/** 最近一次检测到的可用版本 */
+/** Recent detected available version */
 let availableVersion: string | null = null;
 
 let intervalTimer: ReturnType<typeof setInterval> | null = null;
@@ -41,29 +41,30 @@ let intervalTimer: ReturnType<typeof setInterval> | null = null;
 const emit = (event: UpdateEvent): void => sendToMain("update:event", event);
 
 /**
- * 读取当前更新通道
- * @returns 更新通道
+ * Read current update channel
+ * @returns Update channel
  */
 const getChannel = (): UpdateChannel => {
   const channel = store.get("update.channel");
-  return channel === "beta" || channel === "alpha" ? channel : "stable";
+  if (channel === "beta" || channel === "alpha" || channel === "nightly") return channel;
+  if (app.getVersion().includes("-nightly.")) return "nightly";
+  return "stable";
 };
 
 /**
- * 将当前通道应用到 electron-updater
- * @param allowDowngrade - 是否允许本次检查安装更低版本
+ * Apply current update channel to electron-updater
  */
-const applyChannel = (allowDowngrade = false): void => {
+const applyChannel = (): void => {
   const channel = getChannel();
   autoUpdater.channel = channel === "stable" ? "latest" : channel;
   autoUpdater.allowPrerelease = channel !== "stable";
-  autoUpdater.allowDowngrade = allowDowngrade;
+  autoUpdater.allowDowngrade = false;
 };
 
 /**
- * 规范化更新日志格式
- * @param notes 更新日志，可能是字符串或数组
- * @returns 规范化后的更新日志字符串
+ * Normalize release notes format
+ * @param notes Release notes, string or array
+ * @returns Normalized release notes string
  */
 const normalizeNotes = (notes: UpdateInfo["releaseNotes"]): string => {
   if (!notes) return "";
@@ -75,9 +76,9 @@ const normalizeNotes = (notes: UpdateInfo["releaseNotes"]): string => {
 };
 
 /**
- * 将 electron-updater 的 UpdateInfo 转换为 UpdateMeta
- * @param info 更新信息
- * @returns 更新元数据
+ * Convert electron-updater UpdateInfo to UpdateMeta
+ * @param info Update information
+ * @returns Update metadata
  */
 const toMeta = (info: UpdateInfo): UpdateMeta => ({
   version: info.version,
@@ -112,19 +113,17 @@ const bindEvents = (): void => {
 };
 
 /**
- * 执行更新检查
- * @param manual - 是否由用户手动触发
- * @param allowDowngrade - 是否明确允许本次检查安装更低版本
+ * Execute update check
+ * @param manual - Whether triggered manually by the user
  */
-const runCheck = (manual: boolean, allowDowngrade?: boolean): void => {
+const runCheck = (manual: boolean): void => {
   if (currentCheck) {
     pendingCheck = {
       manual: manual || pendingCheck?.manual === true,
-      allowDowngrade: allowDowngrade ?? pendingCheck?.allowDowngrade ?? false,
     };
     return;
   }
-  applyChannel(allowDowngrade ?? false);
+  applyChannel();
   manualCheck = manual;
   currentCheck = autoUpdater
     .checkForUpdates()
@@ -133,20 +132,20 @@ const runCheck = (manual: boolean, allowDowngrade?: boolean): void => {
       currentCheck = null;
       const pending = pendingCheck;
       pendingCheck = null;
-      if (pending) runCheck(pending.manual, pending.allowDowngrade);
+      if (pending) runCheck(pending.manual);
     });
 };
 
 /**
- * 检查更新：自动检查受设置开关约束，手动检查始终执行
- * @param manual 是否由用户手动触发
+ * Check for updates: automatic checks respect the setting switch; manual checks always execute
+ * @param manual Whether triggered manually by the user
  */
 export const checkForUpdates = (manual: boolean): void => {
   if (!manual && !store.get("update.autoCheck")) return;
   runCheck(manual);
 };
 
-/** 下载更新 */
+/** Download update */
 export const downloadUpdate = (): void => {
   if (!canSelfInstall) return;
   autoUpdater.downloadUpdate().catch((error) => {
@@ -156,24 +155,24 @@ export const downloadUpdate = (): void => {
 };
 
 /**
- * 应用更新通道变更并立即重新检查
- * @param previous - 原通道
- * @param channel - 新通道
+ * Apply update channel change and immediately recheck
+ * Transition strategy: changing channel does not trigger downgrade; only alerts if a newer version exists
+ * @param previous - Previous channel
+ * @param channel - New channel
  */
 export const applyChannelChange = (previous: UpdateChannel, channel: UpdateChannel): void => {
   if (previous === channel) return;
   updaterLog.info(`Switched update channel: ${previous} -> ${channel}`);
-  const channelPriority: Record<UpdateChannel, number> = { stable: 0, beta: 1, alpha: 2 };
-  runCheck(true, channelPriority[channel] < channelPriority[previous]);
+  runCheck(true);
 };
 
-/** 退出并安装 */
+/** Quit application and install update */
 export const quitAndInstall = (): void => {
   if (!canSelfInstall) return;
   autoUpdater.quitAndInstall();
 };
 
-/** 打开下载页：AppX 引导 Store 更新，其余跳 Releases */
+/** Open download page: AppX navigates to Microsoft Store, other builds open GitHub Releases */
 export const openDownloadPage = (): void => {
   const releaseUrl = availableVersion
     ? `${RELEASES_URL}/tag/v${encodeURIComponent(availableVersion)}`
@@ -181,7 +180,7 @@ export const openDownloadPage = (): void => {
   void shell.openExternal(isAppX ? STORE_UPDATES_URL : releaseUrl);
 };
 
-/** 初始化更新器 */
+/** Initialize updater */
 export const initUpdater = (): void => {
   autoUpdater.logger = updaterLog;
   autoUpdater.autoDownload = false;
@@ -193,11 +192,11 @@ export const initUpdater = (): void => {
     updaterLog.info("Development mode supports manual update checks only");
     return;
   }
-  // 定时检查
+  // Scheduled update check
   intervalTimer = setInterval(() => checkForUpdates(false), CHECK_INTERVAL_MS);
 };
 
-/** 清理定时器 */
+/** Dispose updater timer */
 export const disposeUpdater = (): void => {
   if (intervalTimer) clearInterval(intervalTimer);
   intervalTimer = null;

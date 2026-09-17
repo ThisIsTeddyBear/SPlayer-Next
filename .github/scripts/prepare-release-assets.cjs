@@ -9,10 +9,10 @@ const MANIFEST_SUFFIXES = ["", "-mac", "-linux", "-linux-arm64"];
 const SKIP_FILES = new Set(["builder-debug.yml", "builder-effective-config.yaml"]);
 
 /**
- * 递归收集目录下的文件
- * @param {string} dir - 起始目录
- * @param {string[]} [out] - 结果累加数组
- * @returns {string[]} 文件路径
+ * Recursively collect files in a directory
+ * @param {string} dir - Starting directory
+ * @param {string[]} [out] - Result accumulator
+ * @returns {string[]} File paths
  */
 const walk = (dir, out = []) => {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -27,20 +27,22 @@ const walk = (dir, out = []) => {
 };
 
 /**
- * 判断清单是否需要合并不同架构
- * @param {string} name - 文件名
- * @returns {boolean} 是否需要合并
+ * Check if manifest needs multi-arch merging
+ * @param {string} name - File name
+ * @returns {boolean} Whether manifest requires merging
  */
-const shouldMergeManifest = (name) => /^(latest|beta|alpha)(-mac)?\.yml$/.test(name);
+const shouldMergeManifest = (name) => /^(latest|beta|alpha|nightly)(-mac)?\.yml$/.test(name);
 
 /**
- * 合并同平台不同架构的更新清单
- * @param {Array<Record<string, any>>} docs - 清单内容
- * @returns {Record<string, any>} 合并结果
+ * Merge update manifests for different architectures on the same platform
+ * @param {Array<Record<string, any>>} docs - Manifest contents
+ * @returns {Record<string, any>} Merged manifest
  */
 const mergeManifests = (docs) => {
   const versions = new Set(docs.map((doc) => doc.version));
-  if (versions.size !== 1) throw new Error(`同名清单版本不一致: ${[...versions].join(", ")}`);
+  if (versions.size !== 1) {
+    throw new Error(`Mismatched versions in manifests: ${[...versions].join(", ")}`);
+  }
 
   const merged = { ...docs[0] };
   const byUrl = new Map();
@@ -59,27 +61,41 @@ const mergeManifests = (docs) => {
 };
 
 /**
- * 从版本号解析发布通道
- * @param {string} version - 应用版本
- * @returns {"latest" | "beta" | "alpha"} 发布通道
+ * Resolve release channel from version string
+ * @param {string} version - Application version
+ * @returns {"latest" | "beta" | "alpha" | "nightly"} Release channel
  */
 const resolveChannel = (version) => {
+  if (/-nightly(?:\.|$)/.test(version)) return "nightly";
   if (/-alpha(?:\.|$)/.test(version)) return "alpha";
   if (/-beta(?:\.|$)/.test(version)) return "beta";
-  if (version.includes("-")) throw new Error(`不支持的预发布版本格式: ${version}`);
+  if (version.includes("-")) throw new Error(`Unsupported prerelease version format: ${version}`);
   return "latest";
 };
 
+const ALIAS_CHANNELS_MAP = {
+  latest: ["beta", "alpha"],
+  beta: ["alpha"],
+};
+
+const VALIDATE_CHANNELS_MAP = {
+  latest: ["latest", "beta", "alpha"],
+  beta: ["beta", "alpha"],
+  alpha: ["alpha"],
+  nightly: ["nightly"],
+};
+
 /**
- * 为更不稳定的订阅通道创建清单别名
- * @param {string} outDir - 发布资源目录
- * @param {"latest" | "beta" | "alpha"} channel - 发布通道
+ * Create manifest aliases for less stable update channels
+ * @param {string} outDir - Release output directory
+ * @param {"latest" | "beta" | "alpha" | "nightly"} channel - Release channel
  */
 const createChannelAliases = (outDir, channel) => {
-  const aliases = channel === "latest" ? ["beta", "alpha"] : channel === "beta" ? ["alpha"] : [];
+  const aliases = ALIAS_CHANNELS_MAP[channel] ?? [];
   for (const suffix of MANIFEST_SUFFIXES) {
     const source = path.join(outDir, `${channel}${suffix}.yml`);
-    if (!fs.existsSync(source)) throw new Error(`缺少更新清单: ${path.basename(source)}`);
+    if (!fs.existsSync(source))
+      throw new Error(`Missing update manifest: ${path.basename(source)}`);
     for (const alias of aliases) {
       fs.copyFileSync(source, path.join(outDir, `${alias}${suffix}.yml`));
     }
@@ -87,38 +103,35 @@ const createChannelAliases = (outDir, channel) => {
 };
 
 /**
- * 校验清单结构和引用资源
- * @param {string} outDir - 发布资源目录
- * @param {string} version - 应用版本
- * @param {"latest" | "beta" | "alpha"} channel - 发布通道
+ * Validate manifest structure and referenced assets
+ * @param {string} outDir - Release output directory
+ * @param {string} version - Application version
+ * @param {"latest" | "beta" | "alpha" | "nightly"} channel - Release channel
  */
 const validateManifests = (outDir, version, channel) => {
-  const channels =
-    channel === "latest"
-      ? ["latest", "beta", "alpha"]
-      : channel === "beta"
-        ? ["beta", "alpha"]
-        : ["alpha"];
+  const channels = VALIDATE_CHANNELS_MAP[channel] ?? [channel];
   for (const current of channels) {
     for (const suffix of MANIFEST_SUFFIXES) {
       const name = `${current}${suffix}.yml`;
       const filePath = path.join(outDir, name);
-      if (!fs.existsSync(filePath)) throw new Error(`缺少更新清单: ${name}`);
+      if (!fs.existsSync(filePath)) throw new Error(`Missing update manifest: ${name}`);
 
       const doc = yaml.load(fs.readFileSync(filePath, "utf8"));
-      if (doc.version !== version) throw new Error(`${name} 的版本不是 ${version}`);
+      if (doc.version !== version) {
+        throw new Error(`${name} version does not match ${version}`);
+      }
       if (!Array.isArray(doc.files) || doc.files.length === 0) {
-        throw new Error(`${name} 没有可更新文件`);
+        throw new Error(`${name} has no updatable files`);
       }
       const selected = doc.files.find((item) => item.url === doc.path);
       if (!selected || selected.sha512 !== doc.sha512) {
-        throw new Error(`${name} 的默认更新文件无效`);
+        throw new Error(`${name} has invalid default update file`);
       }
       for (const item of doc.files) {
         const asset = path.join(outDir, path.basename(item.url));
-        if (!fs.existsSync(asset)) throw new Error(`${name} 引用了不存在的资源: ${item.url}`);
+        if (!fs.existsSync(asset)) throw new Error(`${name} references missing asset: ${item.url}`);
         if (item.size != null && fs.statSync(asset).size !== item.size) {
-          throw new Error(`${name} 的资源大小不匹配: ${item.url}`);
+          throw new Error(`${name} asset size mismatch: ${item.url}`);
         }
       }
     }
@@ -126,10 +139,10 @@ const validateManifests = (outDir, version, channel) => {
 };
 
 /**
- * 整理并校验 GitHub Release 资源
- * @param {string} srcDir - 构建产物目录
- * @param {string} outDir - 发布资源目录
- * @param {string} version - 应用版本
+ * Prepare and validate GitHub Release assets
+ * @param {string} srcDir - Build output directory
+ * @param {string} outDir - Release assets directory
+ * @param {string} version - Application version
  */
 const prepareReleaseAssets = (srcDir, outDir, version) => {
   const channel = resolveChannel(version);
@@ -146,7 +159,7 @@ const prepareReleaseAssets = (srcDir, outDir, version) => {
       manifestDocs.get(name).push(doc);
       continue;
     }
-    if (seen.has(name)) throw new Error(`发现重复发布资源: ${name}`);
+    if (seen.has(name)) throw new Error(`Duplicate release asset detected: ${name}`);
     seen.add(name);
     fs.copyFileSync(file, path.join(outDir, name));
   }
@@ -154,18 +167,18 @@ const prepareReleaseAssets = (srcDir, outDir, version) => {
   for (const [name, docs] of manifestDocs) {
     const merged = mergeManifests(docs);
     fs.writeFileSync(path.join(outDir, name), yaml.dump(merged, { lineWidth: -1 }));
-    console.log(`合并清单 ${name}（files: ${merged.files.length}）`);
+    console.log(`Merged manifest ${name} (files: ${merged.files.length})`);
   }
 
   createChannelAliases(outDir, channel);
   validateManifests(outDir, version, channel);
-  console.log(`release-assets 校验完成，共 ${fs.readdirSync(outDir).length} 个文件`);
+  console.log(`release-assets validation complete, total ${fs.readdirSync(outDir).length} files`);
 };
 
 if (require.main === module) {
   const [srcDir, outDir, version] = process.argv.slice(2);
   if (!srcDir || !outDir || !version) {
-    console.error("用法: node prepare-release-assets.cjs <artifactsDir> <outDir> <version>");
+    console.error("Usage: node prepare-release-assets.cjs <artifactsDir> <outDir> <version>");
     process.exit(1);
   }
   prepareReleaseAssets(srcDir, outDir, version);

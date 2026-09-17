@@ -253,7 +253,7 @@ export interface WindowStates {
   taskbarLyric: TaskbarLyricWindowState;
 }
 
-export type UpdateChannel = "stable" | "beta" | "alpha";
+export type UpdateChannel = "stable" | "beta" | "alpha" | "nightly";
 
 export interface AppUpdateSettings {
   autoCheck: boolean;
