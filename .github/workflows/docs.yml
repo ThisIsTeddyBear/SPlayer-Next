@@ -37,6 +37,8 @@ jobs:
           node-version: 24
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
       # 文档构建无需原生模块，跳过 postinstall（electron-rebuild）
       - name: Install dependencies
         run: pnpm install --ignore-scripts
