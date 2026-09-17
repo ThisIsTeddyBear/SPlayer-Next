@@ -17,6 +17,7 @@ import * as lyricLoader from "@/services/lyric/loader";
 import * as coverLoader from "@/services/coverLoader";
 import * as abLoop from "@/services/abLoop";
 import * as cacheScheduler from "@/services/cacheScheduler";
+import { getDeviceVolume, setDeviceVolume } from "@/services/deviceVolume";
 import { resolveTrackSource, type ResolvedTrackSource } from "@/services/audioSource";
 import {
   consumePreloadedTrack,
@@ -473,11 +474,53 @@ export const markSeek = (posMs: number): void => {
 };
 
 /**
+ * Get active audio output device ID.
+ * Returns the configured output device ID if set; otherwise returns current default device ID.
+ */
+export const getActiveDeviceId = (): string | null => {
+  const settings = useSettingsStore();
+  if (settings.player.outputDevice) {
+    return settings.player.outputDevice;
+  }
+  const defaultDevice = useStatusStore().outputDevices.find((device) => device.isDefault);
+  return defaultDevice?.id ?? null;
+};
+
+/**
+ * Restore saved volume for the currently active output device.
+ * If per-device volume memory is enabled and a record exists, restore it; otherwise save current volume as initial record.
+ */
+export const applySavedVolumeForActiveDevice = async (): Promise<void> => {
+  const settings = useSettingsStore();
+  if (!settings.player.rememberDeviceVolume) return;
+  const activeId = getActiveDeviceId();
+  if (!activeId) return;
+
+  const savedVolume = getDeviceVolume(activeId);
+  const status = useStatusStore();
+  if (savedVolume !== null) {
+    if (Math.abs(savedVolume - status.volume) > 0.001) {
+      await setVolume(savedVolume);
+    }
+  } else {
+    setDeviceVolume(activeId, status.volume);
+  }
+};
+
+/**
+ * Set player volume
+ * @param vol - Volume level (0.0 ~ 1.0)
  */
 export const setVolume = async (vol: number): Promise<void> => {
   const result = await window.api.player.setVolume(vol);
   if (result.success) {
-    useStatusStore().volume = result.data ?? vol;
+    const nextVol = result.data ?? vol;
+    useStatusStore().volume = nextVol;
+    const settings = useSettingsStore();
+    if (settings.player.rememberDeviceVolume) {
+      const activeId = getActiveDeviceId();
+      if (activeId) setDeviceVolume(activeId, nextVol);
+    }
   }
 };
 
@@ -519,7 +562,12 @@ export const switchDevice = async (deviceId: string | null): Promise<void> => {
   const pauseBeforeSwitch =
     settings.player.pauseOnDeviceSwitch && useStatusStore().state === "playing";
   const result = await window.api.player.setOutputDevice(deviceId, pauseBeforeSwitch);
-  if (result.success) settings.player.outputDevice = deviceId;
+  if (result.success) {
+    settings.player.outputDevice = deviceId;
+    if (settings.player.rememberDeviceVolume) {
+      await applySavedVolumeForActiveDevice();
+    }
+  }
 };
 
 /**
@@ -946,6 +994,9 @@ export const initPlayer = async (): Promise<void> => {
     );
     if (legacy) settings.player.outputDevice = legacy.id;
     await window.api.player.setOutputDevice(settings.player.outputDevice);
+  }
+  if (settings.player.rememberDeviceVolume) {
+    await applySavedVolumeForActiveDevice();
   }
   if (unsubscribe) unsubscribe();
   unsubscribe = window.api.player.onEvent(handleEvent);

@@ -886,6 +886,10 @@
       "description": "Select audio output device",
       "default": "System Default"
     },
+    "rememberDeviceVolume": {
+      "label": "Remember Device Volume",
+      "description": "Independently save and restore volume for each audio output device"
+    },
     "pauseOnDeviceSwitch": {
       "label": "Pause on Device Switch",
       "description": "Pause playback when switching the output device, e.g. when a Bluetooth device disconnects"

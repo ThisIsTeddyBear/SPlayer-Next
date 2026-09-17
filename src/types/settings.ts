@@ -152,6 +152,7 @@ export interface PlayerSettings {
   autoImmersive: boolean;
   outputDevice: string | null;
   pauseOnDeviceSwitch: boolean;
+  rememberDeviceVolume: boolean;
   exclusiveAudio: boolean;
   enableSpectrum: boolean;
   spectrumBarWidth: number;
