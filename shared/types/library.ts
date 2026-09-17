@@ -79,11 +79,13 @@ export interface LibraryApi {
   /** 获取已配置的扫描目录 */
   getScanDirs: () => Promise<IpcResponse<string[]>>;
   /** 删除曲目文件并从数据库移除 */
-  deleteTracks: (paths: string[]) => Promise<IpcResponse<{
-    deleted: number;
-    failed: number;
-    deletedPaths: string[];
-  }>>;
+  deleteTracks: (paths: string[]) => Promise<
+    IpcResponse<{
+      deleted: number;
+      failed: number;
+      deletedPaths: string[];
+    }>
+  >;
   /** 读取本地文件的可编辑标签 */
   readTags: (path: string) => Promise<IpcResponse<TrackTags>>;
   /** 批量写入文件标签 */

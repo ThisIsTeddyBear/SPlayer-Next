@@ -10,7 +10,10 @@ test("only exact packaged entry documents are trusted", () => {
   const main = pathToFileURL(path.join(root, "index.html")).href;
   assert.equal(trustedDocument(`${main}#/library`, root), "index.html");
   assert.equal(trustedDocument(pathToFileURL(path.join(root, "other.html")).href, root), undefined);
-  assert.equal(trustedDocument(pathToFileURL(path.join(root, "..", "index.html")).href, root), undefined);
+  assert.equal(
+    trustedDocument(pathToFileURL(path.join(root, "..", "index.html")).href, root),
+    undefined,
+  );
   assert.equal(trustedDocument("https://example.com/index.html", root), undefined);
   assert.equal(trustedDocument("javascript:alert(1)", root), undefined);
 });

@@ -25,4 +25,3 @@ describe("deviceVolume", () => {
     expect(getDeviceVolume("device-extra-29")).toBe(0.2);
   });
 });
-

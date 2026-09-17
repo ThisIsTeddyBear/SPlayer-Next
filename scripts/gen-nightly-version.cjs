@@ -39,4 +39,3 @@ pkg.version = nightlyVersion;
 
 writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8");
 console.log(`[GenNightlyVersion] Version updated to: ${nightlyVersion}`);
-

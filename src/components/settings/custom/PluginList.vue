@@ -147,7 +147,6 @@ const isEmpty = computed(
 
 const DOCS_URL = "https://splayer-next.imsyy.top/plugins/";
 const SUBMIT_URL = "https://github.com/SPlayer-Dev/plugins/issues/new/choose";
-
 </script>
 
 <template>
@@ -206,7 +205,6 @@ const SUBMIT_URL = "https://github.com/SPlayer-Dev/plugins/issues/new/choose";
         </div>
       </div>
     </div>
-
 
     <div
       class="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-0.5 pt-4 text-xs text-on-surface-variant/60"

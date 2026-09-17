@@ -165,4 +165,3 @@ describe("sandbox console and window compatibility", () => {
     expect(logs.some((l) => l.includes("error:assertion failed"))).toBe(true);
   });
 });
-

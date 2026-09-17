@@ -199,7 +199,8 @@ export const useLibraryStore = defineStore("library", () => {
       const deletedIds = new Set(
         tracks.value
           .filter(
-            (t) => (t.path && pathSet.has(t.path)) || (t.cueAudioPath && pathSet.has(t.cueAudioPath)),
+            (t) =>
+              (t.path && pathSet.has(t.path)) || (t.cueAudioPath && pathSet.has(t.cueAudioPath)),
           )
           .map((t) => t.id),
       );

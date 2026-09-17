@@ -7,7 +7,9 @@ let cueRange: CueRange | null = null;
 let generation = 0;
 
 /** 所有播放入口共用分轨时间轴及加载代次。 */
-export const beginPlaybackLoad = (track?: { cueStartMs?: number; cueEndMs?: number } | null): number => {
+export const beginPlaybackLoad = (
+  track?: { cueStartMs?: number; cueEndMs?: number } | null,
+): number => {
   const start = track?.cueStartMs;
   const end = track?.cueEndMs;
   cueRange =
@@ -30,11 +32,10 @@ export const clearPlaybackTimeline = (): void => {
 };
 
 export const toDisplayPositionMs = (positionMs: number): number =>
-  cueRange
-    ? Math.max(0, Math.min(cueRange.durationMs, positionMs - cueRange.startMs))
-    : positionMs;
+  cueRange ? Math.max(0, Math.min(cueRange.durationMs, positionMs - cueRange.startMs)) : positionMs;
 
-export const toDisplayDurationMs = (durationMs: number): number => cueRange?.durationMs ?? durationMs;
+export const toDisplayDurationMs = (durationMs: number): number =>
+  cueRange?.durationMs ?? durationMs;
 
 export const toEnginePositionMs = (positionMs: number): number => {
   if (!Number.isFinite(positionMs) || positionMs < 0) throw new Error("Invalid seek position");

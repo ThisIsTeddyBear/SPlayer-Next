@@ -196,7 +196,7 @@ const tryStart = <T>(name: string, factory: () => T): T | null => {
   try {
     return factory();
   } catch (error) {
-      taskbarLog.warn(`${name} failed to start`, error);
+    taskbarLog.warn(`${name} failed to start`, error);
     return null;
   }
 };
@@ -228,7 +228,7 @@ const stopLayoutWatchers = (): void => {
 /**
  */
 const onExplorerRestart = (): void => {
-    taskbarLog.info("Explorer restarted; rebuilding the watcher and window embedding");
+  taskbarLog.info("Explorer restarted; rebuilding the watcher and window embedding");
   stopLayoutWatchers();
   service?.reinit();
   if (nativeModule) startWatchers(nativeModule);
@@ -248,7 +248,7 @@ export const createTaskbarLyricWindow = (): BrowserWindow | null => {
   if (!nativeModule) {
     nativeModule = loadNativeModule<TaskbarLyricNative>("taskbar-lyric.node", "taskbar-lyric");
     if (!nativeModule) {
-    taskbarLog.error("Failed to load the native module");
+      taskbarLog.error("Failed to load the native module");
       return null;
     }
   }
@@ -296,12 +296,12 @@ export const createTaskbarLyricWindow = (): BrowserWindow | null => {
     const hwndPtrBigInt = win.getNativeWindowHandle().readBigUInt64LE(0);
     if (hwndPtrBigInt > BigInt(Number.MAX_SAFE_INTEGER)) {
       taskbarLog.error(
-      `Failed to embed window: hwnd=${hwndPtrBigInt.toString()} exceeds JavaScript's safe integer range`,
+        `Failed to embed window: hwnd=${hwndPtrBigInt.toString()} exceeds JavaScript's safe integer range`,
       );
       return;
     }
     const hwndPtr = Number(hwndPtrBigInt);
-  taskbarLog.info(`Embedded window hwnd=${hwndPtr}`);
+    taskbarLog.info(`Embedded window hwnd=${hwndPtr}`);
     svc.embedWindowByPtr(hwndPtr);
     svc.update(resolveLyricWidth());
     startWatchers(mod);

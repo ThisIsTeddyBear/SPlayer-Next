@@ -6,7 +6,13 @@ const key = "a".repeat(64);
 
 test("external API requires an exact bearer token", () => {
   assert.equal(isAuthorized(key, `Bearer ${key}`), true);
-  for (const value of [undefined, "", "Bearer null", `Bearer ${key}x`, `Bearer ${"b".repeat(64)}`]) {
+  for (const value of [
+    undefined,
+    "",
+    "Bearer null",
+    `Bearer ${key}x`,
+    `Bearer ${"b".repeat(64)}`,
+  ]) {
     assert.equal(isAuthorized(key, value), false);
   }
   assert.equal(isAuthorized("", "Bearer "), false);

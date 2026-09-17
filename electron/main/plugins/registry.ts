@@ -47,8 +47,7 @@ const readStored = (): StoredManifest => {
     const raw = fs.readFileSync(manifestFile(), "utf-8");
     const data = JSON.parse(raw) as StoredManifest;
     if (data?.version === 1 && data.plugins) return data;
-  } catch {
-  }
+  } catch {}
   return { version: 1, plugins: {} };
 };
 
@@ -359,8 +358,7 @@ class PluginRegistry extends EventEmitter {
 
     try {
       fs.unlinkSync(path.join(scriptsDir(), rt.manifest.fileName));
-    } catch {
-    }
+    } catch {}
     pluginStorageDrop(id);
 
     const enabledMap = { ...(store.get("plugins.enabled") as Record<string, boolean>) };

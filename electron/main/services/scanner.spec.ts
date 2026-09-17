@@ -21,7 +21,9 @@ vi.mock("@main/database", () => ({
 vi.mock("@main/utils/broadcast", () => ({ broadcast: mocks.broadcast }));
 vi.mock("@main/utils/protocol", () => ({ toCacheUrl: (value: string) => value }));
 vi.mock("@main/utils/config", () => ({ getCoverCacheDir: () => "covers", isWin: false }));
-vi.mock("@main/utils/logger", () => ({ libraryLog: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock("@main/utils/logger", () => ({
+  libraryLog: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
 vi.mock("@main/utils/encoding", () => ({ readFileAutoEncoding: vi.fn() }));
 
 beforeEach(() => {

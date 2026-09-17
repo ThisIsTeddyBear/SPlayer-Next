@@ -37,4 +37,3 @@ const content = [`**Version**: \`${version}\``, "", "### Commits", "", commits, 
 const targetFile = resolve(process.cwd(), process.argv[2] || "notes.md");
 writeFileSync(targetFile, content, "utf-8");
 console.log(`[GenNightlyNotes] Generated release notes to: ${targetFile}`);
-

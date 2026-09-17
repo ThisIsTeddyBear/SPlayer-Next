@@ -42,4 +42,3 @@ export const getLineRomaji = (line?: LyricLine | null): string => {
   if (!line.words || line.words.length === 0) return "";
   return line.words.map(getWordRomaji).join("");
 };
-

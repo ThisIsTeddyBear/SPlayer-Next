@@ -47,7 +47,7 @@ const applyDiscordConfig = (discord?: DiscordSettings): void => {
 export const init = (): void => {
   mc = loadNativeModule<MediaCtrlModule>("media-ctrl.node", "media-ctrl");
   if (!mc) {
-  mediaLog.warn("media-ctrl module was not found; media integration is unavailable");
+    mediaLog.warn("media-ctrl module was not found; media integration is unavailable");
     return;
   }
 

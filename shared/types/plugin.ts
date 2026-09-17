@@ -130,7 +130,6 @@ export interface PluginInfo {
   settingsValues?: Record<string, unknown>;
 }
 
-
 export interface MusicUrlReq {
   source: string;
   quality: PluginQuality;
@@ -273,7 +272,6 @@ export interface HostApi {
   onSettingChange: (key: string, handler: (value: unknown) => void) => void;
 }
 
-
 export interface PluginErrorPayload {
   code: string;
   message: string;
@@ -351,7 +349,6 @@ export type HostCallMethod =
   | "player.setVolume"
   | "player.getPosition";
 
-
 export interface PluginResolveUrlArgs {
   pluginId: string;
   source: string;
@@ -425,7 +422,6 @@ export interface PluginsApi {
   matchCover: (args: PluginMatchCoverArgs) => Promise<PluginMatchCoverResult>;
   onStatus: (cb: (info: PluginInfo) => void) => () => void;
 }
-
 
 export interface PluginsConfig {
   enabled: Record<string, boolean>;

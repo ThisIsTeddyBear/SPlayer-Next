@@ -152,7 +152,11 @@ const syncCueTracks = async (
 };
 
 /** 完成 Rust 扫描后的收尾同步 */
-const finishScan = async (dirs: string[], event: JsScanEvent, generation: number): Promise<void> => {
+const finishScan = async (
+  dirs: string[],
+  event: JsScanEvent,
+  generation: number,
+): Promise<void> => {
   if (generation !== scanGeneration) return;
   if (event.removedPaths && event.removedPaths.length > 0) {
     deleteTracksByPaths(event.removedPaths);

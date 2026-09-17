@@ -203,9 +203,8 @@ export const resolveTTMLOverlay = async (
 
 /**
  */
-export const resolveStreamingByPreference = async (
-  track: Track,
-): Promise<ResolvedLyric | null> => resolveStreamingLyric(track);
+export const resolveStreamingByPreference = async (track: Track): Promise<ResolvedLyric | null> =>
+  resolveStreamingLyric(track);
 
 /**
  */

@@ -275,8 +275,7 @@ export const subsonicAdapter: StreamingAdapter = {
           id: album.id,
         });
         tracks.push(...(albumResult.album?.song ?? []).map((song) => toTrack(config, song)));
-      } catch {
-      }
+      } catch {}
     }
     return tracks;
   },
@@ -311,8 +310,7 @@ export const subsonicAdapter: StreamingAdapter = {
           })
           .join("\n");
       }
-    } catch {
-    }
+    } catch {}
     if (!hint?.artist && !hint?.title) return null;
     try {
       const result = await callApi<{ lyrics?: { value?: string } }>(config, "getLyrics", {

@@ -3,7 +3,10 @@ import { test } from "node:test";
 import { readResponseBytes } from "./responseBody.ts";
 
 test("bounded response reader accepts exact limits", async () => {
-  assert.deepEqual(await readResponseBytes(new Response("music"), 5), new TextEncoder().encode("music"));
+  assert.deepEqual(
+    await readResponseBytes(new Response("music"), 5),
+    new TextEncoder().encode("music"),
+  );
 });
 
 test("bounded response reader cancels oversized chunked bodies", async () => {

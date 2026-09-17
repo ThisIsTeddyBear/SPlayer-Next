@@ -63,4 +63,3 @@ export const setDeviceVolume = (deviceId: string, volume: number): void => {
     // Ignore storage errors or disabled quota
   }
 };
-

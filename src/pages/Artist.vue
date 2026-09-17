@@ -45,9 +45,7 @@ const hasMoreSongs = ref(false);
 const loadingMore = ref(false);
 
 /** 在线头像未到位时，用任一曲目的封面顶替 */
-const fallbackTrackCover = computed(
-  () => artist.value?.tracks.find((t) => t.cover)?.cover,
-);
+const fallbackTrackCover = computed(() => artist.value?.tracks.find((t) => t.cover)?.cover);
 
 /** 折叠状态 */
 const collapsed = ref(false);
@@ -73,8 +71,7 @@ const loadArtist = async (): Promise<void> => {
 
   try {
     await loadArtistService(source, id, {
-      fallbackName:
-        typeof route.query.name === "string" ? route.query.name : undefined,
+      fallbackName: typeof route.query.name === "string" ? route.query.name : undefined,
       signal: myAbort.signal,
       onUpdate: (next) => {
         if (myAbort.signal.aborted) return;
@@ -133,9 +130,7 @@ const canSubscribeArtist = computed(() => artist.value?.source === "netease");
 const isArtistSubscribed = computed(() => {
   const current = artist.value;
   if (!current || current.source !== "netease") return false;
-  return userStore.artists.some(
-    (item) => String(item.id) === String(current.id),
-  );
+  return userStore.artists.some((item) => String(item.id) === String(current.id));
 });
 
 /** 收藏操作进行中 */
@@ -146,16 +141,9 @@ const handleToggleSubscribe = async (): Promise<void> => {
   if (!current || current.source !== "netease" || artistSubBusy.value) return;
   artistSubBusy.value = true;
   try {
-    await userStore.toggleArtistSubscribe(
-      current.id,
-      !isArtistSubscribed.value,
-    );
+    await userStore.toggleArtistSubscribe(current.id, !isArtistSubscribed.value);
   } catch (err) {
-    toast.error(
-      err instanceof Error && err.message
-        ? err.message
-        : t("liked.toast.failed"),
-    );
+    toast.error(err instanceof Error && err.message ? err.message : t("liked.toast.failed"));
   } finally {
     artistSubBusy.value = false;
   }
@@ -186,8 +174,7 @@ const ARTIST_TAB_KEYS: readonly ArtistTab[] = ["songs", "albums"];
 /** 当前 tab */
 const activeTab = computed<ArtistTab>(() => {
   const tab = route.query.tab;
-  return typeof tab === "string" &&
-    (ARTIST_TAB_KEYS as readonly string[]).includes(tab)
+  return typeof tab === "string" && (ARTIST_TAB_KEYS as readonly string[]).includes(tab)
     ? (tab as ArtistTab)
     : "songs";
 });
@@ -247,11 +234,7 @@ const albumItems = computed<CoverItem[]>(() => {
             </h1>
             <div
               class="grid transition-[grid-template-rows,opacity] duration-300"
-              :class="
-                collapsed
-                  ? 'grid-rows-[0fr] opacity-0'
-                  : 'grid-rows-[1fr] opacity-100'
-              "
+              :class="collapsed ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'"
             >
               <div
                 class="overflow-hidden flex items-center gap-3 text-sm leading-none text-on-surface-variant/50"
@@ -294,18 +277,10 @@ const albumItems = computed<CoverItem[]>(() => {
                 @click="handleToggleSubscribe"
               >
                 <template #icon>
-                  <IconMaterialSymbolsFavoriteRounded
-                    v-if="isArtistSubscribed"
-                  />
+                  <IconMaterialSymbolsFavoriteRounded v-if="isArtistSubscribed" />
                   <IconMaterialSymbolsFavoriteOutlineRounded v-else />
                 </template>
-                {{
-                  t(
-                    isArtistSubscribed
-                      ? "collection.unsubscribe"
-                      : "collection.subscribe",
-                  )
-                }}
+                {{ t(isArtistSubscribed ? "collection.unsubscribe" : "collection.subscribe") }}
               </SButton>
               <SDropdownMenu
                 :items="moreMenuItems"
@@ -314,11 +289,7 @@ const albumItems = computed<CoverItem[]>(() => {
                 @select="handleMoreMenu"
               >
                 <template #trigger>
-                  <SButton
-                    variant="secondary"
-                    circle
-                    :disabled="activeTab !== 'songs'"
-                  >
+                  <SButton variant="secondary" circle :disabled="activeTab !== 'songs'">
                     <template #icon>
                       <IconLucideEllipsis />
                     </template>
@@ -336,9 +307,7 @@ const albumItems = computed<CoverItem[]>(() => {
               data-search-input
             >
               <template #prefix>
-                <IconLucideSearch
-                  class="size-4 text-on-surface-variant/40 shrink-0"
-                />
+                <IconLucideSearch class="size-4 text-on-surface-variant/40 shrink-0" />
               </template>
             </SInput>
           </div>
@@ -379,40 +348,25 @@ const albumItems = computed<CoverItem[]>(() => {
             />
           </div>
           <!-- 专辑网格 -->
-          <div
-            v-else-if="activeTab === 'albums'"
-            key="albums"
-            class="flex-1 min-h-0"
-          >
+          <div v-else-if="activeTab === 'albums'" key="albums" class="flex-1 min-h-0">
             <CoverList
               :items="albumItems"
               :padding-x="20"
               :padding-bottom="24"
-              @click="
-                (item) =>
-                  navigateToAlbum(item.title, { source, albumId: item.id })
-              "
+              @click="(item) => navigateToAlbum(item.title, { source, albumId: item.id })"
             />
           </div>
         </Transition>
       </div>
       <!-- 加载中 -->
-      <div
-        v-else-if="loading"
-        key="loading"
-        class="flex-1 flex items-center justify-center"
-      >
+      <div v-else-if="loading" key="loading" class="flex-1 flex items-center justify-center">
         <div class="text-center text-on-surface-variant/60">
           <SLoading class="text-4xl text-primary/70 mb-4 mx-auto block" />
           <div class="text-sm">{{ t("common.loading") }}</div>
         </div>
       </div>
       <!-- 错误态 -->
-      <div
-        v-else-if="error"
-        key="error"
-        class="flex-1 flex items-center justify-center px-6"
-      >
+      <div v-else-if="error" key="error" class="flex-1 flex items-center justify-center px-6">
         <div class="text-center text-red-500/85">
           <IconLucideTriangleAlert class="size-14 mx-auto mb-4 opacity-50" />
           <div class="text-sm font-medium mb-1">
@@ -428,11 +382,7 @@ const albumItems = computed<CoverItem[]>(() => {
         </div>
       </div>
       <!-- 空状态 -->
-      <div
-        v-else-if="artist"
-        key="empty"
-        class="flex-1 flex items-center justify-center"
-      >
+      <div v-else-if="artist" key="empty" class="flex-1 flex items-center justify-center">
         <div class="text-center text-on-surface-variant/50">
           <IconLucideMusic class="size-12 mx-auto mb-3 opacity-30" />
           <div class="text-sm">{{ t("collection.empty") }}</div>

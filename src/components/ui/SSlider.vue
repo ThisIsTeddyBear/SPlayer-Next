@@ -250,7 +250,10 @@ const onKeydown = (event: KeyboardEvent): void => {
       : event.key === "End"
         ? props.max
         : displayValue.value + increments[event.key];
-  const value = Math.max(props.min, Math.min(props.max, Number(target.toFixed(stepDecimals.value))));
+  const value = Math.max(
+    props.min,
+    Math.min(props.max, Number(target.toFixed(stepDecimals.value))),
+  );
   emit("dragStart", displayValue.value);
   emit("change", value);
   emit("update:modelValue", value);

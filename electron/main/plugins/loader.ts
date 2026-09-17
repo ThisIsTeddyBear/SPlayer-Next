@@ -18,7 +18,11 @@ import {
   type PluginManifest,
   type PluginType,
 } from "@shared/types/plugin";
-import { HOST_API_LEVEL, INSTALL_URL_MAX_SIZE, PluginErrorCodes } from "@shared/defaults/plugin-api";
+import {
+  HOST_API_LEVEL,
+  INSTALL_URL_MAX_SIZE,
+  PluginErrorCodes,
+} from "@shared/defaults/plugin-api";
 
 const GZ_PREFIX = "gz_";
 

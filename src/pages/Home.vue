@@ -44,7 +44,6 @@ const artistName = (track: Track): string => track.artists.map((artist) => artis
 
 /** 序号补零为两位 */
 const trackNo = (index: number): string => String(index + 1).padStart(2, "0");
-
 </script>
 
 <template>

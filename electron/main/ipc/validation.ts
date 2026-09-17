@@ -23,10 +23,7 @@ export const validateIpcArgs = (channel: string, args: unknown[]): void => {
   const value = args[0];
   if (
     range &&
-    (typeof value !== "number" ||
-      !Number.isFinite(value) ||
-      value < range[0] ||
-      value > range[1])
+    (typeof value !== "number" || !Number.isFinite(value) || value < range[0] || value > range[1])
   ) {
     throw new Error("Invalid numeric IPC argument");
   }
@@ -47,20 +44,12 @@ export const validateIpcArgs = (channel: string, args: unknown[]): void => {
       value.length > 256 ||
       value
         .split(".")
-        .some(
-          (part) =>
-            !part || ["__proto__", "prototype", "constructor"].includes(part),
-        ))
+        .some((part) => !part || ["__proto__", "prototype", "constructor"].includes(part)))
   ) {
     throw new Error("Invalid configuration path");
   }
   if (channel === "player:load") {
-    if (
-      typeof value !== "string" ||
-      !value ||
-      value.length > 65536 ||
-      value.includes("\0")
-    ) {
+    if (typeof value !== "string" || !value || value.length > 65536 || value.includes("\0")) {
       throw new Error("Invalid playback source");
     }
     const options = args[1];

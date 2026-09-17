@@ -31,7 +31,9 @@ describe("slider keyboard access", () => {
   });
 
   it("supports fractional volume and ignores disabled keyboard input", async () => {
-    const wrapper = mount(SSlider, { props: { modelValue: 0.3, max: 1, step: 0.01, vertical: true } });
+    const wrapper = mount(SSlider, {
+      props: { modelValue: 0.3, max: 1, step: 0.01, vertical: true },
+    });
     await wrapper.trigger("keydown", { key: "ArrowUp" });
     expect(wrapper.emitted("change")?.[0]).toEqual([0.31]);
     await wrapper.setProps({ disabled: true });

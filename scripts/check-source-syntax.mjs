@@ -42,7 +42,9 @@ const check = (filename) => {
         ...[".ts", ".js", ".mjs", ".cjs", ".vue", ".json"].map((extension) => target + extension),
         ...["index.ts", "index.js", "index.vue"].map((entry) => path.join(target, entry)),
       ];
-      if (!candidates.some((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile())) {
+      if (
+        !candidates.some((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile())
+      ) {
         throw new Error(`Unresolved repository import: ${specifier}`);
       }
     }
