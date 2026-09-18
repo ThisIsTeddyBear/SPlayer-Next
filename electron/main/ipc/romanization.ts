@@ -30,17 +30,11 @@ const isPurelyLatinScript = (text: string): boolean =>
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** 使用带有浏览器标识和超时控制的 fetch 调用 Google Translate。 */
+/** 使用 am-lyrics 相同的超时控制调用 Google Translate。 */
 const fetchWithTimeout = (url: string): Promise<Response> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  return fetch(url, {
-    signal: controller.signal,
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    },
-  }).finally(() => clearTimeout(timeoutId));
+  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timeoutId));
 };
 
 /** 读取 Google Translate 响应，并将 HTML 错误页与 JSON 负载区分开。 */
@@ -76,7 +70,7 @@ const readGoogleTranslateResponse = async (response: Response): Promise<unknown[
 const romanizeLine = async (text: string): Promise<string | undefined> => {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
     try {
-      const url = `${GOOGLE_TRANSLATE_ENDPOINT}?client=dict-chrome-ex&sl=auto&tl=en&dt=rm&q=${encodeURIComponent(text)}`;
+      const url = `${GOOGLE_TRANSLATE_ENDPOINT}?client=gtx&sl=auto&tl=en&dt=rm&q=${encodeURIComponent(text)}`;
       const response = await fetchWithTimeout(url);
       const data = await readGoogleTranslateResponse(response);
       const reading = data?.[0]?.[0]?.[3];
