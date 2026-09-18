@@ -131,6 +131,56 @@ describe("Google Translate romanization", () => {
     expect(mocks.fetch).toHaveBeenCalledTimes(3);
   });
 
+  it("simplifies Indic scholarly diacritics and Gurmukhi contractions in batch mode", async () => {
+    const line1 = "ਮਸਤੀ ’ਚ ਮਸਤਾਈ ਜ਼ਹਿਰੀ ਜਵਾਨੀ";
+    const line2 = "ਨੱਚਣਾ";
+    mocks.fetch.mockResolvedValue(
+      new Response(
+        JSON.stringify([[[null, null, null, "Masatī’ca masatā'ī zahirī javānī | nacaṇā"]]]),
+      ),
+    );
+
+    const res = await romanizeLines([line1, line2]);
+    expect(res).toEqual({
+      [line1]: "Masati'ch masata'i zahiri javani",
+      [line2]: "nachana",
+    });
+    expect(mocks.setCachedRomanizations).toHaveBeenCalledWith({
+      [line1]: "Masati'ch masata'i zahiri javani",
+      [line2]: "nachana",
+    });
+  });
+
+  it("simplifies single-line Indic transliterations with Gurmukhi apostrophes", async () => {
+    const line = "ਮਸਤੀ ’ਚ ਮਸਤਾਈ ਜ਼ਹਿਰੀ ਜਵਾਨੀ";
+    mocks.fetch.mockResolvedValue(
+      new Response(JSON.stringify([[[null, null, null, "Masatī’ca masatā'ī zahirī javānī"]]])),
+    );
+
+    const res = await romanizeLines([line]);
+    expect(res).toEqual({
+      [line]: "Masati'ch masata'i zahiri javani",
+    });
+    expect(mocks.setCachedRomanizations).toHaveBeenCalledWith({
+      [line]: "Masati'ch masata'i zahiri javani",
+    });
+  });
+
+  it("preserves English words in mixed-script Indic lyric lines", async () => {
+    const line = "Music ਚੱਲਦਾ Club 'ਚ";
+    mocks.fetch.mockResolvedValue(
+      new Response(JSON.stringify([[[null, null, null, "Music caladā Club 'ca"]]])),
+    );
+
+    const res = await romanizeLines([line]);
+    expect(res).toEqual({
+      [line]: "Music chalada Club'ch",
+    });
+    expect(mocks.setCachedRomanizations).toHaveBeenCalledWith({
+      [line]: "Music chalada Club'ch",
+    });
+  });
+
   it("registers the renderer-only IPC handler", () => {
     registerRomanizationIpc();
     expect(mocks.handle).toHaveBeenCalledWith("lyrics:romanize", expect.any(Function));

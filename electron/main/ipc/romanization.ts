@@ -3,6 +3,7 @@ import {
   getCachedRomanizations,
   setCachedRomanizations,
 } from "@main/database/lyricRomanizationCache";
+import { simplifyGoogleRomanization } from "@shared/utils/lyrics";
 import { ipcMain } from "./trusted";
 
 const GOOGLE_TRANSLATE_ENDPOINT = "https://translate.googleapis.com/translate_a/single";
@@ -88,7 +89,10 @@ const romanizeText = async (text: string): Promise<string | undefined> => {
   return undefined;
 };
 
-const romanizeLine = async (text: string): Promise<string | undefined> => romanizeText(text);
+const romanizeLine = async (text: string): Promise<string | undefined> => {
+  const reading = await romanizeText(text);
+  return reading ? simplifyGoogleRomanization(reading, text) : undefined;
+};
 
 /**
  * 批量将多行歌词拼合并请求罗马音
@@ -109,7 +113,7 @@ const romanizeBatch = async (lines: string[]): Promise<Record<string, string> | 
   const map: Record<string, string> = {};
   for (let i = 0; i < lines.length; i++) {
     const part = parts[i]?.trim();
-    if (part) map[lines[i]] = part;
+    if (part) map[lines[i]] = simplifyGoogleRomanization(part, lines[i]);
   }
   return map;
 };

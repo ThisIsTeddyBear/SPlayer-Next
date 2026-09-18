@@ -60,3 +60,47 @@ export const splitGraphemes = (text: string): string[] => {
   }
   return Array.from(text);
 };
+
+/**
+ * 简化并标准化 Google Translate 罗马音结果。
+ * 移除学术变音附加符号、规范化标点与空白，并将印度语系转写中的 ISO 拼写转换为易读的拉丁拼写。
+ * @param reading - Google Translate 原始转写结果
+ * @param sourceText - 对应的原文歌词行
+ * @returns 适合阅读的大众化罗马音
+ */
+export const simplifyGoogleRomanization = (reading: string, sourceText = ""): string => {
+  let value = String(reading || "");
+  if (typeof value.normalize === "function") {
+    value = value.normalize("NFKD");
+  }
+
+  value = value
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[’‘`´]/g, "'")
+    .replace(/[‐‑–—]/g, "-")
+    .replace(/\s*'\s*/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (/[\u0900-\u0d7f]/u.test(String(sourceText || ""))) {
+    const originalLatinWords = new Set(
+      (String(sourceText || "").match(/[A-Za-z]+/g) || []).map((word) => word.toLowerCase()),
+    );
+    if (originalLatinWords.size > 0) {
+      value = value
+        .split(/(\s+|[^\p{L}\p{N}]+)/u)
+        .map((token) => {
+          if (originalLatinWords.has(token.toLowerCase())) return token;
+          return token.replace(/C(?!h)/g, "Ch").replace(/c(?!h)/g, "ch");
+        })
+        .join("");
+    } else {
+      value = value.replace(/C(?!h)/g, "Ch").replace(/c(?!h)/g, "ch");
+    }
+    if (/[’']\s*ਚ/u.test(String(sourceText || ""))) {
+      value = value.replace(/'cha\b/gi, "'ch");
+    }
+  }
+
+  return value;
+};
