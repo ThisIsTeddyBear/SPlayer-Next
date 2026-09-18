@@ -7,10 +7,14 @@ import { simplifyGoogleRomanization } from "@shared/utils/lyrics";
 import { ipcMain } from "./trusted";
 
 const GOOGLE_TRANSLATE_ENDPOINT = "https://translate.googleapis.com/translate_a/single";
+const CLIENT_PARAM = "dict-chrome-ex";
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const MAX_LINE_LENGTH = 1_500;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1_000;
 const FETCH_TIMEOUT_MS = 6_000;
+const LINE_REQUEST_DELAY_MS = process.env.NODE_ENV === "test" ? 0 : 150;
 
 class GoogleTranslateResponseError extends Error {
   constructor(
@@ -30,11 +34,16 @@ const isPurelyLatinScript = (text: string): boolean =>
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** 使用 am-lyrics 相同的超时控制调用 Google Translate。 */
+/** 使用带有浏览器标识和超时控制的 fetch 调用 Google Translate。 */
 const fetchWithTimeout = (url: string): Promise<Response> => {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timeoutId));
+  return fetch(url, {
+    signal: controller.signal,
+    headers: {
+      "User-Agent": USER_AGENT,
+    },
+  }).finally(() => clearTimeout(timeoutId));
 };
 
 /** 读取 Google Translate 响应，并将 HTML 错误页与 JSON 负载区分开。 */
@@ -67,55 +76,26 @@ const readGoogleTranslateResponse = async (response: Response): Promise<unknown[
   }
 };
 
-const BATCH_SIZE = 15;
-const BATCH_DELIMITER = " | ";
-const BATCH_DELIMITER_REGEX = /\s*\|\s*/;
-
-const romanizeText = async (text: string): Promise<string | undefined> => {
+const romanizeLine = async (text: string): Promise<string | undefined> => {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
     try {
-      const url = `${GOOGLE_TRANSLATE_ENDPOINT}?client=gtx&sl=auto&tl=en&dt=rm&q=${encodeURIComponent(text)}`;
+      const url = `${GOOGLE_TRANSLATE_ENDPOINT}?client=${CLIENT_PARAM}&sl=auto&tl=en&dt=rm&q=${encodeURIComponent(text)}`;
       const response = await fetchWithTimeout(url);
       const data = await readGoogleTranslateResponse(response);
       const reading = data?.[0]?.[0]?.[3];
-      return typeof reading === "string" && reading.trim() ? reading.trim() : undefined;
+      return typeof reading === "string" && reading.trim()
+        ? simplifyGoogleRomanization(reading.trim(), text)
+        : undefined;
     } catch (error) {
       if (error instanceof GoogleTranslateResponseError && !error.retryable) throw error;
       if (attempt + 1 === MAX_RETRIES) throw error;
-      await delay(RETRY_DELAY_MS * 2 ** attempt);
+      const is429 = error instanceof GoogleTranslateResponseError && error.message.includes("429");
+      const backoffMs = is429 ? 2_000 * (attempt + 1) : RETRY_DELAY_MS * 2 ** attempt;
+      await delay(backoffMs);
     }
   }
 
   return undefined;
-};
-
-const romanizeLine = async (text: string): Promise<string | undefined> => {
-  const reading = await romanizeText(text);
-  return reading ? simplifyGoogleRomanization(reading, text) : undefined;
-};
-
-/**
- * 批量将多行歌词拼合并请求罗马音
- * @param lines - 待转换的行数组
- * @returns 成功返回映射字典；解析数量不匹配时返回 null 以便触发逐行降级
- */
-const romanizeBatch = async (lines: string[]): Promise<Record<string, string> | null> => {
-  if (lines.length === 0) return {};
-  if (lines.length === 1) {
-    const reading = await romanizeLine(lines[0]);
-    return reading ? { [lines[0]]: reading } : {};
-  }
-  const queryText = lines.map((line) => line.replace(/\|/g, " ")).join(BATCH_DELIMITER);
-  const reading = await romanizeText(queryText);
-  if (!reading) return null;
-  const parts = reading.split(BATCH_DELIMITER_REGEX);
-  if (parts.length !== lines.length) return null;
-  const map: Record<string, string> = {};
-  for (let i = 0; i < lines.length; i++) {
-    const part = parts[i]?.trim();
-    if (part) map[lines[i]] = simplifyGoogleRomanization(part, lines[i]);
-  }
-  return map;
 };
 
 /**
@@ -147,27 +127,15 @@ export const romanizeLines = async (input: unknown): Promise<Record<string, stri
     );
   }
 
-  let index = 0;
-  while (index < pending.length) {
-    const batch = pending.slice(index, index + BATCH_SIZE);
+  for (const [index, line] of pending.entries()) {
+    if (index > 0 && LINE_REQUEST_DELAY_MS > 0) {
+      await delay(LINE_REQUEST_DELAY_MS);
+    }
     try {
-      const batchResult = await romanizeBatch(batch);
-      if (batchResult) {
-        for (const [line, reading] of Object.entries(batchResult)) {
-          result[line] = reading;
-          generated[line] = reading;
-        }
-        index += batch.length;
-      } else {
-        // 分割数量不匹配时降级为单行处理
-        for (const line of batch) {
-          const reading = await romanizeLine(line);
-          if (reading) {
-            result[line] = reading;
-            generated[line] = reading;
-          }
-          index += 1;
-        }
+      const reading = await romanizeLine(line);
+      if (reading) {
+        result[line] = reading;
+        generated[line] = reading;
       }
     } catch (error) {
       systemLog.warn(
