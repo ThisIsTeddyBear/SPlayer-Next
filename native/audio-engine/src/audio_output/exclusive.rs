@@ -10,8 +10,9 @@ use windows::Win32::{
     Foundation::{CloseHandle, HANDLE, WAIT_EVENT, WAIT_OBJECT_0, WAIT_TIMEOUT},
     Media::Audio::{
         eConsole, eRender, IAudioClient, IAudioRenderClient, IMMDevice, IMMDeviceEnumerator,
-        MMDeviceEnumerator, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-        WAVEFORMATEX, WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0,
+        MMDeviceEnumerator, AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED, AUDCLNT_E_UNSUPPORTED_FORMAT,
+        AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, WAVEFORMATEX,
+        WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0,
     },
     System::{
         Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED},
@@ -28,12 +29,11 @@ const WAVE_FORMAT_EXTENSIBLE: u16 = 0xfffe;
 const SPEAKER_FRONT_LEFT: u32 = 0x1;
 const SPEAKER_FRONT_RIGHT: u32 = 0x2;
 const SPEAKER_FRONT_CENTER: u32 = 0x4;
-const KSDATAFORMAT_SUBTYPE_PCM: GUID =
-    GUID::from_u128(0x00000001_0000_0010_8000_00aa00389b71);
+const KSDATAFORMAT_SUBTYPE_PCM: GUID = GUID::from_u128(0x00000001_0000_0010_8000_00aa00389b71);
 const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: GUID =
     GUID::from_u128(0x00000003_0000_0010_8000_00aa00389b71);
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ExclusiveSampleFormat {
     Pcm16,
     Pcm24In32,
@@ -86,6 +86,7 @@ pub struct ExclusiveConfig {
     sample_rate: u32,
     channels: u16,
     sample_format: ExclusiveSampleFormat,
+    legacy_format: bool,
     bit_perfect: bool,
 }
 
@@ -118,9 +119,15 @@ impl ExclusiveConfig {
                 source_channels,
                 source_bits_per_sample,
                 true,
-            ) {
+            )? {
                 return Ok(config);
             }
+            bail!(
+                "Exclusive audio cannot preserve this track's native format ({} Hz, {} channels, {}-bit PCM) on the selected device",
+                sample_rate,
+                source_channels,
+                source_bits_per_sample
+            );
         }
 
         // 保留独占输出，但在设备不接受源格式时协商可用格式并交给解码器重采样。
@@ -132,13 +139,13 @@ impl ExclusiveConfig {
                 source_channels,
                 source_bits_per_sample,
                 false,
-            ) {
+            )? {
                 return Ok(config);
             }
         }
 
         bail!(
-            "The selected output device does not support exclusive playback for {} Hz audio. Close other applications using audio or select a compatible device.",
+            "The selected output device does not support exclusive playback for {} Hz audio.",
             sample_rate
         )
     }
@@ -164,13 +171,17 @@ impl ExclusiveConfig {
         let block_align = self.channels * (bits_per_sample / 8);
         WAVEFORMATEXTENSIBLE {
             Format: WAVEFORMATEX {
-                wFormatTag: WAVE_FORMAT_EXTENSIBLE,
+                wFormatTag: if self.legacy_format {
+                    1
+                } else {
+                    WAVE_FORMAT_EXTENSIBLE
+                },
                 nChannels: self.channels,
                 nSamplesPerSec: self.sample_rate,
                 nAvgBytesPerSec: self.sample_rate * u32::from(block_align),
                 nBlockAlign: block_align,
                 wBitsPerSample: bits_per_sample,
-                cbSize: 22,
+                cbSize: if self.legacy_format { 0 } else { 22 },
             },
             Samples: WAVEFORMATEXTENSIBLE_0 {
                 wValidBitsPerSample: self.sample_format.valid_bits_per_sample(),
@@ -188,31 +199,46 @@ fn find_supported_config(
     source_channels: u16,
     source_bits_per_sample: u32,
     bit_perfect: bool,
-) -> Option<ExclusiveConfig> {
+) -> Result<Option<ExclusiveConfig>> {
     for channels in candidate_channels(source_channels, bit_perfect) {
         for sample_format in candidate_formats(source_bits_per_sample, bit_perfect) {
-            let config = ExclusiveConfig {
+            let mut config = ExclusiveConfig {
                 device_id: device_id.map(str::to_owned),
                 sample_rate,
                 channels,
                 sample_format: *sample_format,
+                legacy_format: false,
                 bit_perfect,
             };
-            let wave_format = config.wave_format();
-            let supported = unsafe {
-                client.IsFormatSupported(
-                    AUDCLNT_SHAREMODE_EXCLUSIVE,
-                    &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
-                    None,
-                )
-            }
-            .is_ok();
-            if supported {
-                return Some(config);
+            // 部分驱动只接受传统 PCM 描述，不能把一次格式拒绝当成设备不支持。
+            let supports_legacy = channels <= 2
+                && sample_format.sub_format() == KSDATAFORMAT_SUBTYPE_PCM
+                && sample_format.bits_per_sample() == sample_format.valid_bits_per_sample();
+            for legacy_format in [false, true] {
+                if legacy_format && !supports_legacy {
+                    continue;
+                }
+                config.legacy_format = legacy_format;
+                let wave_format = config.wave_format();
+                let result = unsafe {
+                    client.IsFormatSupported(
+                        AUDCLNT_SHAREMODE_EXCLUSIVE,
+                        &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
+                        None,
+                    )
+                };
+                if result == windows::Win32::Foundation::S_OK {
+                    return Ok(Some(config));
+                }
+                if result != AUDCLNT_E_UNSUPPORTED_FORMAT {
+                    result
+                        .ok()
+                        .context("Failed to query exclusive audio format support")?;
+                }
             }
         }
     }
-    None
+    Ok(None)
 }
 
 fn candidate_sample_rates(source_rate: u32) -> Vec<u32> {
@@ -230,17 +256,12 @@ fn candidate_sample_rates(source_rate: u32) -> Vec<u32> {
             .into_iter()
             .filter(|rate| *rate < source_rate),
     );
-    rates.extend(
-        other_family
-            .into_iter()
-            .filter(|rate| *rate < source_rate),
-    );
-    let remaining =
-        preferred_family
-            .into_iter()
-            .chain(other_family)
-            .filter(|rate| !rates.contains(rate))
-            .collect::<Vec<_>>();
+    rates.extend(other_family.into_iter().filter(|rate| *rate < source_rate));
+    let remaining = preferred_family
+        .into_iter()
+        .chain(other_family)
+        .filter(|rate| !rates.contains(rate))
+        .collect::<Vec<_>>();
     rates.extend(remaining);
     rates
 }
@@ -271,10 +292,17 @@ fn candidate_formats(
 ) -> &'static [ExclusiveSampleFormat] {
     if bit_perfect {
         return match source_bits_per_sample {
-            16 => &[ExclusiveSampleFormat::Pcm16],
+            // 整数零填充可以保留所有源位，HDMI 驱动可能只接受更宽的容器。
+            16 => &[
+                ExclusiveSampleFormat::Pcm16,
+                ExclusiveSampleFormat::Pcm24In32,
+                ExclusiveSampleFormat::Pcm24Packed,
+                ExclusiveSampleFormat::Pcm32,
+            ],
             24 => &[
                 ExclusiveSampleFormat::Pcm24In32,
                 ExclusiveSampleFormat::Pcm24Packed,
+                ExclusiveSampleFormat::Pcm32,
             ],
             _ => unreachable!("bit-perfect source format was validated before negotiation"),
         };
@@ -395,7 +423,8 @@ impl ExclusiveStream {
                     ready_tx.clone(),
                 );
                 if let Err(error) = result {
-                    if ready_tx.send(Err(error.to_string())).is_err() {
+                    tracing::warn!(error = %format!("{error:#}"), "WASAPI 独占输出失败");
+                    if ready_tx.send(Err(format!("{error:#}"))).is_err() {
                         on_failure();
                     }
                 }
@@ -424,12 +453,14 @@ impl ExclusiveStream {
 
     pub fn play(&self) -> Result<()> {
         self.control.playing.store(true, Ordering::Release);
-        unsafe { SetEvent(self.control.control_event) }.context("Failed to resume exclusive audio output")
+        unsafe { SetEvent(self.control.control_event) }
+            .context("Failed to resume exclusive audio output")
     }
 
     pub fn pause(&self) -> Result<()> {
         self.control.playing.store(false, Ordering::Release);
-        unsafe { SetEvent(self.control.control_event) }.context("Failed to pause exclusive audio output")
+        unsafe { SetEvent(self.control.control_event) }
+            .context("Failed to pause exclusive audio output")
     }
 
     pub fn stop(&self) {
@@ -458,7 +489,7 @@ fn run_stream(
     let _com = ComApartmentGuard::init()?;
     priority::boost_current_audio_thread("wasapi-exclusive-output");
     let device = open_device(config.device_id.as_deref())?;
-    let client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None) }
+    let mut client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None) }
         .context("Failed to activate the exclusive audio device")?;
     let wave_format = config.wave_format();
     let mut period_hns = 0;
@@ -467,7 +498,7 @@ fn run_stream(
     if period_hns <= 0 {
         bail!("The exclusive audio device returned an invalid period");
     }
-    unsafe {
+    let mut initialized = unsafe {
         client.Initialize(
             AUDCLNT_SHAREMODE_EXCLUSIVE,
             AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
@@ -476,12 +507,42 @@ fn run_stream(
             &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
             None,
         )
+    };
+    if initialized
+        .as_ref()
+        .is_err_and(|error| error.code() == AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED)
+    {
+        let frames = unsafe { client.GetBufferSize() }
+            .context("Failed to read the aligned exclusive audio buffer size")?;
+        period_hns = ((10_000_000_u64 * u64::from(frames) + u64::from(config.sample_rate) / 2)
+            / u64::from(config.sample_rate)) as i64;
+        // 初始化失败后的客户端不能复用，必须先释放再按驱动返回的帧数重建。
+        drop(client);
+        client = unsafe { device.Activate(CLSCTX_ALL, None) }
+            .context("Failed to reactivate the exclusive audio device")?;
+        initialized = unsafe {
+            client.Initialize(
+                AUDCLNT_SHAREMODE_EXCLUSIVE,
+                AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+                period_hns,
+                period_hns,
+                &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
+                None,
+            )
+        };
     }
-    .context("The device rejected exclusive audio output")?;
+    initialized.map_err(|error| {
+        anyhow::anyhow!(
+            "The device rejected exclusive audio output (HRESULT 0x{:08X}): {}",
+            error.code().0 as u32,
+            error
+        )
+    })?;
 
-    let buffer_frames = unsafe { client.GetBufferSize() }.context("Failed to read the exclusive audio buffer")?;
-    let render_client: IAudioRenderClient =
-        unsafe { client.GetService() }.context("Failed to get the exclusive audio render interface")?;
+    let buffer_frames =
+        unsafe { client.GetBufferSize() }.context("Failed to read the exclusive audio buffer")?;
+    let render_client: IAudioRenderClient = unsafe { client.GetService() }
+        .context("Failed to get the exclusive audio render interface")?;
     let audio_event = unsafe { CreateEventW(None, false, false, PCWSTR::null()) }
         .context("Failed to create the exclusive audio event")?;
     if let Err(error) = unsafe { client.SetEventHandle(audio_event) } {
@@ -491,9 +552,9 @@ fn run_stream(
         return Err(error).context("Failed to set the exclusive audio event");
     }
 
-    ready_tx
-        .send(Ok(()))
-        .map_err(|_| anyhow::anyhow!("The exclusive audio initialization result receiver was closed"))?;
+    ready_tx.send(Ok(())).map_err(|_| {
+        anyhow::anyhow!("The exclusive audio initialization result receiver was closed")
+    })?;
     run_loop(
         &client,
         &render_client,
@@ -533,11 +594,12 @@ fn run_loop(
 
     let _audio_event = AudioEvent(audio_event);
     let mut running = false;
-    let handles = [audio_event, control.control_event];
+    // 控制事件优先，避免持续就绪的设备事件阻塞停止和流释放。
+    let handles = [control.control_event, audio_event];
 
     loop {
         let wait = unsafe { WaitForMultipleObjects(&handles, false, INFINITE) };
-        if wait == WAIT_EVENT(WAIT_OBJECT_0.0 + 1) {
+        if wait == WAIT_OBJECT_0 {
             if control.stopped.load(Ordering::Acquire) || stopped.load(Ordering::Acquire) {
                 if running {
                     stop_client(client)?;
@@ -561,7 +623,7 @@ fn run_loop(
             }
             continue;
         }
-        if wait == WAIT_OBJECT_0 {
+        if wait == WAIT_EVENT(WAIT_OBJECT_0.0 + 1) {
             if running {
                 write_buffer(
                     render_client,
@@ -594,7 +656,8 @@ fn write_buffer(
     source: &mut DecoderSource,
     volume: &AtomicU32,
 ) -> Result<()> {
-    let buffer = unsafe { render_client.GetBuffer(frames) }.context("Failed to get the exclusive audio buffer")?;
+    let buffer = unsafe { render_client.GetBuffer(frames) }
+        .context("Failed to get the exclusive audio buffer")?;
     let gain = f32::from_bits(volume.load(Ordering::Relaxed));
     let samples = match sample_format {
         ExclusiveSampleFormat::Pcm16 => {
@@ -660,7 +723,8 @@ fn write_buffer(
         }
     };
     debug_assert_eq!(samples, frames as usize * channels as usize);
-    unsafe { render_client.ReleaseBuffer(frames, 0) }.context("Failed to release the exclusive audio buffer")
+    unsafe { render_client.ReleaseBuffer(frames, 0) }
+        .context("Failed to release the exclusive audio buffer")
 }
 
 fn to_i16(value: f32) -> i16 {
@@ -687,7 +751,74 @@ fn to_i32(value: f32) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::candidate_sample_rates;
+    use super::*;
+
+    #[test]
+    fn bit_perfect_candidates_allow_wider_integer_containers_only() {
+        for bits in [16, 24] {
+            let formats = candidate_formats(bits, true);
+            assert!(formats.contains(&ExclusiveSampleFormat::Pcm32));
+            assert!(formats.contains(&ExclusiveSampleFormat::Pcm24In32));
+            assert!(formats.contains(&ExclusiveSampleFormat::Pcm24Packed));
+            for format in formats {
+                assert_eq!(format.sub_format(), KSDATAFORMAT_SUBTYPE_PCM);
+                assert!(u32::from(format.valid_bits_per_sample()) >= bits);
+            }
+        }
+    }
+
+    #[test]
+    fn bit_perfect_channels_are_never_remixed() {
+        for channels in [1, 2, 6, 8] {
+            assert_eq!(candidate_channels(channels, true), vec![channels]);
+        }
+    }
+
+    #[test]
+    fn legacy_pcm_descriptor_preserves_the_audio_format() {
+        let mut config = ExclusiveConfig {
+            device_id: None,
+            sample_rate: 192_000,
+            channels: 2,
+            sample_format: ExclusiveSampleFormat::Pcm24Packed,
+            legacy_format: false,
+            bit_perfect: true,
+        };
+        let extended = config.wave_format();
+        config.legacy_format = true;
+        let legacy = config.wave_format();
+        // Windows 格式结构为紧凑布局，断言前先复制字段以避免未对齐引用。
+        assert_eq!({ extended.Format.wFormatTag }, WAVE_FORMAT_EXTENSIBLE);
+        assert_eq!({ extended.Format.cbSize }, 22);
+        assert_eq!({ legacy.Format.wFormatTag }, 1);
+        assert_eq!({ legacy.Format.cbSize }, 0);
+        assert_eq!({ legacy.Format.nSamplesPerSec }, 192_000);
+        assert_eq!({ legacy.Format.nChannels }, 2);
+        assert_eq!({ legacy.Format.wBitsPerSample }, 24);
+        assert_eq!({ legacy.Format.nBlockAlign }, 6);
+        assert_eq!({ legacy.Format.nAvgBytesPerSec }, 1_152_000);
+    }
+
+    #[test]
+    fn every_16_bit_sample_survives_integer_container_widening() {
+        for value in i16::MIN..=i16::MAX {
+            let sample = f32::from(value) / 32_768.0;
+            assert_eq!(to_i16(sample), value);
+            assert_eq!(to_i24(sample), i32::from(value) << 8);
+            assert_eq!(to_i24_in_i32(sample), i32::from(value) << 16);
+            assert_eq!(to_i32(sample), i32::from(value) << 16);
+        }
+    }
+
+    #[test]
+    fn preserves_24_bit_samples_in_packed_and_wide_containers() {
+        for value in [-8_388_608, -8_388_607, -65_537, -1, 0, 1, 65_537, 8_388_607] {
+            let sample = value as f32 / 8_388_608.0;
+            assert_eq!(to_i24(sample), value);
+            assert_eq!(to_i24_in_i32(sample), value << 8);
+            assert_eq!(to_i32(sample), value << 8);
+        }
+    }
 
     #[test]
     fn keeps_the_source_rate_before_resampling() {

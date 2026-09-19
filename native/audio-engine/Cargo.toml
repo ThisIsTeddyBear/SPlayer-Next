@@ -54,8 +54,11 @@ workspace = true
 features = [
   "Win32_Foundation",
   "Win32_Media_Audio",
+  "Win32_Security",
   "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
   "Win32_System_Threading",
+  "Win32_System_Variant",
 ]
 
 [build-dependencies]

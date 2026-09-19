@@ -207,9 +207,18 @@ impl InnerPlayer {
         let reader = DecoderSource::new(Arc::clone(&shared), Arc::clone(&self.fft));
         let was_paused = self.state == PlayerState::Paused;
         let volume = self.target_volume;
-        let playback = {
-            let output = self.ensure_output(None)?;
-            Arc::new(PlaybackHandle::attach(output, reader, volume, was_paused)?)
+        let playback = match self
+            .ensure_output(None)
+            .and_then(|output| PlaybackHandle::attach(output, reader, volume, was_paused))
+        {
+            Ok(playback) => Arc::new(playback),
+            Err(error) => {
+                // 输出创建失败后必须唤醒解码线程，否则它会永久阻塞在已满的缓冲区上。
+                shared.stop();
+                self.seek_base = position_secs;
+                self.enter_paused_for_recovery();
+                return Err(error);
+            }
         };
 
         self.playback = Some(playback);
@@ -263,9 +272,19 @@ impl InnerPlayer {
 
         let reader = DecoderSource::new(Arc::clone(&shared), Arc::clone(&self.fft));
         let volume = self.target_volume;
-        let playback = {
-            let output = self.ensure_output(None)?;
-            Arc::new(PlaybackHandle::attach(output, reader, volume, !auto_play)?)
+        let playback = match self
+            .ensure_output(None)
+            .and_then(|output| PlaybackHandle::attach(output, reader, volume, !auto_play))
+        {
+            Ok(playback) => Arc::new(playback),
+            Err(error) => {
+                shared.stop();
+                if let Some(cancel) = self.pending_load_handle.take() {
+                    cancel.cancel();
+                }
+                self.enter_paused_for_recovery();
+                return Err(error);
+            }
         };
 
         self.playback = Some(playback);
