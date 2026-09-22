@@ -31,6 +31,7 @@ import { appName, getSongCacheDir } from "@main/utils/config";
 import * as songCache from "@main/services/songCache";
 import { parseArtists, parseAlbum, formatArtists, artistNames } from "@main/utils/metadata";
 import { playerLog } from "@main/utils/logger";
+import { releasePowerBlocker, updatePowerBlocker } from "@main/utils/powerBlocker";
 import { ErrorCode } from "@shared/types/errors";
 import type {
   Artist,
@@ -94,6 +95,7 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
     switch (event.type) {
       case "stateChanged": {
         const state = (event.state ?? "idle") as PlayerState;
+        updatePowerBlocker(state === "playing" || state === "loading");
         getThumbar()?.updateThumbar(state === "playing");
         setTrayPlayState(state === "playing" ? "playing" : "paused");
         if (state === "playing") {
@@ -727,5 +729,8 @@ export const registerPlayerIpc = (): void => {
     wsBroadcast(stoppedEvent);
   };
   powerMonitor.on("resume", resumeHandler);
-  app.on("before-quit", stopDeviceMonitoring);
+  app.on("before-quit", () => {
+    stopDeviceMonitoring();
+    releasePowerBlocker();
+  });
 };
