@@ -82,10 +82,12 @@ const nextFrame = (): Promise<void> =>
 const processedLyrics = computed(() => {
   if (!props.lyricLines) return [];
   return props.lyricLines.map((line) => {
+    const hasWordRoman = line.words?.some((word) => Boolean(word.romanWord?.trim())) ?? false;
+    const showWordRomanForLine = props.showWordRomanization && hasWordRoman;
     const newLine = {
       ...line,
       translatedLyric: props.showTranslation ? line.translatedLyric : "",
-      romanLyric: props.showLineRomanization ? line.romanLyric : "",
+      romanLyric: props.showLineRomanization && !showWordRomanForLine ? line.romanLyric : "",
     };
     if (line.words) {
       newLine.words = line.words.map((word) => {
