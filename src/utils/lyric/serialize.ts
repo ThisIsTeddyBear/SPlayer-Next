@@ -34,11 +34,7 @@ const formatTtmlTime = (ms: number): string => {
 };
 
 /** 行主文本 */
-const lineMainText = (line: LyricLine): string =>
-  line.words
-    .map(getWordText)
-    .join("")
-    .trim();
+const lineMainText = (line: LyricLine): string => line.words.map(getWordText).join("").trim();
 
 /** 逐行 LRC；双语时翻译行紧随主歌词、共用时间戳 */
 const toLrc = (lines: LyricLine[]): string => {
@@ -88,10 +84,7 @@ const roleSpan = (role: string, text: string): string =>
 
 /** 背景行嵌套 span */
 const bgSpan = (bg: LyricLine): string =>
-  `<span ttm:role="x-bg">${wordSpans(bg)}${roleSpan(
-    "x-translation",
-    bg.translatedLyric,
-  )}${roleSpan("x-roman", bg.romanLyric)}</span>`;
+  `<span ttm:role="x-bg">${wordSpans(bg)}${roleSpan("x-translation", bg.translatedLyric)}${roleSpan("x-roman", bg.romanLyric)}</span>`;
 
 /** 一行 <p>：主词 + 翻译 + 音译 + 背景行；对唱标 agent */
 const paragraph = (main: LyricLine, bgs: LyricLine[]): string => {
