@@ -88,7 +88,10 @@ const roleSpan = (role: string, text: string): string =>
 
 /** 背景行嵌套 span */
 const bgSpan = (bg: LyricLine): string =>
-  `<span ttm:role="x-bg">${wordSpans(bg)}${roleSpan("x-translation", bg.translatedLyric)}${roleSpan("x-roman", bg.romanLyric)}</span>`;
+  `<span ttm:role="x-bg">${wordSpans(bg)}${roleSpan(
+    "x-translation",
+    bg.translatedLyric,
+  )}${roleSpan("x-roman", bg.romanLyric)}</span>`;
 
 /** 一行 <p>：主词 + 翻译 + 音译 + 背景行；对唱标 agent */
 const paragraph = (main: LyricLine, bgs: LyricLine[]): string => {

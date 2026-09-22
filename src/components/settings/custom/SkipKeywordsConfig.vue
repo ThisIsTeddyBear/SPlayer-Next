@@ -50,8 +50,8 @@ const save = (): void => {
   </SButton>
   <SDialog
     v-model:open="open"
-    :title="t("settings.skipKeywordsSongs.label")"
-    :description="t("settings.skipKeywordsRules.hint")"
+    :title="t('settings.skipKeywordsSongs.label')"
+    :description="t('settings.skipKeywordsRules.hint')"
     width="540px"
   >
     <div class="flex flex-col gap-4 pt-1">
@@ -68,7 +68,7 @@ const save = (): void => {
         <div class="flex gap-2">
           <SInput
             v-model="newKeyword"
-            :placeholder="t("settings.skipKeywordsRules.placeholder")"
+            :placeholder="t('settings.skipKeywordsRules.placeholder')"
             class="flex-1"
             @keydown.enter="addKeyword"
           />

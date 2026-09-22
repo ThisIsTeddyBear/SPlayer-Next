@@ -7,14 +7,22 @@ import { shouldChunkEmphasize, shouldEmphasize } from "./emphasize";
 import type { LyricWord } from "@shared/types/lyrics";
 
 describe("splitGraphemes", () => {
-  it("正确拆分印地语/天城文（Devanagari），变音符号（matra）与辅音保持完整", () => {
-    expect(splitGraphemes("जाएगा")).toEqual(["जा", "ए", "गा"]);
-    expect(splitGraphemes("टूटा")).toEqual(["टू", "टा"]);
-    expect(splitGraphemes("है")).toEqual(["है"]);
-    expect(splitGraphemes("मुसाफ़िर")).toEqual(["मु", "सा", "फ़ि", "र"]);
-    expect(splitGraphemes("नमस्ते")).toEqual(["न", "म", "स्ते"]);
-    expect(splitGraphemes("प्यार")).toEqual(["प्या", "र"]);
-  });
+  it(
+    "正确拆分印地语/天城文（Devanagari），变音符号（matra）与辅音保持完整",
+    () => {
+      expect(splitGraphemes("जाएगा")).toEqual(["जा", "ए", "गा"]);
+      expect(splitGraphemes("टूटा")).toEqual(["टू", "टा"]);
+      expect(splitGraphemes("है")).toEqual(["है"]);
+      expect(splitGraphemes("मुसाफ़िर")).toEqual([
+        "मु",
+        "सा",
+        "फ़ि",
+        "र",
+      ]);
+      expect(splitGraphemes("नमस्ते")).toEqual(["न", "म", "स्ते"]);
+      expect(splitGraphemes("प्यार")).toEqual(["प्या", "र"]);
+    },
+  );
 
   it("正确拆分旁遮普语/果鲁穆奇文（Gurmukhi）", () => {
     expect(splitGraphemes("ਆਜਾ")).toEqual(["ਆ", "ਜਾ"]);
@@ -93,4 +101,3 @@ describe("shouldEmphasize & shouldChunkEmphasize", () => {
     expect(shouldChunkEmphasize(chunkShort)).toBe(false);
   });
 });
-
