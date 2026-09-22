@@ -30,7 +30,7 @@ import { useFavorite } from "@/composables/useFavorite";
 import { extractColorFromUrl } from "@/utils/color";
 import { handleError, isSkippableError } from "@/utils/errors";
 import { ErrorCode } from "@shared/types/errors";
-import { shouldSkipDjTrack } from "@/utils/preset/djMode";
+import { shouldSkipKeywordTrack } from "@/utils/preset/skipKeywords";
 import { toast } from "@/composables/useToast";
 import i18n from "@/i18n";
 
@@ -249,9 +249,12 @@ const loadTrack = async (
   autoPlay = true,
 ): Promise<void> => {
   if (!track) return;
-  // Fuck DJ Mode
+  // 跳过指定关键词歌曲
   const settings = useSettingsStore();
-  if (settings.preset.fuckDjMode && shouldSkipDjTrack(track)) {
+  if (
+    settings.preset.skipKeywordsSongs &&
+    shouldSkipKeywordTrack(track, settings.preset.skipTrackKeywords)
+  ) {
     await nextTrack("skip", autoPlay);
     return;
   }

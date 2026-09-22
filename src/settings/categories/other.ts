@@ -1,4 +1,5 @@
 import type { SettingCategory } from "@/types/settings-schema";
+import SkipKeywordsConfig from "@/components/settings/custom/SkipKeywordsConfig.vue";
 import IconLucideSettings from "~icons/lucide/settings";
 
 const otherCategory: SettingCategory = {
@@ -9,10 +10,9 @@ const otherCategory: SettingCategory = {
       id: "preset",
       items: [
         {
-          key: "fuckDjMode",
-          type: "switch",
-          binding: { store: "settings", path: "preset.fuckDjMode" },
-          defaultValue: false,
+          key: "skipKeywordsSongs",
+          type: "custom",
+          component: SkipKeywordsConfig,
         },
         {
           key: "uncensorProfanity",

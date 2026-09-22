@@ -188,8 +188,10 @@ export interface AppearanceSettings {
 }
 
 export interface PresetSettings {
-  /** Fuck DJ Mode */
-  fuckDjMode: boolean;
+  /** 跳过指定关键词歌曲 */
+  skipKeywordsSongs: boolean;
+  /** 跳过关键词列表 */
+  skipTrackKeywords: string[];
   /** Fuck ** Mode */
   uncensorProfanity: boolean;
   hideVipTag: boolean;

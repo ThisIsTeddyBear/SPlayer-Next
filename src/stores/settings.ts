@@ -19,6 +19,7 @@ import type { SystemConfig, LocaleCode } from "@shared/types/settings";
 import { ALL_PLATFORMS } from "@shared/types/platform";
 import { defaultSystemConfig } from "@shared/defaults/settings";
 import { setByPath } from "@shared/utils/path";
+import { DEFAULT_SKIP_TRACK_KEYWORDS } from "@/utils/preset/skipKeywords";
 
 /**
  */
@@ -139,7 +140,8 @@ export const useSettingsStore = defineStore(
     });
 
     const preset = reactive<PresetSettings>({
-      fuckDjMode: false,
+      skipKeywordsSongs: false,
+      skipTrackKeywords: [...DEFAULT_SKIP_TRACK_KEYWORDS],
       uncensorProfanity: false,
       hideVipTag: false,
       hideQualityTag: false,
@@ -325,13 +327,21 @@ export const useSettingsStore = defineStore(
       storage: localStorage,
       omit: ["system"],
       afterHydrate: ({ store }) => {
-        const { lyric, appearance } = store as unknown as {
+        const { lyric, appearance, preset } = store as unknown as {
           lyric: LyricSettings;
           appearance: AppearanceSettings;
+          preset: PresetSettings & { fuckDjMode?: boolean };
         };
         if (typeof lyric.detectBackgroundLyrics !== "boolean") {
           lyric.detectBackgroundLyrics = true;
         }
+        if (typeof preset.skipKeywordsSongs !== "boolean") {
+          preset.skipKeywordsSongs = preset.fuckDjMode ?? false;
+        }
+        if (!Array.isArray(preset.skipTrackKeywords)) {
+          preset.skipTrackKeywords = [...DEFAULT_SKIP_TRACK_KEYWORDS];
+        }
+        delete preset.fuckDjMode;
         lyric.lyricSourceOrder = reconcileOrder(lyric.lyricSourceOrder, ALL_PLATFORMS);
         lyric.lyricFormatOrder = reconcileOrder(lyric.lyricFormatOrder, DEFAULT_LYRIC_FORMAT_ORDER);
         appearance.sidebarNavGroups = reconcileNavGroups(appearance.sidebarNavGroups ?? []);
