@@ -107,13 +107,7 @@ impl ExclusiveConfig {
         let device = open_device(device_id)?;
         let client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None) }
             .context("Failed to activate the exclusive audio device")?;
-        if bit_perfect && !matches!(source_bits_per_sample, 16 | 24) {
-            bail!(
-                "Bit-perfect playback supports 16-bit and 24-bit integer PCM sources only; this track reports {source_bits_per_sample}-bit audio"
-            );
-        }
-
-        if bit_perfect {
+        if bit_perfect && matches!(source_bits_per_sample, 16 | 24) {
             if let Some(config) = find_supported_config(
                 &client,
                 device_id,
@@ -124,15 +118,25 @@ impl ExclusiveConfig {
             )? {
                 return Ok(config);
             }
-            bail!(
-                "Exclusive audio cannot preserve this track's native format ({} Hz, {} channels, {}-bit PCM) on the selected device",
+
+            tracing::warn!(
                 sample_rate,
                 source_channels,
-                source_bits_per_sample
+                source_bits_per_sample,
+                "Bit-perfect exclusive output is unsupported; falling back to converted exclusive output"
+            );
+        } else if bit_perfect {
+            tracing::warn!(
+                sample_rate,
+                source_channels,
+                source_bits_per_sample,
+                "Bit-perfect exclusive output is unavailable for this source format; falling back to converted exclusive output"
             );
         }
 
-        // 保留独占输出，但在设备不接受源格式时协商可用格式并交给解码器重采样。
+        // Keep exclusive output active even when the device cannot accept the source format.
+        // The selected rate/channel layout is propagated to the decoder, whose playback
+        // resampler converts the decoded PCM before it reaches this WASAPI stream.
         for output_rate in candidate_sample_rates(sample_rate) {
             if let Some(config) = find_supported_config(
                 &client,
