@@ -253,7 +253,10 @@ export interface WindowStates {
   taskbarLyric: TaskbarLyricWindowState;
 }
 
-export type UpdateChannel = "stable" | "beta" | "alpha" | "nightly";
+/** 应用更新通道候选值，同时作为运行时校验名单 */
+export const UPDATE_CHANNELS = ["stable", "beta", "alpha", "nightly"] as const;
+
+export type UpdateChannel = (typeof UPDATE_CHANNELS)[number];
 
 export interface AppUpdateSettings {
   autoCheck: boolean;
