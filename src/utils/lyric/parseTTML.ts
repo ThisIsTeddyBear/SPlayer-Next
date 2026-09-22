@@ -104,6 +104,14 @@ const stripParens = (text: string): string =>
 
 /**
  */
+const LANG_TAG_ALIASES: Record<string, string> = {
+  "zh-cn": "zh-hans-cn",
+  "zh-sg": "zh-hans-sg",
+  "zh-tw": "zh-hant-tw",
+  "zh-hk": "zh-hant-hk",
+  "zh-mo": "zh-hant-mo",
+};
+
 const normalizeLang = (lang: string | null | undefined): string =>
   (lang ?? "").toLowerCase().replace(/_/g, "-");
 
@@ -111,20 +119,42 @@ const normalizeLang = (lang: string | null | undefined): string =>
  */
 const pickLangIndex = (langs: (string | null)[], preferred: string): number => {
   if (langs.length === 0) return -1;
-  const want = normalizeLang(preferred);
-  if (!want) return 0;
-  const wantBase = want.split("-")[0];
-  let baseMatch = -1;
-  let hasTagged = false;
-  for (let i = 0; i < langs.length; i++) {
-    const lang = normalizeLang(langs[i]);
-    if (!lang) continue;
-    hasTagged = true;
-    if (lang === want) return i;
-    if (baseMatch === -1 && lang.split("-")[0] === wantBase) baseMatch = i;
+  const options = langs.map(normalizeLang);
+  if (options.every((lang) => !lang)) return 0;
+
+  const normalizedPreferred = normalizeLang(preferred);
+  if (!normalizedPreferred) return 0;
+  const candidates = [normalizedPreferred];
+  const subtags = normalizedPreferred.split("-");
+  for (let i = subtags.length - 1; i > 0; i--) {
+    candidates.push(subtags.slice(0, i).join("-"));
   }
-  if (baseMatch !== -1) return baseMatch;
-  return hasTagged ? -1 : 0;
+
+  for (const alias in LANG_TAG_ALIASES) {
+    const aliasIndex = candidates.indexOf(alias);
+    if (aliasIndex === -1) continue;
+    const mapped = LANG_TAG_ALIASES[alias];
+    if (candidates.includes(mapped)) continue;
+    let insertIndex = aliasIndex + 1;
+    candidates.splice(insertIndex, 0, mapped);
+    insertIndex++;
+    const mappedSubtags = mapped.split("-");
+    for (let i = mappedSubtags.length - 1; i > 0; i--) {
+      const partial = mappedSubtags.slice(0, i).join("-");
+      if (candidates.includes(partial)) break;
+      candidates.splice(insertIndex, 0, partial);
+      insertIndex++;
+    }
+  }
+
+  for (const candidate of candidates) {
+    const exactMatch = options.indexOf(candidate);
+    if (exactMatch !== -1) return exactMatch;
+    const prefixMatch = options.findIndex((lang) => lang.startsWith(`${candidate}-`));
+    if (prefixMatch !== -1) return prefixMatch;
+  }
+
+  return -1;
 };
 
 interface TransCandidate {
