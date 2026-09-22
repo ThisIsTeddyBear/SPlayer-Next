@@ -685,6 +685,15 @@ export const registerPlayerIpc = (): void => {
     } catch {}
   });
 
+  powerMonitor.on("suspend", () => {
+    try {
+      getPlayer().pause();
+      playerLog.info("系统进入睡眠，已暂停播放");
+    } catch (error) {
+      playerLog.warn("睡眠时暂停播放失败:", error);
+    }
+  });
+
   const resumeHandler = async (): Promise<void> => {
     const inst = getPlayer();
     const MAX_RETRIES = 3;

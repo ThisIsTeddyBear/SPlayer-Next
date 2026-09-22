@@ -69,7 +69,11 @@ const announceTrackTransition = (profile: DynamicBackgroundTransitionProfile): v
 
 /**
  */
-const skipOnFailure = async (myToken: number, getCurrentToken: () => number): Promise<void> => {
+const skipOnFailure = async (
+  myToken: number,
+  getCurrentToken: () => number,
+  autoPlay = true,
+): Promise<void> => {
   consecutiveFailures++;
   if (
     consecutiveFailures >= MAX_CONSECUTIVE_FAILURES ||
@@ -84,7 +88,7 @@ const skipOnFailure = async (myToken: number, getCurrentToken: () => number): Pr
     return;
   }
   setTimeout(() => {
-    if (myToken === getCurrentToken()) nextTrack();
+    if (myToken === getCurrentToken()) nextTrack("skip", autoPlay);
   }, SKIP_ON_ERROR_DELAY_MS);
 };
 
@@ -239,12 +243,16 @@ const loadTrackSourceWithFallback = async (
 
 /**
  */
-const loadTrack = async (track: Track | null, context?: PlaybackContext): Promise<void> => {
+const loadTrack = async (
+  track: Track | null,
+  context?: PlaybackContext,
+  autoPlay = true,
+): Promise<void> => {
   if (!track) return;
   // Fuck DJ Mode
   const settings = useSettingsStore();
   if (settings.preset.fuckDjMode && shouldSkipDjTrack(track)) {
-    await nextTrack();
+    await nextTrack("skip", autoPlay);
     return;
   }
   const myToken = ++trackToken;
@@ -260,7 +268,7 @@ const loadTrack = async (track: Track | null, context?: PlaybackContext): Promis
     const loaded = await loadTrackSourceWithFallback(
       track,
       context,
-      true,
+      autoPlay,
       () => myToken === trackToken,
       false,
       preloaded?.source,
@@ -296,7 +304,7 @@ const loadTrack = async (track: Track | null, context?: PlaybackContext): Promis
       }
     }
   }
-  if (shouldSkip) await skipOnFailure(myToken, () => trackToken);
+  if (shouldSkip) await skipOnFailure(myToken, () => trackToken, autoPlay);
 };
 
 /**
@@ -339,8 +347,9 @@ let sourceRecoveryTrackId: string | null = null;
 export const recoverFromSourceFailure = async (): Promise<void> => {
   const track = useMediaStore().track;
   if (!track) return;
+  const wasPlaying = useStatusStore().isPlaying;
   if (track.source === "local") {
-    await nextTrack();
+    await nextTrack("skip", wasPlaying);
     return;
   }
   if (sourceRecoveryTrackId !== track.id) {
@@ -349,14 +358,14 @@ export const recoverFromSourceFailure = async (): Promise<void> => {
   }
   if (sourceRecoveryCount >= 1) {
     sourceRecoveryCount = 0;
-    await nextTrack();
+    await nextTrack("skip", wasPlaying);
     return;
   }
   sourceRecoveryCount++;
-  const ok = await reloadCurrentTrack(true);
+  const ok = await reloadCurrentTrack();
   if (!ok) {
     sourceRecoveryCount = 0;
-    await nextTrack();
+    await nextTrack("skip", wasPlaying);
   }
 };
 
@@ -697,13 +706,14 @@ export const dislikeFmTrack = async (): Promise<void> => {
  */
 export const nextTrack = async (
   transitionProfile: DynamicBackgroundTransitionProfile = "skip",
+  autoPlay = true,
 ): Promise<void> => {
   const status = useStatusStore();
   if (status.fmMode) {
     const next = await fm.next();
     if (next) {
       announceTrackTransition(transitionProfile);
-      await loadTrack(next);
+      await loadTrack(next, undefined, autoPlay);
     }
     return;
   }
@@ -719,7 +729,7 @@ export const nextTrack = async (
     status.playIndex++;
   }
   announceTrackTransition(transitionProfile);
-  await loadTrack(status.currentTrack, status.currentPlaybackContext);
+  await loadTrack(status.currentTrack, status.currentPlaybackContext, autoPlay);
 };
 
 /**
