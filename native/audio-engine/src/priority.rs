@@ -5,8 +5,8 @@ mod imp {
     use windows::Win32::{
         Foundation::HANDLE,
         System::Threading::{
-            AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW, GetCurrentThread,
-            SetThreadPriority, THREAD_PRIORITY_HIGHEST,
+            AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW, AvSetMmThreadPriority,
+            GetCurrentThread, SetThreadPriority, AVRT_PRIORITY_HIGH, THREAD_PRIORITY_HIGHEST,
         },
     };
 
@@ -35,7 +35,12 @@ mod imp {
     pub fn boost_current_audio_thread(name: &str) -> AudioThreadPriority {
         let mut task_index = 0;
         match unsafe { AvSetMmThreadCharacteristicsW(w!("Pro Audio"), &mut task_index) } {
-            Ok(task) => return AudioThreadPriority { task: Some(task) },
+            Ok(task) => {
+                if let Err(error) = unsafe { AvSetMmThreadPriority(task, AVRT_PRIORITY_HIGH) } {
+                    warn!(thread = name, %error, "Failed to set MMCSS audio thread priority");
+                }
+                return AudioThreadPriority { task: Some(task) };
+            }
             Err(error) => {
                 warn!(thread = name, %error, "MMCSS Pro Audio registration unavailable");
             }
