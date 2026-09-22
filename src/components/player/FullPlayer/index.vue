@@ -52,16 +52,7 @@ const initialLyricTimeMs = ref(0);
 const displayTrack = computed(() => media.track ?? status.currentTrack);
 const hasLyric = computed(() => media.parsedLyric.length > 0 || media.lyricLoading);
 const hasTrack = computed(() => !!displayTrack.value);
-const useAmlLyrics = computed(
-  () =>
-    settings.lyric.engine === "amll" &&
-    !media.parsedLyric.some(
-      (line) =>
-        line.singerRole === "response" ||
-        line.singerRole === "group" ||
-        line.singerRole === "background",
-    ),
-);
+const useAmlLyrics = computed(() => settings.lyric.engine === "amll");
 
 /** 精确播放时间（毫秒） */
 const { start: startTick, stop: stopTick } = usePlaybackTime((currentMs) => {
