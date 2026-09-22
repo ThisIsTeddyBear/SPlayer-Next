@@ -10,12 +10,20 @@ use tracing::{debug, info, warn};
 
 use crate::decoder;
 use crate::error::{AudioErrorKind, AudioResultExt};
+#[cfg(target_os = "windows")]
+use crate::priority;
 use crate::source::DecoderSource;
 
 #[cfg(target_os = "windows")]
 mod exclusive;
 
 pub type OutputFailureCallback = Arc<dyn Fn() + Send + Sync + 'static>;
+
+#[cfg(target_os = "windows")]
+thread_local! {
+    // CPAL 的回调线程由后端创建，在首次回调时为每个线程只提升一次优先级。
+    static CPAL_OUTPUT_PRIORITY: () = priority::boost_current_audio_thread("cpal-output");
+}
 
 pub enum OutputStream {
     Shared(cpal::Stream),
@@ -505,6 +513,9 @@ where
         device.build_output_stream(
             config,
             move |data: &mut [T], _| {
+                #[cfg(target_os = "windows")]
+                CPAL_OUTPUT_PRIORITY.with(|_| {});
+
                 let gain = f32::from_bits(volume.load(Ordering::Relaxed));
                 if stopped.load(Ordering::Acquire) {
                     data.fill(T::EQUILIBRIUM);
