@@ -29,6 +29,8 @@ const WAVE_FORMAT_EXTENSIBLE: u16 = 0xfffe;
 const SPEAKER_FRONT_LEFT: u32 = 0x1;
 const SPEAKER_FRONT_RIGHT: u32 = 0x2;
 const SPEAKER_FRONT_CENTER: u32 = 0x4;
+const SPEAKER_5POINT1: u32 = 0x3f;
+const SPEAKER_7POINT1: u32 = 0x63f;
 const KSDATAFORMAT_SUBTYPE_PCM: GUID = GUID::from_u128(0x00000001_0000_0010_8000_00aa00389b71);
 const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: GUID =
     GUID::from_u128(0x00000003_0000_0010_8000_00aa00389b71);
@@ -270,6 +272,8 @@ fn channel_mask(channels: u16) -> u32 {
     match channels {
         1 => SPEAKER_FRONT_CENTER,
         2 => SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT,
+        6 => SPEAKER_5POINT1,
+        8 => SPEAKER_7POINT1,
         _ => 0,
     }
 }
@@ -772,6 +776,14 @@ mod tests {
         for channels in [1, 2, 6, 8] {
             assert_eq!(candidate_channels(channels, true), vec![channels]);
         }
+    }
+
+    #[test]
+    fn multichannel_layouts_use_matching_speaker_masks() {
+        assert_eq!(channel_mask(6), SPEAKER_5POINT1);
+        assert_eq!(channel_mask(6).count_ones(), 6);
+        assert_eq!(channel_mask(8), SPEAKER_7POINT1);
+        assert_eq!(channel_mask(8).count_ones(), 8);
     }
 
     #[test]
