@@ -34,9 +34,6 @@ const SPEAKER_7POINT1: u32 = 0x63f;
 const KSDATAFORMAT_SUBTYPE_PCM: GUID = GUID::from_u128(0x00000001_0000_0010_8000_00aa00389b71);
 const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: GUID =
     GUID::from_u128(0x00000003_0000_0010_8000_00aa00389b71);
-const MIN_PERIOD_CALLBACK_TIMEOUT_MS: u64 = 250;
-const MAX_PERIOD_CALLBACK_TIMEOUT_MS: u64 = 1_000;
-const PERIOD_CALLBACK_TIMEOUT_MULTIPLIER: u64 = 8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ExclusiveSampleFormat {
@@ -494,7 +491,7 @@ fn run_stream(
     ready_tx: mpsc::SyncSender<std::result::Result<(), String>>,
 ) -> Result<()> {
     let _com = ComApartmentGuard::init()?;
-    let _audio_priority = priority::boost_current_audio_thread("wasapi-exclusive-output");
+    priority::boost_current_audio_thread("wasapi-exclusive-output");
     let device = open_device(config.device_id.as_deref())?;
     let mut client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None) }
         .context("Failed to activate the exclusive audio device")?;
@@ -573,7 +570,6 @@ fn run_stream(
         &volume,
         &stopped,
         &control,
-        period_callback_timeout_ms(period_hns),
     )
 }
 
@@ -589,7 +585,6 @@ fn run_loop(
     volume: &AtomicU32,
     stopped: &AtomicBool,
     control: &StreamControl,
-    callback_timeout_ms: u32,
 ) -> Result<()> {
     struct AudioEvent(HANDLE);
 
@@ -607,8 +602,7 @@ fn run_loop(
     let handles = [control.control_event, audio_event];
 
     loop {
-        let timeout = if running { callback_timeout_ms } else { INFINITE };
-        let wait = unsafe { WaitForMultipleObjects(&handles, false, timeout) };
+        let wait = unsafe { WaitForMultipleObjects(&handles, false, INFINITE) };
         if wait == WAIT_OBJECT_0 {
             if control.stopped.load(Ordering::Acquire) || stopped.load(Ordering::Acquire) {
                 if running {
@@ -647,22 +641,10 @@ fn run_loop(
             continue;
         }
         if wait == WAIT_TIMEOUT {
-            if running {
-                bail!("Exclusive audio output stopped delivering period callbacks");
-            }
             continue;
         }
         bail!("Failed while waiting for the exclusive audio event");
     }
-}
-
-/// 允许短暂的调度抖动，同时在设备不再发送周期事件时触发输出重建。
-fn period_callback_timeout_ms(period_hns: i64) -> u32 {
-    let period_ms = period_hns as u64 / 10_000;
-    let timeout = period_ms
-        .saturating_mul(PERIOD_CALLBACK_TIMEOUT_MULTIPLIER)
-        .clamp(MIN_PERIOD_CALLBACK_TIMEOUT_MS, MAX_PERIOD_CALLBACK_TIMEOUT_MS);
-    timeout as u32
 }
 
 fn stop_client(client: &IAudioClient) -> Result<()> {
@@ -866,11 +848,5 @@ mod tests {
     #[test]
     fn keeps_the_44khz_family_for_176khz_sources() {
         assert_eq!(candidate_sample_rates(176_400)[1], 88_200);
-    }
-
-    #[test]
-    fn period_callback_watchdog_tolerates_brief_scheduler_delays() {
-        assert_eq!(period_callback_timeout_ms(100_000), 250);
-        assert_eq!(period_callback_timeout_ms(5_000_000), 1_000);
     }
 }
