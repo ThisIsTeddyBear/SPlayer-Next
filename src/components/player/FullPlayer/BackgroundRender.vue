@@ -4,10 +4,19 @@ import {
   type BaseRenderer,
   BackgroundRender as CoreBackgroundRender,
   MeshGradientRenderer,
+  IsolationRenderer,
+  PixiRenderer,
 } from "@applemusic-like-lyrics/core";
+import type { PlayerBgRenderer } from "@/types/settings";
 import { getFftFrame } from "@/services/playback";
 import { acquireFft, releaseFft } from "@/services/fftCapture";
 import { getBassPulse, toAmllLowFreqVolume } from "@/services/audioFeatures";
+
+const RENDERER_MAP: Record<PlayerBgRenderer, new (canvas: HTMLCanvasElement) => BaseRenderer> = {
+  mesh: MeshGradientRenderer,
+  isolation: IsolationRenderer,
+  pixi: PixiRenderer,
+};
 
 export interface BackgroundRenderProps {
   /** 专辑封面资源 URL */
@@ -24,7 +33,9 @@ export interface BackgroundRenderProps {
   renderScale?: number;
   /** 是否随低频节拍脉动（默认 false，关闭则不采集 FFT） */
   enableBeat?: boolean;
-  /** 渲染器类，默认为 MeshGradientRenderer */
+  /** 渲染引擎标识 */
+  renderEngine?: PlayerBgRenderer;
+  /** 自定义渲染器类，优先于 renderEngine */
   renderer?: new (...args: ConstructorParameters<typeof BaseRenderer>) => BaseRenderer;
 }
 
@@ -35,7 +46,7 @@ const props = withDefaults(defineProps<BackgroundRenderProps>(), {
   fps: 30,
   renderScale: 0.5,
   enableBeat: false,
-  renderer: () => MeshGradientRenderer,
+  renderEngine: "mesh",
 });
 
 const wrapperRef = ref<HTMLDivElement | null>(null);
@@ -155,11 +166,14 @@ const syncFftCapture = () => {
   }
 };
 
-onMounted(() => {
+const getRendererClass = () =>
+  props.renderer ?? RENDERER_MAP[props.renderEngine ?? "mesh"] ?? MeshGradientRenderer;
+
+/** 初始化底层渲染器并挂载至 DOM */
+const initRenderer = () => {
   if (!wrapperRef.value) return;
 
-  // 初始化 AMLL 底层渲染器
-  bgRenderRef.value = CoreBackgroundRender.new(props.renderer);
+  bgRenderRef.value = CoreBackgroundRender.new(getRendererClass());
 
   // 设置 Canvas 自适应容器并附着 DOM
   const el = bgRenderRef.value.getElement();
@@ -170,19 +184,36 @@ onMounted(() => {
 
   updateRendererState();
   syncFftCapture();
-});
+};
 
-onBeforeUnmount(() => {
+/** 释放渲染器资源 */
+const destroyRenderer = () => {
   stopFftCapture();
 
   const renderer = bgRenderRef.value;
   if (renderer) {
-    // 同步释放底层 Canvas 与 WebGL 上下文，避免上下文泄漏
     renderer.pause();
+    renderer.getElement()?.remove();
     renderer.dispose();
     bgRenderRef.value = undefined;
   }
+};
+
+onMounted(() => {
+  initRenderer();
 });
+
+onBeforeUnmount(() => {
+  destroyRenderer();
+});
+
+watch(
+  () => [props.renderEngine, props.renderer],
+  () => {
+    destroyRenderer();
+    initRenderer();
+  },
+);
 
 // 属性变化监听
 watch(

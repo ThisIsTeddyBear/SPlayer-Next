@@ -6,6 +6,8 @@ import type { CjkTransformMode } from "@shared/types/opencc";
 import type { QualityLevel } from "@/utils/quality";
 
 export type PlayerBgType = "blur" | "solid" | "dynamic" | "animation";
+/** 流体背景渲染引擎 */
+export type PlayerBgRenderer = "mesh" | "isolation" | "pixi";
 export type DynamicBackgroundPreset = "balanced" | "immersive" | "focus";
 export type CoverLayout = "default" | "fullscreen";
 
@@ -130,7 +132,6 @@ export interface LyricSettings {
   amllScaleSpringSoft: boolean;
   amllCleanUnintentionalOverlaps: boolean;
   amllTryAdvanceStartTime: boolean;
-  amllConvertExcessiveBackgroundLines: boolean;
   amllSyncMainAndBackgroundLines: boolean;
   amllNormalizeSpaces: boolean;
   amllResetLineTimestamps: boolean;
@@ -138,6 +139,7 @@ export interface LyricSettings {
 
 export interface PlayerSettings {
   playerBgType: PlayerBgType;
+  playerBgRenderer: PlayerBgRenderer;
   dynamicBackgroundPreset: DynamicBackgroundPreset;
   playerBgFps: number;
   playerBgFlowSpeed: number;

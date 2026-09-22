@@ -108,6 +108,7 @@ export const useSettingsStore = defineStore(
 
     const player = reactive<PlayerSettings>({
       playerBgType: "blur",
+      playerBgRenderer: "mesh",
       dynamicBackgroundPreset: "balanced",
       playerBgFps: 30,
       playerBgFlowSpeed: 4,
@@ -196,7 +197,6 @@ export const useSettingsStore = defineStore(
       amllScaleSpringSoft: false,
       amllCleanUnintentionalOverlaps: true,
       amllTryAdvanceStartTime: true,
-      amllConvertExcessiveBackgroundLines: true,
       amllSyncMainAndBackgroundLines: true,
       amllNormalizeSpaces: true,
       amllResetLineTimestamps: true,

@@ -1136,10 +1136,6 @@
       "label": "Advance Animation Start Time",
       "description": "Advance lyric entry animation (up to 1s) for smoother transitions"
     },
-    "amllConvertExcessiveBackgroundLines": {
-      "label": "Convert Excessive Background Lines",
-      "description": "Convert consecutive multi-line background vocals into a single-line background vocal attached to the main line"
-    },
     "amllSyncMainAndBackgroundLines": {
       "label": "Sync Background Lines Timing",
       "description": "Synchronize timing between main lines and background vocal lines"
@@ -1470,6 +1466,13 @@
       "solid": "Solid",
       "dynamic": "Dynamic",
       "animation": "Fluid"
+    },
+    "playerBgRenderer": {
+      "label": "Render Engine",
+      "description": "Select the rendering engine for the fluid animation background",
+      "mesh": "Mesh Gradient Renderer",
+      "isolation": "Isolation Renderer",
+      "pixi": "PixiJS Renderer"
     },
     "dynamicBackgroundPreset": {
       "label": "Dynamic Style",
