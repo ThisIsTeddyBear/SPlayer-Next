@@ -9,11 +9,10 @@ use windows::core::{GUID, PCWSTR};
 use windows::Win32::{
     Foundation::{CloseHandle, HANDLE, WAIT_EVENT, WAIT_OBJECT_0, WAIT_TIMEOUT},
     Media::Audio::{
-        eConsole, eRender, IAudioClient, IAudioClock, IAudioRenderClient, IMMDevice,
-        IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED,
-        AUDCLNT_E_UNSUPPORTED_FORMAT, AUDCLNT_SHAREMODE_EXCLUSIVE,
-        AUDCLNT_STREAMFLAGS_EVENTCALLBACK, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
-        WAVEFORMATEXTENSIBLE_0,
+        eConsole, eRender, IAudioClient, IAudioRenderClient, IMMDevice, IMMDeviceEnumerator,
+        MMDeviceEnumerator, AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED, AUDCLNT_E_UNSUPPORTED_FORMAT,
+        AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, WAVEFORMATEX,
+        WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0,
     },
     System::{
         Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED},
@@ -38,8 +37,6 @@ const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: GUID =
 const MIN_PERIOD_CALLBACK_TIMEOUT_MS: u64 = 250;
 const MAX_PERIOD_CALLBACK_TIMEOUT_MS: u64 = 1_000;
 const PERIOD_CALLBACK_TIMEOUT_MULTIPLIER: u64 = 8;
-const CLOCK_DRIFT_RATIO: u128 = 2;
-const CLOCK_DRIFT_STRIKES: u8 = 2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ExclusiveSampleFormat {
@@ -130,9 +127,15 @@ impl ExclusiveConfig {
             )? {
                 return Ok(config);
             }
+            bail!(
+                "Exclusive audio cannot preserve this track's native format ({} Hz, {} channels, {}-bit PCM) on the selected device",
+                sample_rate,
+                source_channels,
+                source_bits_per_sample
+            );
         }
 
-        // 原生格式不可用时保留独占输出，并将重采样后的路径明确标记为非 bit-perfect。
+        // 保留独占输出，但在设备不接受源格式时协商可用格式并交给解码器重采样。
         for output_rate in candidate_sample_rates(sample_rate) {
             if let Some(config) = find_supported_config(
                 &client,
@@ -547,13 +550,6 @@ fn run_stream(
         unsafe { client.GetBufferSize() }.context("Failed to read the exclusive audio buffer")?;
     let render_client: IAudioRenderClient = unsafe { client.GetService() }
         .context("Failed to get the exclusive audio render interface")?;
-    let clock: IAudioClock = unsafe { client.GetService() }
-        .context("Failed to get the exclusive audio device clock")?;
-    let clock_frequency =
-        unsafe { clock.GetFrequency() }.context("Failed to read the exclusive audio clock rate")?;
-    if clock_frequency == 0 {
-        bail!("The exclusive audio device returned an invalid clock rate");
-    }
     let audio_event = unsafe { CreateEventW(None, false, false, PCWSTR::null()) }
         .context("Failed to create the exclusive audio event")?;
     if let Err(error) = unsafe { client.SetEventHandle(audio_event) } {
@@ -578,7 +574,6 @@ fn run_stream(
         &stopped,
         &control,
         period_callback_timeout_ms(period_hns),
-        ClockMonitor::new(clock, clock_frequency),
     )
 }
 
@@ -595,7 +590,6 @@ fn run_loop(
     stopped: &AtomicBool,
     control: &StreamControl,
     callback_timeout_ms: u32,
-    mut clock_monitor: ClockMonitor,
 ) -> Result<()> {
     struct AudioEvent(HANDLE);
 
@@ -623,7 +617,6 @@ fn run_loop(
                 return Ok(());
             }
             if control.playing.load(Ordering::Acquire) && !running {
-                clock_monitor.reset();
                 write_buffer(
                     render_client,
                     buffer_frames,
@@ -636,16 +629,12 @@ fn run_loop(
                 running = true;
             } else if !control.playing.load(Ordering::Acquire) && running {
                 stop_client(client)?;
-                clock_monitor.reset();
                 running = false;
             }
             continue;
         }
         if wait == WAIT_EVENT(WAIT_OBJECT_0.0 + 1) {
             if running {
-                if clock_monitor.observe()? {
-                    bail!("Exclusive audio device clock diverged from its performance counter");
-                }
                 write_buffer(
                     render_client,
                     buffer_frames,
@@ -674,74 +663,6 @@ fn period_callback_timeout_ms(period_hns: i64) -> u32 {
         .saturating_mul(PERIOD_CALLBACK_TIMEOUT_MULTIPLIER)
         .clamp(MIN_PERIOD_CALLBACK_TIMEOUT_MS, MAX_PERIOD_CALLBACK_TIMEOUT_MS);
     timeout as u32
-}
-
-#[derive(Clone, Copy)]
-struct ClockSample {
-    position: u64,
-    qpc_hns: u64,
-}
-
-struct ClockMonitor {
-    clock: IAudioClock,
-    frequency: u64,
-    previous: Option<ClockSample>,
-    drift_strikes: u8,
-}
-
-impl ClockMonitor {
-    fn new(clock: IAudioClock, frequency: u64) -> Self {
-        Self {
-            clock,
-            frequency,
-            previous: None,
-            drift_strikes: 0,
-        }
-    }
-
-    fn reset(&mut self) {
-        self.previous = None;
-        self.drift_strikes = 0;
-    }
-
-    /// 检测设备位置与同一时刻 QPC 的速率是否持续偏离。
-    fn observe(&mut self) -> Result<bool> {
-        let mut position = 0;
-        let mut qpc_hns = 0;
-        unsafe {
-            self.clock
-                .GetPosition(&mut position, Some(&mut qpc_hns as *mut u64))
-        }
-        .context("Failed to read the exclusive audio device clock position")?;
-
-        let sample = ClockSample { position, qpc_hns };
-        let Some(previous) = self.previous.replace(sample) else {
-            return Ok(false);
-        };
-        if sample.position <= previous.position || sample.qpc_hns <= previous.qpc_hns {
-            self.drift_strikes = 0;
-            return Ok(false);
-        }
-
-        if device_clock_drifted(
-            sample.position - previous.position,
-            sample.qpc_hns - previous.qpc_hns,
-            self.frequency,
-        ) {
-            self.drift_strikes = self.drift_strikes.saturating_add(1);
-        } else {
-            self.drift_strikes = 0;
-        }
-        Ok(self.drift_strikes >= CLOCK_DRIFT_STRIKES)
-    }
-}
-
-fn device_clock_drifted(position_delta: u64, qpc_delta_hns: u64, frequency: u64) -> bool {
-    if position_delta == 0 || qpc_delta_hns == 0 || frequency == 0 {
-        return false;
-    }
-    u128::from(qpc_delta_hns) * u128::from(frequency)
-        > u128::from(position_delta) * 10_000_000 * CLOCK_DRIFT_RATIO
 }
 
 fn stop_client(client: &IAudioClient) -> Result<()> {
@@ -951,11 +872,5 @@ mod tests {
     fn period_callback_watchdog_tolerates_brief_scheduler_delays() {
         assert_eq!(period_callback_timeout_ms(100_000), 250);
         assert_eq!(period_callback_timeout_ms(5_000_000), 1_000);
-    }
-
-    #[test]
-    fn detects_an_endpoint_clock_that_falls_two_periods_behind_qpc() {
-        assert!(!device_clock_drifted(144, 30_000, 48_000));
-        assert!(device_clock_drifted(144, 90_000, 48_000));
     }
 }
