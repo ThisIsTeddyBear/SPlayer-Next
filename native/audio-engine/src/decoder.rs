@@ -221,12 +221,15 @@ pub fn start_prepared_decode(
     let handle = thread::Builder::new()
         .name("audio-decoder".to_string())
         .spawn(move || {
-            priority::boost_current_audio_thread("audio-decoder");
+            let _audio_priority = priority::boost_current_audio_thread("audio-decoder");
             let mut data = data;
             let dsp_shared = Arc::clone(&shared);
             let dsp_handle = thread::Builder::new()
                 .name("audio-dsp".to_string())
-                .spawn(move || run_dsp_safely(dsp_shared, equalizer, tempo));
+                .spawn(move || {
+                    let _audio_priority = priority::boost_current_audio_thread("audio-dsp");
+                    run_dsp_safely(dsp_shared, equalizer, tempo);
+                });
             let Ok(dsp_handle) = dsp_handle else {
                 shared.mark_decode_failed();
                 shared.mark_output_eof();
@@ -259,12 +262,15 @@ pub fn resume_decode(
     thread::Builder::new()
         .name("audio-decoder".to_string())
         .spawn(move || {
-            priority::boost_current_audio_thread("audio-decoder");
+            let _audio_priority = priority::boost_current_audio_thread("audio-decoder");
             let mut data = data;
             let dsp_shared = Arc::clone(&shared);
             let dsp_handle = thread::Builder::new()
                 .name("audio-dsp".to_string())
-                .spawn(move || run_dsp_safely(dsp_shared, equalizer, tempo));
+                .spawn(move || {
+                    let _audio_priority = priority::boost_current_audio_thread("audio-dsp");
+                    run_dsp_safely(dsp_shared, equalizer, tempo);
+                });
             let Ok(dsp_handle) = dsp_handle else {
                 shared.mark_decode_failed();
                 shared.mark_output_eof();
