@@ -6,7 +6,7 @@ use napi::bindgen_prelude::*;
 use napi::threadsafe_function::ThreadsafeFunctionCallMode;
 use napi_derive::napi;
 use parking_lot::Mutex;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::player::{self, InnerPlayer, PlayerEvent, PlayerState, SeekTake};
 use crate::{audio_output, decoder, device_watcher};
@@ -626,6 +626,7 @@ impl AudioPlayer {
         if !position.is_finite() || position < 0.0 {
             return Err(Error::from_reason("Seek position must be a finite non-negative number"));
         }
+        debug!(position, "Seeking audio source");
 
         let take = {
             let mut player = self.inner.lock();

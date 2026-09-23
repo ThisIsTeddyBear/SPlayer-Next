@@ -617,6 +617,7 @@ fn run_loop(
     let mut late_wakes = 0;
     let mut total_late_wakes = 0u64;
     let mut longest_gap = Duration::ZERO;
+    let mut last_late_wake = None;
     // 控制事件优先，避免持续就绪的设备事件阻塞停止和流释放。
     let handles = [control.control_event, audio_event];
 
@@ -631,10 +632,13 @@ fn run_loop(
                     tracing::warn!(
                         total_late_wakes,
                         longest_gap_ms = longest_gap.as_secs_f64() * 1000.0,
+                        last_gap_ago_ms = last_late_wake
+                            .map_or(0.0, |at: Instant| at.elapsed().as_secs_f64() * 1000.0),
                         period_ms = period.as_secs_f64() * 1000.0,
                         "WASAPI exclusive output missed device event periods"
                     );
                 }
+                tracing::debug!("WASAPI exclusive audio stream stopped");
                 return Ok(());
             }
             if control.playing.load(Ordering::Acquire) && !running {
@@ -647,6 +651,7 @@ fn run_loop(
                     volume,
                 )?;
                 unsafe { client.Start() }.context("Failed to start exclusive audio output")?;
+                tracing::debug!(buffer_frames, sample_rate, "WASAPI exclusive audio stream started");
                 running = true;
                 last_audio_wake = None;
                 initial_gap_total = Duration::ZERO;
@@ -655,6 +660,7 @@ fn run_loop(
                 late_wakes = 0;
             } else if !control.playing.load(Ordering::Acquire) && running {
                 stop_client(client)?;
+                tracing::debug!("WASAPI exclusive audio stream paused");
                 running = false;
                 last_audio_wake = None;
                 baseline_gap = None;
@@ -667,12 +673,17 @@ fn run_loop(
                 let now = Instant::now();
                 if let Some(previous) = last_audio_wake {
                     let gap = now.duration_since(previous);
-                    if gap > period * 2 {
+                    if gap > period + period / 2 {
                         total_late_wakes += 1;
                         longest_gap = longest_gap.max(gap);
+                        last_late_wake = Some(now);
                     }
                     if let Some(baseline) = baseline_gap {
-                        late_wakes = if gap > baseline * 2 { late_wakes + 1 } else { 0 };
+                        late_wakes = if gap > baseline + baseline / 2 {
+                            late_wakes + 1
+                        } else {
+                            0
+                        };
                         // 部分 USB 驱动会在播放一段时间后改变事件周期，重置流才能恢复原有时序。
                         if late_wakes >= 3
                             && control.playing.load(Ordering::Acquire)
