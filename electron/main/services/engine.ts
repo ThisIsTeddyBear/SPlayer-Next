@@ -58,6 +58,18 @@ export const resetPlayer = (): void => {
   playerInstance = null;
 };
 
+/** 退出时主动释放独占输出设备。 */
+export const shutdownPlayer = (): void => {
+  if (!playerInstance) return;
+  try {
+    playerInstance.stop();
+  } catch (error) {
+    playerLog.warn("退出时停止播放器失败:", error);
+  }
+  playerInstance = null;
+  playerLog.info("退出时已释放音频输出");
+};
+
 /** 同步音量均衡设置到播放器 */
 export const setNormalizationEnabled = (enabled: boolean): void => {
   if (playerInstance) {

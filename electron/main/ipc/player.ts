@@ -9,7 +9,7 @@ import { toMs } from "@main/utils/time";
 import * as mediaService from "@main/services/media";
 import * as nowPlaying from "@main/services/nowPlaying";
 import { fetchBytes } from "@main/utils/fetchBytes";
-import { getPlayer, resetPlayer, onPlayerCreated } from "@main/services/engine";
+import { getPlayer, resetPlayer, shutdownPlayer, onPlayerCreated } from "@main/services/engine";
 import {
   cancelPendingReinit,
   setPauseOnDeviceSwitch,
@@ -749,6 +749,7 @@ export const registerPlayerIpc = (): void => {
   powerMonitor.on("resume", resumeHandler);
   app.on("before-quit", () => {
     stopDeviceMonitoring();
+    shutdownPlayer();
     releasePowerBlocker();
   });
 };

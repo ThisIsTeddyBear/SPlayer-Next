@@ -10,8 +10,9 @@ use windows::core::{GUID, PCWSTR};
 use windows::Win32::{
     Foundation::{CloseHandle, HANDLE, WAIT_EVENT, WAIT_OBJECT_0, WAIT_TIMEOUT},
     Media::Audio::{
-        eConsole, eRender, IAudioClient, IAudioRenderClient, IMMDevice, IMMDeviceEnumerator,
-        MMDeviceEnumerator, AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED, AUDCLNT_E_UNSUPPORTED_FORMAT,
+        eConsole, eRender, IAudioClient, IAudioClock, IAudioRenderClient, IMMDevice,
+        IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED,
+        AUDCLNT_E_UNSUPPORTED_FORMAT,
         AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, WAVEFORMATEX,
         WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0,
     },
@@ -556,6 +557,20 @@ fn run_stream(
         unsafe { client.GetBufferSize() }.context("Failed to read the exclusive audio buffer")?;
     let render_client: IAudioRenderClient = unsafe { client.GetService() }
         .context("Failed to get the exclusive audio render interface")?;
+    let device_clock: Option<(IAudioClock, u64)> =
+        match unsafe { client.GetService::<IAudioClock>() } {
+            Ok(clock) => match unsafe { clock.GetFrequency() } {
+                Ok(frequency) if frequency > 0 => Some((clock, frequency)),
+                result => {
+                    tracing::warn!(?result, "WASAPI exclusive device clock is unavailable");
+                    None
+                }
+            },
+            Err(error) => {
+                tracing::warn!(%error, "WASAPI exclusive device clock is unavailable");
+                None
+            }
+        };
     let audio_event = unsafe { CreateEventW(None, false, false, PCWSTR::null()) }
         .context("Failed to create the exclusive audio event")?;
     if let Err(error) = unsafe { client.SetEventHandle(audio_event) } {
@@ -571,6 +586,7 @@ fn run_stream(
     run_loop(
         &client,
         &render_client,
+        device_clock.as_ref().map(|(clock, frequency)| (clock, *frequency)),
         audio_event,
         buffer_frames,
         config.sample_rate,
@@ -587,6 +603,7 @@ fn run_stream(
 fn run_loop(
     client: &IAudioClient,
     render_client: &IAudioRenderClient,
+    device_clock: Option<(&IAudioClock, u64)>,
     audio_event: HANDLE,
     buffer_frames: u32,
     sample_rate: u32,
@@ -618,6 +635,9 @@ fn run_loop(
     let mut total_late_wakes = 0u64;
     let mut longest_gap = Duration::ZERO;
     let mut last_late_wake = None;
+    let mut clock_baseline: Option<(u64, u64)> = None;
+    let mut last_clock_check = Instant::now();
+    let mut clock_anomalies = 0u8;
     // 控制事件优先，避免持续就绪的设备事件阻塞停止和流释放。
     let handles = [control.control_event, audio_event];
 
@@ -658,6 +678,9 @@ fn run_loop(
                 initial_gaps = 0;
                 baseline_gap = None;
                 late_wakes = 0;
+                clock_baseline = None;
+                last_clock_check = Instant::now();
+                clock_anomalies = 0;
             } else if !control.playing.load(Ordering::Acquire) && running {
                 stop_client(client)?;
                 tracing::debug!("WASAPI exclusive audio stream paused");
@@ -665,6 +688,8 @@ fn run_loop(
                 last_audio_wake = None;
                 baseline_gap = None;
                 late_wakes = 0;
+                clock_baseline = None;
+                clock_anomalies = 0;
             }
             continue;
         }
@@ -712,6 +737,9 @@ fn run_loop(
                             initial_gaps = 0;
                             baseline_gap = None;
                             late_wakes = 0;
+                            clock_baseline = None;
+                            last_clock_check = Instant::now();
+                            clock_anomalies = 0;
                             continue;
                         }
                     } else {
@@ -731,6 +759,65 @@ fn run_loop(
                     source,
                     volume,
                 )?;
+                if let Some((clock, clock_frequency)) = device_clock
+                    .filter(|_| now.duration_since(last_clock_check) >= Duration::from_millis(100))
+                {
+                    last_clock_check = now;
+                    let mut device_position = 0;
+                    let mut qpc_position = 0;
+                    unsafe { clock.GetPosition(&mut device_position, Some(&mut qpc_position)) }
+                        .context("Failed to read the exclusive audio device clock position")?;
+                    if let Some((previous_device, previous_qpc)) = clock_baseline {
+                        let device_delta = device_position.saturating_sub(previous_device);
+                        let qpc_delta = qpc_position.saturating_sub(previous_qpc);
+                        if qpc_delta > 0 {
+                            // QPC 时间戳单位是 100ns；用设备频率换算后比较两种时钟。
+                            let device_ticks = u128::from(device_delta) * 10_000_000;
+                            let reference_ticks =
+                                u128::from(qpc_delta) * u128::from(clock_frequency);
+                            let drifted = device_ticks * 4 < reference_ticks * 3
+                                || device_ticks * 4 > reference_ticks * 5;
+                            clock_anomalies = if drifted {
+                                clock_anomalies.saturating_add(1)
+                            } else {
+                                0
+                            };
+                            if clock_anomalies >= 2
+                                && control.playing.load(Ordering::Acquire)
+                                && !control.stopped.load(Ordering::Acquire)
+                                && !stopped.load(Ordering::Acquire)
+                            {
+                                tracing::warn!(
+                                    clock_ratio = device_ticks as f64 / reference_ticks as f64,
+                                    device_delta,
+                                    qpc_delta,
+                                    "WASAPI exclusive device clock drifted; resetting the audio client"
+                                );
+                                stop_client(client)?;
+                                write_buffer(
+                                    render_client,
+                                    buffer_frames,
+                                    channels,
+                                    sample_format,
+                                    source,
+                                    volume,
+                                )?;
+                                unsafe { client.Start() }
+                                    .context("Failed to restart exclusive audio output")?;
+                                last_audio_wake = None;
+                                initial_gap_total = Duration::ZERO;
+                                initial_gaps = 0;
+                                baseline_gap = None;
+                                late_wakes = 0;
+                                clock_baseline = None;
+                                last_clock_check = Instant::now();
+                                clock_anomalies = 0;
+                                continue;
+                            }
+                        }
+                    }
+                    clock_baseline = Some((device_position, qpc_position));
+                }
             }
             continue;
         }
