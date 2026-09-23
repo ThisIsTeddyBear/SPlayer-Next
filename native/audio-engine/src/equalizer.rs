@@ -122,7 +122,12 @@ impl Equalizer {
     }
 
     pub fn set_enabled(&mut self, enabled: bool) {
+        if self.enabled == enabled {
+            return;
+        }
         self.enabled = enabled;
+        // 关闭期间滤波器状态不再推进，切回时必须丢弃旧尾音，避免把过期状态混入当前音频。
+        self.reset_state();
     }
 
     /// 更新输出格式，设备采样率或声道数变化时重建对应滤波器状态
@@ -237,5 +242,20 @@ mod tests {
 
         assert_eq!(equalizer.filters.len(), 8);
         assert_eq!(equalizer.sample_rate, 96_000.0);
+    }
+
+    #[test]
+    fn enabling_after_bypass_does_not_restore_stale_filter_tail() {
+        let mut equalizer = Equalizer::new(48_000, 2);
+        equalizer.set_band_gains(&[12.0]);
+        equalizer.set_enabled(true);
+        equalizer.process_interleaved(&mut [1.0, 1.0]);
+
+        equalizer.set_enabled(false);
+        equalizer.set_enabled(true);
+        let mut silence = [0.0; 2];
+        equalizer.process_interleaved(&mut silence);
+
+        assert_eq!(silence, [0.0; 2]);
     }
 }

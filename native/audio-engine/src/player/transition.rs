@@ -39,6 +39,7 @@ pub struct SeekTake {
     pub old_threads: OldThreads,
     pub normalization_enabled: bool,
     pub normalization_gain: f32,
+    pub has_replay_gain: bool,
     pub bit_perfect: bool,
     pub current_source: Option<String>,
     pub was_playing: bool,
@@ -128,6 +129,7 @@ impl InnerPlayer {
     pub fn take_for_async_seek(&mut self) -> Option<SeekTake> {
         self.decoder_thread.as_ref()?;
 
+        let recovery_position = self.position();
         let token = self.load_token.fetch_add(1, Ordering::AcqRel) + 1;
 
         if let Some(flag) = self.fade_cancel.take() {
@@ -154,24 +156,28 @@ impl InnerPlayer {
             fade_handle: self.fade_handle.take(),
         };
 
-        let (norm_enabled, norm_gain, bit_perfect) = match self.shared.take() {
+        let (norm_enabled, norm_gain, has_replay_gain, bit_perfect) = match self.shared.take() {
             Some(s) => {
                 s.drain_buffer();
                 (
                     s.is_normalization_enabled(),
                     s.normalization_gain(),
+                    s.has_replay_gain(),
                     s.is_bit_perfect(),
                 )
             }
-            None => (self.normalization_enabled, 0.0, false),
+            None => (self.normalization_enabled, 1.0, false, false),
         };
 
+        // 重建输出失败时旧的 Shared 已被移除，保留当前位置供回退设备重新加载。
+        self.seek_base = recovery_position;
         self.fft.reset();
 
         Some(SeekTake {
             old_threads,
             normalization_enabled: norm_enabled,
             normalization_gain: norm_gain,
+            has_replay_gain,
             bit_perfect,
             current_source: self.current_source.clone(),
             was_playing: self.state == PlayerState::Playing,

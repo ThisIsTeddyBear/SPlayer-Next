@@ -33,6 +33,7 @@ pub struct Shared {
     all_consumed: AtomicBool,
     decode_failed: AtomicBool,
     normalization_gain: AtomicU32,
+    has_replay_gain: AtomicBool,
     normalization_enabled: AtomicBool,
     bit_perfect: AtomicBool,
     cancel_handle: Mutex<Option<HttpCancelHandle>>,
@@ -41,6 +42,8 @@ pub struct Shared {
 pub const FRAME_BUFFER_CAPACITY: usize = 192;
 
 const OUTPUT_BUFFER_CAPACITY: usize = 4;
+
+const STARTUP_BUFFER_MS: u64 = 50;
 
 const BUFFER_POOL_CAPACITY: usize = FRAME_BUFFER_CAPACITY + OUTPUT_BUFFER_CAPACITY + 4;
 
@@ -66,6 +69,7 @@ impl Shared {
             all_consumed: AtomicBool::new(false),
             decode_failed: AtomicBool::new(false),
             normalization_gain: AtomicU32::new(1.0_f32.to_bits()),
+            has_replay_gain: AtomicBool::new(false),
             normalization_enabled: AtomicBool::new(false),
             bit_perfect: AtomicBool::new(false),
             cancel_handle: Mutex::new(None),
@@ -79,6 +83,15 @@ impl Shared {
     pub fn set_normalization_gain(&self, gain: f32) {
         self.normalization_gain
             .store(gain.to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn set_has_replay_gain(&self, has_replay_gain: bool) {
+        self.has_replay_gain
+            .store(has_replay_gain, Ordering::Relaxed);
+    }
+
+    pub fn has_replay_gain(&self) -> bool {
+        self.has_replay_gain.load(Ordering::Relaxed)
     }
 
     pub fn sample_rate(&self) -> u32 {
@@ -227,6 +240,29 @@ impl Shared {
         self.output_condvar.notify_one();
     }
 
+    /// 启动输出前等待少量 PCM，避免首帧解码抖动立即触发欠载。
+    pub fn wait_for_playback_ready(&self) {
+        let mut buffer = self.output_buffer.lock();
+        while !self.playback_buffer_ready(&buffer) {
+            self.output_condvar.wait(&mut buffer);
+        }
+    }
+
+    fn playback_buffer_ready(&self, buffer: &VecDeque<AudioChunk>) -> bool {
+        let target_samples = u64::from(self.sample_rate)
+            .saturating_mul(u64::from(self.channels))
+            .saturating_mul(STARTUP_BUFFER_MS)
+            / 1000;
+        self.is_stopping.load(Ordering::Acquire)
+            || self.output_eof.load(Ordering::Acquire)
+            || buffer.len() >= OUTPUT_BUFFER_CAPACITY
+            || buffer
+                .iter()
+                .map(|chunk| chunk.player_samples.len() as u64)
+                .sum::<u64>()
+                >= target_samples
+    }
+
     pub fn try_pop(&self) -> PopResult {
         let mut buffer = self.output_buffer.lock();
         if let Some(chunk) = buffer.pop_front() {
@@ -291,5 +327,22 @@ mod tests {
 
         assert_eq!(shared.player_buffer_pool.lock().len(), BUFFER_POOL_CAPACITY);
         assert_eq!(shared.fft_buffer_pool.lock().len(), BUFFER_POOL_CAPACITY);
+    }
+
+    #[test]
+    fn playback_waits_for_a_small_startup_buffer() {
+        let shared = Shared::new(1000, 2);
+        shared.push_output(AudioChunk {
+            player_samples: vec![0.0; 50],
+            fft_samples: Vec::new(),
+            source_sample_count: 50,
+        });
+        assert!(!shared.playback_buffer_ready(&shared.output_buffer.lock()));
+        shared.push_output(AudioChunk {
+            player_samples: vec![0.0; 50],
+            fft_samples: Vec::new(),
+            source_sample_count: 50,
+        });
+        assert!(shared.playback_buffer_ready(&shared.output_buffer.lock()));
     }
 }

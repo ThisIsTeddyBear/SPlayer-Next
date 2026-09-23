@@ -664,6 +664,7 @@ fn write_buffer(
     source: &mut DecoderSource,
     volume: &AtomicU32,
 ) -> Result<()> {
+    let previous_buffer_finished = source.is_finished();
     let buffer = unsafe { render_client.GetBuffer(frames) }
         .context("Failed to get the exclusive audio buffer")?;
     let gain = f32::from_bits(volume.load(Ordering::Relaxed));
@@ -732,7 +733,11 @@ fn write_buffer(
     };
     debug_assert_eq!(samples, frames as usize * channels as usize);
     unsafe { render_client.ReleaseBuffer(frames, 0) }
-        .context("Failed to release the exclusive audio buffer")
+        .context("Failed to release the exclusive audio buffer")?;
+    if previous_buffer_finished {
+        source.mark_finished_played();
+    }
+    Ok(())
 }
 
 fn to_i16(value: f32) -> i16 {

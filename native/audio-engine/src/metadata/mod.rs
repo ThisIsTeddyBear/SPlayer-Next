@@ -113,7 +113,10 @@ pub fn extract_replay_gain(dict: &HashMap<String, String>) -> Option<f32> {
         dict_get(dict, "R128_TRACK_GAIN").or_else(|| dict_get(dict, "R128_ALBUM_GAIN"))
     {
         if let Ok(raw) = val.trim().parse::<f32>() {
-            return Some(raw / 256.0);
+            let db = raw / 256.0;
+            if db.is_finite() {
+                return Some(db);
+            }
         }
     }
 
@@ -123,7 +126,9 @@ pub fn extract_replay_gain(dict: &HashMap<String, String>) -> Option<f32> {
     {
         let cleaned = val.trim().trim_end_matches(" dB").trim_end_matches("dB");
         if let Ok(db) = cleaned.parse::<f32>() {
-            return Some(db);
+            if db.is_finite() {
+                return Some(db);
+            }
         }
     }
 
@@ -132,7 +137,12 @@ pub fn extract_replay_gain(dict: &HashMap<String, String>) -> Option<f32> {
 
 /// 将 dB 增益转换为线性增益因子
 pub fn db_to_linear(db: f32) -> f32 {
-    10.0_f32.powf(db / 20.0)
+    let gain = 10.0_f32.powf(db / 20.0);
+    if gain.is_finite() && gain > 0.0 {
+        gain
+    } else {
+        1.0
+    }
 }
 
 #[cfg(test)]
@@ -166,5 +176,14 @@ mod tests {
     #[test]
     fn decibels_are_converted_to_linear_gain() {
         assert!((db_to_linear(-6.0) - 0.501_187_2).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn non_finite_replay_gain_is_ignored() {
+        let dict = HashMap::from([("replaygain_track_gain".to_string(), "NaN dB".to_string())]);
+
+        assert_eq!(extract_replay_gain(&dict), None);
+        assert_eq!(db_to_linear(f32::INFINITY), 1.0);
+        assert_eq!(db_to_linear(-10_000.0), 1.0);
     }
 }

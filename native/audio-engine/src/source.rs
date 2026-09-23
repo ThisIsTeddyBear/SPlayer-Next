@@ -21,6 +21,7 @@ pub struct DecoderSampleReader {
     /// 用上一帧做短衰减，避免音频与静音之间的波形突变
     last_frame: Vec<f32>,
     channel_index: usize,
+    finished: bool,
     sample_rate: u32,
     channels: u16,
 }
@@ -39,6 +40,7 @@ impl DecoderSampleReader {
             recovery_frames_remaining: 0,
             last_frame: vec![0.0; usize::from(channels)],
             channel_index: 0,
+            finished: false,
             sample_rate,
             channels,
         }
@@ -58,6 +60,7 @@ impl DecoderSampleReader {
     }
 
     fn next_audio_sample(&mut self, sample: f32) -> f32 {
+        let sample = if sample.is_finite() { sample } else { 0.0 };
         let output = if self.recovery_frames_remaining == 0 {
             sample
         } else {
@@ -83,12 +86,25 @@ impl DecoderSampleReader {
         }
         output
     }
+
+    pub fn is_finished(&self) -> bool {
+        self.finished
+    }
+
+    pub fn mark_finished_played(&self) {
+        if self.finished {
+            self.shared.mark_all_consumed();
+        }
+    }
 }
 
 impl Iterator for DecoderSampleReader {
     type Item = f32;
 
     fn next(&mut self) -> Option<f32> {
+        if self.finished {
+            return None;
+        }
         if let Some(sample) = self.local_buffer.get(self.local_index).copied() {
             self.local_index += 1;
             return Some(self.next_audio_sample(sample));
@@ -138,8 +154,7 @@ impl Iterator for DecoderSampleReader {
                     return Some(self.next_underrun_sample());
                 }
                 PopResult::Finished => {
-                    // 数据源耗尽，标记消费完毕
-                    self.shared.mark_all_consumed();
+                    self.finished = true;
                     return None;
                 }
             }
@@ -181,6 +196,20 @@ mod tests {
         assert!((source.next().unwrap() + 0.1).abs() < 1e-6);
         assert!((source.next().unwrap() - 2.0).abs() < 1e-6);
         assert!((source.next().unwrap() + 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn replaces_non_finite_decoder_samples_with_silence() {
+        let shared = Shared::new(48_000, 2);
+        shared.push_output(AudioChunk {
+            player_samples: vec![f32::NAN, f32::INFINITY],
+            fft_samples: vec![],
+            source_sample_count: 2,
+        });
+        let mut source = DecoderSource::new(shared, Arc::new(FftAnalyzer::new()));
+
+        assert_eq!(source.next(), Some(0.0));
+        assert_eq!(source.next(), Some(0.0));
     }
 
     #[test]
@@ -238,5 +267,17 @@ mod tests {
             assert_next_sample(&mut source, gain);
             assert_next_sample(&mut source, -gain);
         }
+    }
+
+    #[test]
+    fn completion_waits_until_the_output_confirms_the_tail_was_played() {
+        let shared = Shared::new(1000, 2);
+        shared.mark_output_eof();
+        let mut source = DecoderSource::new(Arc::clone(&shared), Arc::new(FftAnalyzer::new()));
+
+        assert_eq!(source.next(), None);
+        assert!(!shared.is_all_consumed());
+        source.mark_finished_played();
+        assert!(shared.is_all_consumed());
     }
 }

@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::events::playback_completion_event;
 use super::{InnerPlayer, PlayerEvent, PlayerState};
@@ -22,16 +22,19 @@ fn fade_volume(
         playback.set_volume(to);
         return;
     }
-    let step_duration = Duration::from_millis(duration_ms / u64::from(FADE_STEPS));
-    for step in 1..=FADE_STEPS {
+    let steps = u64::from(FADE_STEPS).min(duration_ms);
+    let started = Instant::now();
+    for step in 1..=steps {
         if cancel.load(Ordering::Relaxed) {
             return;
         }
-        let progress = step as f32 / FADE_STEPS as f32;
+        let progress = step as f32 / steps as f32;
         playback.set_volume(from + (to - from) * progress);
-        // 分片可取消：渐变时长用户可配，长渐变的整步 sleep 会让 cancel_fade 的
-        // 同步 join 卡住最长一个步长
-        sleep_unless_stopped(cancel, step_duration);
+        let target_ms = (duration_ms / steps) * step + (duration_ms % steps) * step / steps;
+        sleep_unless_stopped(
+            cancel,
+            Duration::from_millis(target_ms).saturating_sub(started.elapsed()),
+        );
     }
 }
 

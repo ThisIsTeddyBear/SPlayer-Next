@@ -170,6 +170,7 @@ impl AudioPlayer {
                 old_threads,
                 normalization_enabled,
                 normalization_gain,
+                has_replay_gain,
                 bit_perfect: _,
                 current_source,
                 was_playing,
@@ -224,6 +225,7 @@ impl AudioPlayer {
                 shared.set_bit_perfect(output.is_bit_perfect());
                 shared.set_normalization_enabled(normalization_enabled);
                 shared.set_normalization_gain(normalization_gain);
+                shared.set_has_replay_gain(has_replay_gain);
                 equalizer
                     .lock()
                     .set_output_format(output.sample_rate(), output.channels());
@@ -600,6 +602,10 @@ impl AudioPlayer {
     pub async fn seek(&self, position: f64) -> Result<()> {
         use crate::shared::Shared;
 
+        if !position.is_finite() || position < 0.0 {
+            return Err(Error::from_reason("Seek position must be a finite non-negative number"));
+        }
+
         let take = {
             let mut player = self.inner.lock();
             player.take_for_async_seek()
@@ -612,6 +618,7 @@ impl AudioPlayer {
             old_threads,
             normalization_enabled,
             normalization_gain,
+            has_replay_gain,
             bit_perfect,
             current_source,
             was_playing,
@@ -638,6 +645,7 @@ impl AudioPlayer {
             shared.set_bit_perfect(bit_perfect);
             shared.set_normalization_enabled(normalization_enabled);
             shared.set_normalization_gain(normalization_gain);
+            shared.set_has_replay_gain(has_replay_gain);
             equalizer
                 .lock()
                 .set_output_format(output_sample_rate, output_channels);
@@ -708,7 +716,9 @@ impl AudioPlayer {
 
     #[napi]
     pub fn set_fade_duration(&self, duration_ms: f64) {
-        self.inner.lock().set_fade_duration(duration_ms as u64);
+        if duration_ms.is_finite() && duration_ms >= 0.0 {
+            self.inner.lock().set_fade_duration(duration_ms as u64);
+        }
     }
 
     #[napi]
@@ -834,8 +844,32 @@ impl AudioPlayer {
 
     #[napi]
     pub async fn set_output_device(&self, device_id: Option<String>) -> Result<()> {
+        let (previous, was_playing) = {
+            let player = self.inner.lock();
+            (
+                player.selected_device().map(String::from),
+                player.state() == PlayerState::Playing,
+            )
+        };
+        if previous == device_id {
+            return Ok(());
+        }
+
         self.inner.lock().set_output_device(device_id);
-        self.reinit_output().await
+        if let Err(error) = self.reinit_output().await {
+            self.inner.lock().set_output_device(previous);
+            match self.reinit_output().await {
+                Ok(()) if was_playing => {
+                    let _ = self.play().await;
+                }
+                Ok(()) => {}
+                Err(recovery_error) => {
+                    warn!(error = %recovery_error, "Could not restore the previous output device");
+                }
+            }
+            return Err(error);
+        }
+        Ok(())
     }
 
     #[napi]
