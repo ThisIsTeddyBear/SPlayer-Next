@@ -7,7 +7,6 @@ import {
   APP_VERSION,
   REPO_URL,
   REPO_NAME,
-  HOMEPAGE_URL,
   COPYRIGHT_HOLDER,
   IS_APPX,
   COMMIT_HASH,
@@ -15,7 +14,6 @@ import {
 } from "@/utils/config";
 import IconLucideRefreshCw from "~icons/lucide/refresh-cw";
 import IconLucideGithub from "~icons/lucide/github";
-import IconLucideRss from "~icons/lucide/rss";
 import IconLucideArrowUpRight from "~icons/lucide/arrow-up-right";
 import IconLucideChevronDown from "~icons/lucide/chevron-down";
 
@@ -88,18 +86,10 @@ const dependencies: Dependency[] = [
     description: "类 Apple Music 歌词显示组件库",
     url: "https://github.com/Steve-xmh/applemusic-like-lyrics",
   },
-  {
-    name: "NeteaseCloudMusicApiEnhanced",
-    description: "网易云音乐 API 备份 + 增强",
-    url: "https://github.com/neteasecloudmusicapienhanced/api-enhanced",
-  },
 ];
 
 /** 社区与资讯入口 */
-const community = computed(() => [
-  { name: REPO_NAME, url: REPO_URL, icon: IconLucideGithub },
-  { name: t("settings.about.officialSite"), url: HOMEPAGE_URL, icon: IconLucideRss },
-]);
+const community = computed(() => [{ name: REPO_NAME, url: REPO_URL, icon: IconLucideGithub }]);
 
 const developers = ref<Contributor[]>([]);
 const showAllDevelopers = ref(false);
@@ -137,6 +127,7 @@ onMounted(async () => {
         <div class="flex items-center gap-2 mr-auto">
           <span class="text-lg font-logo text-on-surface">{{ REPO_NAME }}</span>
           <STag type="primary" size="small" round>v{{ APP_VERSION }}</STag>
+          <span class="text-sm text-on-surface-variant">Developed by TEDDY</span>
           <STag v-if="IS_APPX" type="primary" size="small" round>
             {{ t("settings.storeVersion") }}
           </STag>

@@ -108,7 +108,7 @@ import {
   type DownloadAsset,
 } from "../utils/downloadAssets";
 
-const GITHUB_REPO = "SPlayer-Dev/SPlayer-Next";
+const GITHUB_REPO = "ThisIsTeddyBear/SPlayer-Next";
 const releasesUrl = `https://github.com/${GITHUB_REPO}/releases`;
 
 interface Release {

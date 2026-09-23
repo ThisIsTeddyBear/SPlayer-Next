@@ -103,7 +103,7 @@ export const initApp = (): void => {
   registerCacheScheme();
   // 其他初始化
   app.whenReady().then(() => {
-    electronApp.setAppUserModelId("top.imsyy.splayer-next");
+    electronApp.setAppUserModelId("io.github.thisisteddybear.splayer-next");
     // 注册 cache:// 协议处理
     handleCacheProtocol();
     app.on("browser-window-created", (_, window) => {

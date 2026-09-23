@@ -10,7 +10,7 @@ For flicker, hangs, or broken floating windows, run through X11/Xwayland:
 pnpm dev -- --ozone-platform=x11
 ```
 
-For an installed package, copy `top.imsyy.splayer_next.desktop` from `/usr/share/applications/` to `~/.local/share/applications/` and add the argument to `Exec`:
+For an installed package, copy `io.github.thisisteddybear.splayer_next.desktop` from `/usr/share/applications/` to `~/.local/share/applications/` and add the argument to `Exec`:
 
 ```desktop
 Exec=/opt/SPlayer-Next/SPlayer-Next --ozone-platform=x11 %U
@@ -38,7 +38,7 @@ Behavior varies between GNOME Mutter, KDE KWin, wlroots-based compositors, and o
 
 ## Desktop lyric window rules
 
-The desktop lyric window has the fixed title `SPlayer-Next - Desktop Lyric`. In KWin, create a rule matching window class `top.imsyy.splayer_next` and this exact title. You can force Always on Top, Overlay layer, All Desktops, and skip taskbar/pager/switcher behavior.
+The desktop lyric window has the fixed title `SPlayer-Next - Desktop Lyric`. In KWin, create a rule matching window class `io.github.thisisteddybear.splayer_next` and this exact title. You can force Always on Top, Overlay layer, All Desktops, and skip taskbar/pager/switcher behavior.
 
 Example KWin rule:
 
@@ -59,7 +59,7 @@ skiptaskbar=true
 skiptaskbarrule=2
 title=SPlayer-Next - Desktop Lyric
 titlematch=1
-wmclass=top.imsyy.splayer_next
+wmclass=io.github.thisisteddybear.splayer_next
 wmclassmatch=1
 ```
 
@@ -67,7 +67,7 @@ Example Niri rule, which has not been extensively tested:
 
 ```kdl
 window-rule {
-    match app-id="top.imsyy.splayer_next" title="SPlayer-Next - Desktop Lyric"
+    match app-id="io.github.thisisteddybear.splayer_next" title="SPlayer-Next - Desktop Lyric"
     open-floating true
 }
 ```

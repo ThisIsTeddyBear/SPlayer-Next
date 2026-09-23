@@ -16,10 +16,10 @@ const { autoUpdater } = electronUpdater;
 const canSelfInstall = !isMac && !isPortable && !isAppX;
 
 /** Releases page URL */
-const RELEASES_URL = "https://github.com/SPlayer-Dev/SPlayer-Next/releases";
+const RELEASES_URL = "https://github.com/ThisIsTeddyBear/SPlayer-Next/releases";
 
 /** GitHub provider repository */
-const GITHUB_REPO = { owner: "SPlayer-Dev", repo: "SPlayer-Next" } as const;
+const GITHUB_REPO = { owner: "ThisIsTeddyBear", repo: "SPlayer-Next" } as const;
 
 /** Nightly rolling release feed */
 const NIGHTLY_FEED_URL = `${RELEASES_URL}/download/nightly`;

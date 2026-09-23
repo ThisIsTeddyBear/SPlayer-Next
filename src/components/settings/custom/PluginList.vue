@@ -145,7 +145,8 @@ const isEmpty = computed(
   () => sourcePlugins.value.length === 0 && controlPlugins.value.length === 0,
 );
 
-const DOCS_URL = "https://splayer-next.imsyy.top/plugins/";
+const DOCS_URL =
+  "https://github.com/ThisIsTeddyBear/SPlayer-Next/blob/dev/docs/en/plugins/index.md";
 const SUBMIT_URL = "https://github.com/SPlayer-Dev/plugins/issues/new/choose";
 </script>
 

@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (e.g. v1.1.0-beta.1 or v1.1.0-alpha.1)"
+        description: "Release tag (e.g. v1.0.0 or v1.1.0-beta.1)"
         required: true
         type: string
 
@@ -245,7 +245,6 @@ jobs:
           ls -1 release-assets
 
       # Deterministically create Release with official gh CLI
-      # Stable releases are kept as draft, prereleases are published directly
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -269,6 +268,5 @@ jobs:
               --title "$RELEASE_TAG" \
               --generate-notes \
               --verify-tag \
-              --draft \
               release-assets/*
           fi

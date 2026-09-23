@@ -4,7 +4,7 @@ layout: home
 hero:
   name: "SPlayer-Next"
   text: "Music, the way it should be"
-  tagline: A clean and refined cross-platform desktop music player with broad format support, expressive lyrics, deep performance optimization, and carefully crafted details.
+  tagline: Version 1.0.0 by TEDDY. A refined cross-platform desktop music player with broad format support, expressive lyrics, and carefully crafted details.
   actions:
     - theme: brand
       text: Download
@@ -14,7 +14,7 @@ hero:
       link: /en/guide
     - theme: alt
       text: GitHub
-      link: https://github.com/SPlayer-Dev/SPlayer-Next
+      link: https://github.com/ThisIsTeddyBear/SPlayer-Next
 
 features:
   - icon: 🎵

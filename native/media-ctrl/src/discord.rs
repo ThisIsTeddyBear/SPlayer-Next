@@ -232,7 +232,7 @@ impl Worker {
             .small_image(ICON_KEY)
             .small_text("SPlayer");
 
-        let buttons = vec![Button::new("SPlayer", "https://github.com/imsyy/SPlayer")];
+        let buttons = vec![Button::new("SPlayer-Next", "https://github.com/ThisIsTeddyBear/SPlayer-Next")];
 
         let status_type = match display_mode {
             DiscordDisplayMode::Name => StatusDisplayType::Name,

@@ -6,6 +6,8 @@
 
 **Your music, beautifully played.**
 
+**Version 1.0.0 · Developed by TEDDY**
+
 A desktop music player with a carefully crafted layout, expressive lyrics, local and streaming libraries, and a Rust-powered audio engine. Successor to the original [SPlayer-Next](https://github.com/SPlayer-Dev/SPlayer-Next).
 
 [Download](https://github.com/ThisIsTeddyBear/SPlayer-Next/releases) · [Documentation](docs/en/index.md) · [Report an issue](https://github.com/ThisIsTeddyBear/SPlayer-Next/issues)
@@ -57,7 +59,7 @@ Some features depend on the operating system, a connected server, or a third-par
 
 ## Get SPlayer-Next
 
-Our first major release is on the way. When it is published, download the builds from [this repository's Releases page](https://github.com/ThisIsTeddyBear/SPlayer-Next/releases). Until then, you can build the app from source using the instructions below.
+Version 1.0.0 is the first stable release of this TEDDY-developed successor project. Download published builds from [this repository's Releases page](https://github.com/ThisIsTeddyBear/SPlayer-Next/releases), or build the app from source using the instructions below.
 
 ## Development
 
@@ -93,7 +95,7 @@ Builds target the current architecture; cross-compilation is not supported. The 
 
 ## Acknowledgements
 
-SPlayer-Next builds on open-source work including [applemusic-like-lyrics](https://github.com/Steve-xmh/applemusic-like-lyrics).
+SPlayer-Next was developed by TEDDY from the [original SPlayer-Next project](https://github.com/SPlayer-Dev/SPlayer-Next) and builds on open-source work including [applemusic-like-lyrics](https://github.com/Steve-xmh/applemusic-like-lyrics). Original contributors retain credit for their work.
 
 ## License and third-party services
 

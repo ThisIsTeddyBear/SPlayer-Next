@@ -8,4 +8,4 @@ Installing all Windows updates and the [Visual C++ Redistributable 2015–2022](
 
 Windows 7 lacks modern APIs used by Electron and does not support SMTC system media controls. Its default TLS configuration may also reject modern services.
 
-Windows 7 reached end of support in January 2020. Upgrade to Windows 10 or 11 for security, compatibility, and current media integration. Older builds may exist on [GitHub Releases](https://github.com/SPlayer-Dev/SPlayer-Next/releases), but they can contain known security issues.
+Windows 7 reached end of support in January 2020. Upgrade to Windows 10 or 11 for security, compatibility, and current media integration. Older builds may exist on [GitHub Releases](https://github.com/ThisIsTeddyBear/SPlayer-Next/releases), but they can contain known security issues.

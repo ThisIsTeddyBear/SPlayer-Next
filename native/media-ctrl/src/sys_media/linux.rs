@@ -300,7 +300,7 @@ async fn run_mpris_loop(
         .maximum_rate(2.0)
         .playback_status(MprisPlaybackStatus::Stopped)
         .identity("SPlayer-Next")
-        .desktop_entry("top.imsyy.splayer_next")
+        .desktop_entry("io.github.thisisteddybear.splayer_next")
         .build()
         .await
         .map_err(|e| anyhow::anyhow!("Failed to initialize MPRIS: {e}"))?;

@@ -54,5 +54,5 @@ Updates are published on the official documentation site and may also be mention
 
 ## 9. Contact
 
-- [GitHub Issues](https://github.com/SPlayer-Dev/SPlayer-Next/issues)
+- [GitHub Issues](https://github.com/ThisIsTeddyBear/SPlayer-Next/issues)
 - The contact email published in the official GitHub repository and developer profile

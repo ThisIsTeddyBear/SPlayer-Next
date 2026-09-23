@@ -12,16 +12,16 @@ The list below fetches the latest release for the selected channel from GitHub a
 
 | Channel    | Intended audience       | Releases received           | Example         |
 | ---------- | ----------------------- | --------------------------- | --------------- |
-| **Stable** | Everyday use            | Stable                      | `1.2.0`         |
-| **Beta**   | Early feature access    | Beta, then Stable           | `1.3.0-beta.1`  |
-| **Alpha**  | Development and testing | Alpha, then Beta and Stable | `1.4.0-alpha.1` |
+| **Stable** | Everyday use            | Stable                      | `1.0.0`         |
+| **Beta**   | Early feature access    | Beta, then Stable           | `1.1.0-beta.1`  |
+| **Alpha**  | Development and testing | Alpha, then Beta and Stable | `1.2.0-alpha.1` |
 
 Change the channel under **Settings → General → Release channel**. Alpha builds may be highly unstable. Moving to a more stable channel may require installing a build with a lower version number.
 
 ## Other sources
 
-- **Previous versions:** Browse all archived builds on [GitHub Releases](https://github.com/SPlayer-Dev/SPlayer-Next/releases).
-- **Development builds:** Download the latest workflow artifact from [GitHub Actions](https://github.com/SPlayer-Dev/SPlayer-Next/actions). A GitHub account is required.
+- **Previous versions:** Browse all archived builds on [GitHub Releases](https://github.com/ThisIsTeddyBear/SPlayer-Next/releases).
+- **Development builds:** Download the latest workflow artifact from [GitHub Actions](https://github.com/ThisIsTeddyBear/SPlayer-Next/actions). A GitHub account is required.
 
 ## Installation notes
 

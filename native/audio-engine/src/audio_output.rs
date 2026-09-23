@@ -504,9 +504,9 @@ fn build_typed_stream_for_format(
 #[cfg(any(target_os = "linux", test))]
 fn format_pipewire_props(sample_rate: u32) -> String {
     let mut props = serde_json::json!({
-        "application.id": "top.imsyy.splayer_next",
+        "application.id": "io.github.thisisteddybear.splayer_next",
         "application.name": "SPlayer-Next",
-        "application.icon-name": "top.imsyy.splayer_next",
+        "application.icon-name": "io.github.thisisteddybear.splayer_next",
         "media.name": "Playback",
     });
     if sample_rate > 0 {
@@ -677,16 +677,16 @@ mod tests {
     fn pipewire_props_includes_stable_identity_and_optional_rate() {
         let props_with_rate = format_pipewire_props(96000);
         assert!(props_with_rate.contains(r#""node.rate":"1/96000""#));
-        assert!(props_with_rate.contains(r#""application.id":"top.imsyy.splayer_next""#));
+        assert!(props_with_rate.contains(r#""application.id":"io.github.thisisteddybear.splayer_next""#));
         assert!(props_with_rate.contains(r#""application.name":"SPlayer-Next""#));
-        assert!(props_with_rate.contains(r#""application.icon-name":"top.imsyy.splayer_next""#));
+        assert!(props_with_rate.contains(r#""application.icon-name":"io.github.thisisteddybear.splayer_next""#));
         assert!(props_with_rate.contains(r#""media.name":"Playback""#));
 
         let props_without_rate = format_pipewire_props(0);
         assert!(!props_without_rate.contains("node.rate"));
-        assert!(props_without_rate.contains(r#""application.id":"top.imsyy.splayer_next""#));
+        assert!(props_without_rate.contains(r#""application.id":"io.github.thisisteddybear.splayer_next""#));
         assert!(props_without_rate.contains(r#""application.name":"SPlayer-Next""#));
-        assert!(props_without_rate.contains(r#""application.icon-name":"top.imsyy.splayer_next""#));
+        assert!(props_without_rate.contains(r#""application.icon-name":"io.github.thisisteddybear.splayer_next""#));
         assert!(props_without_rate.contains(r#""media.name":"Playback""#));
     }
 

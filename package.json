@@ -1,24 +1,23 @@
 {
   "name": "splayer-next",
   "productName": "SPlayer-Next",
-  "desktopName": "top.imsyy.splayer_next",
-  "version": "1.2.0-alpha.1",
+  "desktopName": "io.github.thisisteddybear.splayer_next",
+  "version": "1.0.0",
   "description": "Cross-platform desktop music player with rich lyric support and wide audio format compatibility",
   "type": "module",
   "packageManager": "pnpm@11.5.2",
   "main": "./out/main/index.js",
   "author": {
-    "name": "imsyy",
-    "email": "imsyy1024@gmail.com",
-    "url": "https://imsyy.top"
+    "name": "TEDDY",
+    "url": "https://github.com/ThisIsTeddyBear"
   },
-  "homepage": "https://splayer-next.imsyy.top",
+  "homepage": "https://github.com/ThisIsTeddyBear/SPlayer-Next",
   "repository": {
     "type": "git",
-    "url": "https://github.com/SPlayer-Dev/SPlayer-Next"
+    "url": "https://github.com/ThisIsTeddyBear/SPlayer-Next"
   },
   "bugs": {
-    "url": "https://github.com/SPlayer-Dev/SPlayer-Next/issues"
+    "url": "https://github.com/ThisIsTeddyBear/SPlayer-Next/issues"
   },
   "license": "AGPL-3.0",
   "license-file": "LICENSE",

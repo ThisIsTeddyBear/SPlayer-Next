@@ -6,7 +6,8 @@ import { isExternalUrl, openExternal } from "@/utils/url";
 defineOptions({ inheritAttrs: false });
 
 /** 插件开发文档地址 */
-const DOCS_URL = "https://splayer-next.imsyy.top/plugins/";
+const DOCS_URL =
+  "https://github.com/ThisIsTeddyBear/SPlayer-Next/blob/dev/docs/en/plugins/index.md";
 
 const { t } = useI18n();
 const pluginsStore = usePluginsStore();

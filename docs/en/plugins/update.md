@@ -19,7 +19,7 @@ Checks run silently at application startup and can also be started from each plu
 ```js
 /**
  * @name      ClassIsland Integration
- * @id        imsyy.classisland
+ * @id        teddy.classisland
  * @version   1.1.0
  * @updateUrl https://raw.githubusercontent.com/you/repo/main/ClassIsland.js
  * @changelog Fix port collision crashes\nShow album names

@@ -1,7 +1,7 @@
 import { defineConfig, type DefaultTheme } from "vitepress";
 
 const socialLinks: DefaultTheme.SocialLink[] = [
-  { icon: "github", link: "https://github.com/SPlayer-Dev/SPlayer-Next" },
+  { icon: "github", link: "https://github.com/ThisIsTeddyBear/SPlayer-Next" },
 ];
 
 const themeConfig: DefaultTheme.Config = {
@@ -27,7 +27,7 @@ const themeConfig: DefaultTheme.Config = {
         { text: "Privacy Policy", link: "/en/privacy" },
       ],
     },
-    { text: "GitHub", link: "https://github.com/SPlayer-Dev/SPlayer-Next" },
+    { text: "GitHub", link: "https://github.com/ThisIsTeddyBear/SPlayer-Next" },
   ],
   sidebar: [
     {
@@ -82,10 +82,10 @@ const themeConfig: DefaultTheme.Config = {
   footer: {
     message:
       'Released under AGPL-3.0 | <a href="/en/agreement">User Agreement</a> | <a href="/en/privacy">Privacy Policy</a>',
-    copyright: "Copyright © 2025-present imsyy",
+    copyright: "Copyright © 2026 TEDDY and SPlayer-Next contributors",
   },
   editLink: {
-    pattern: "https://github.com/SPlayer-Dev/SPlayer-Next/blob/dev/docs/:path?plain=1",
+    pattern: "https://github.com/ThisIsTeddyBear/SPlayer-Next/blob/dev/docs/:path?plain=1",
     text: "View or edit this page",
   },
   lastUpdated: {
@@ -99,7 +99,7 @@ export default defineConfig({
   srcExclude: ["superpowers/**"],
   head: [
     ["link", { rel: "icon", href: "/favicon.png" }],
-    ["meta", { name: "author", content: "imsyy" }],
+    ["meta", { name: "author", content: "TEDDY" }],
     [
       "meta",
       {

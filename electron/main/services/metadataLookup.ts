@@ -6,7 +6,7 @@ import type {
   MetadataSearchQuery,
 } from "@shared/types/tagEditor";
 
-const USER_AGENT = "SPlayer-Next/1.2 (https://github.com/SPlayer-Dev/SPlayer-Next)";
+const USER_AGENT = "SPlayer-Next/1.0 (https://github.com/ThisIsTeddyBear/SPlayer-Next)";
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";

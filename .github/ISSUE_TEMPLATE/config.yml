@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: General discussion
-    url: https://github.com/SPlayer-Dev/SPlayer-Next/discussions
+    url: https://github.com/ThisIsTeddyBear/SPlayer-Next/discussions
     about: Ask questions, share ideas, and discuss with the community.
   - name: How to ask good questions
     url: https://www.catb.org/~esr/faqs/smart-questions.html

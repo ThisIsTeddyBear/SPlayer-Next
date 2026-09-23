@@ -33,9 +33,9 @@ if (updateChannel !== inferredUpdateChannel) {
 }
 
 const config: Configuration = {
-  appId: "top.imsyy.splayer-next",
+  appId: "io.github.thisisteddybear.splayer-next",
   productName: "SPlayer-Next",
-  copyright: "Copyright © imsyy 2025",
+  copyright: "Copyright © 2026 TEDDY and SPlayer-Next contributors",
   directories: { buildResources: "public" },
   fileAssociations,
   afterPack: "./scripts/after-pack.ts",
@@ -112,7 +112,7 @@ const config: Configuration = {
   },
   nsis: {
     oneClick: false,
-    guid: "top.imsyy.splayer-next",
+    guid: "io.github.thisisteddybear.splayer-next",
     installerIcon: "public/icons/favicon.ico",
     uninstallerIcon: "public/icons/favicon.ico",
     artifactName: "${productName}-${version}-${arch}-setup.${ext}",
@@ -154,7 +154,7 @@ const config: Configuration = {
     executableName: "SPlayer-Next",
     icon: "public/icons/favicon-512x512.png",
     artifactName: "${name}-${version}-${arch}.${ext}",
-    maintainer: "imsyy.top",
+    maintainer: "TEDDY",
     category: "Audio;Music;AudioVideo;",
     target: ["AppImage", "deb", "rpm", "tar.gz", "pacman"],
     syncDesktopName: true,
@@ -182,7 +182,7 @@ const config: Configuration = {
   },
   publish: {
     provider: "github",
-    owner: "SPlayer-Dev",
+    owner: "ThisIsTeddyBear",
     repo: "SPlayer-Next",
     channel: updateChannel,
   },

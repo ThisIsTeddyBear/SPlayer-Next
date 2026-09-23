@@ -19,7 +19,7 @@ A script has one type, selected by `@type`; the default is `source`.
 
 ## Publishing to the plugin market
 
-Submit a plugin to [SPlayer-Dev/plugins](https://github.com/SPlayer-Dev/plugins) through the New Plugin issue template. Automated checks validate the manifest and conventions, a pull request is generated for maintainer review, and merging rebuilds the market index.
+The built-in plugin market currently uses the [original SPlayer-Dev/plugins registry](https://github.com/SPlayer-Dev/plugins). Submit a plugin there through its New Plugin issue template. Automated checks validate the manifest and conventions, a pull request is generated for maintainer review, and merging rebuilds the market index.
 
 Use the Update Plugin template for a new version. Keep `@id` unchanged so users can update in place. See [Plugin Updates](/en/plugins/update).
 

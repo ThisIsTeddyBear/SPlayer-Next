@@ -27,6 +27,6 @@ If media keys do not work, close applications that may capture them and review *
 
 ## Update failures
 
-1. Download the latest build from [GitHub Releases](https://github.com/SPlayer-Dev/SPlayer-Next/releases).
+1. Download the latest build from [GitHub Releases](https://github.com/ThisIsTeddyBear/SPlayer-Next/releases).
 2. Remove the old application and reinstall.
 3. Check your network connection.

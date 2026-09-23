@@ -35,4 +35,4 @@ rm -rf /Applications/SPlayer-Next.app
 rm -rf ~/Library/Application\ Support/SPlayer-Next
 ```
 
-Download a fresh copy from [GitHub Releases](https://github.com/SPlayer-Dev/SPlayer-Next/releases), remove the quarantine attribute, and try again.
+Download a fresh copy from [GitHub Releases](https://github.com/ThisIsTeddyBear/SPlayer-Next/releases), remove the quarantine attribute, and try again.

@@ -11,7 +11,7 @@ Thank you for contributing to SPlayer-Next. This page covers the local environme
 ## Getting started
 
 ```bash
-git clone https://github.com/SPlayer-Dev/SPlayer-Next.git
+git clone https://github.com/ThisIsTeddyBear/SPlayer-Next.git
 cd SPlayer-Next
 pnpm install
 pnpm dev
