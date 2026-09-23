@@ -411,6 +411,24 @@ export const registerPlayerIpc = (): void => {
     };
   });
 
+  ipcMain.handle("player:getStreamInfo", () => {
+    try {
+      const inst = getPlayer();
+      const info = inst.getStreamInfo();
+      return {
+        success: true,
+        data: info
+          ? {
+              ...info,
+              deviceName: inst.getSelectedDeviceName() ?? inst.getDefaultDeviceName() ?? "Unknown",
+            }
+          : null,
+      };
+    } catch (error) {
+      return fail(ErrorCode.UNKNOWN, error);
+    }
+  });
+
   ipcMain.handle("player:reinit", async () => {
     try {
       await getPlayer().reinitOutput();

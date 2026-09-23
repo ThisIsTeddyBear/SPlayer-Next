@@ -169,6 +169,10 @@ impl ExclusiveConfig {
         self.sample_format.name()
     }
 
+    pub fn valid_bits_per_sample(&self) -> u32 {
+        u32::from(self.sample_format.valid_bits_per_sample())
+    }
+
     pub fn is_bit_perfect(&self) -> bool {
         self.bit_perfect
     }
@@ -496,7 +500,7 @@ fn run_stream(
     ready_tx: mpsc::SyncSender<std::result::Result<(), String>>,
 ) -> Result<()> {
     let _com = ComApartmentGuard::init()?;
-    priority::boost_current_audio_thread("wasapi-exclusive-output");
+    let _priority = priority::RenderThreadPriority::new();
     let device = open_device(config.device_id.as_deref())?;
     let mut client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None) }
         .context("Failed to activate the exclusive audio device")?;
@@ -611,6 +615,8 @@ fn run_loop(
     let mut initial_gaps = 0u32;
     let mut baseline_gap = None;
     let mut late_wakes = 0;
+    let mut total_late_wakes = 0u64;
+    let mut longest_gap = Duration::ZERO;
     // 控制事件优先，避免持续就绪的设备事件阻塞停止和流释放。
     let handles = [control.control_event, audio_event];
 
@@ -620,6 +626,14 @@ fn run_loop(
             if control.stopped.load(Ordering::Acquire) || stopped.load(Ordering::Acquire) {
                 if running {
                     stop_client(client)?;
+                }
+                if total_late_wakes > 0 {
+                    tracing::warn!(
+                        total_late_wakes,
+                        longest_gap_ms = longest_gap.as_secs_f64() * 1000.0,
+                        period_ms = period.as_secs_f64() * 1000.0,
+                        "WASAPI exclusive output missed device event periods"
+                    );
                 }
                 return Ok(());
             }
@@ -653,6 +667,10 @@ fn run_loop(
                 let now = Instant::now();
                 if let Some(previous) = last_audio_wake {
                     let gap = now.duration_since(previous);
+                    if gap > period * 2 {
+                        total_late_wakes += 1;
+                        longest_gap = longest_gap.max(gap);
+                    }
                     if let Some(baseline) = baseline_gap {
                         late_wakes = if gap > baseline * 2 { late_wakes + 1 } else { 0 };
                         // 部分 USB 驱动会在播放一段时间后改变事件周期，重置流才能恢复原有时序。

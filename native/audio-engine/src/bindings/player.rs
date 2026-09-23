@@ -102,6 +102,25 @@ pub struct JsPlayerStatus {
     pub bit_perfect_active: bool,
 }
 
+#[napi(object)]
+pub struct JsAudioStreamInfo {
+    pub is_exclusive: bool,
+    pub bit_perfect_active: bool,
+    pub output_sample_rate: u32,
+    pub output_channels: u32,
+    pub output_bits: u32,
+    pub output_format: String,
+    pub source_sample_rate: u32,
+    pub source_channels: u32,
+    pub source_bits: u32,
+    pub is_resampling: bool,
+    pub is_equalizer_active: bool,
+    pub is_tempo_active: bool,
+    pub is_normalization_active: bool,
+    pub is_limiter_active: bool,
+    pub speed: f64,
+}
+
 fn state_to_str(state: PlayerState) -> &'static str {
     match state {
         PlayerState::Idle => "idle",
@@ -747,6 +766,11 @@ impl AudioPlayer {
             is_finished: player.is_finished(),
             bit_perfect_active: player.bit_perfect_active(),
         }
+    }
+
+    #[napi]
+    pub fn get_stream_info(&self) -> Option<JsAudioStreamInfo> {
+        self.inner.lock().stream_info()
     }
 
     #[napi]

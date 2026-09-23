@@ -17,10 +17,15 @@ pub enum PopResult {
     Finished,
 }
 
+struct OutputBuffer {
+    chunks: VecDeque<AudioChunk>,
+    samples: u64,
+}
+
 pub struct Shared {
     decoded_buffer: Mutex<VecDeque<AudioChunk>>,
     decoded_condvar: Condvar,
-    output_buffer: Mutex<VecDeque<AudioChunk>>,
+    output_buffer: Mutex<OutputBuffer>,
     output_condvar: Condvar,
     player_buffer_pool: Mutex<Vec<Vec<f32>>>,
     fft_buffer_pool: Mutex<Vec<Vec<f32>>>,
@@ -41,11 +46,12 @@ pub struct Shared {
 
 pub const FRAME_BUFFER_CAPACITY: usize = 192;
 
-const OUTPUT_BUFFER_CAPACITY: usize = 4;
+const OUTPUT_BUFFER_CAPACITY: usize = 256;
+const OUTPUT_BUFFER_MS: u64 = 100;
 
 const STARTUP_BUFFER_MS: u64 = 50;
 
-const BUFFER_POOL_CAPACITY: usize = FRAME_BUFFER_CAPACITY + OUTPUT_BUFFER_CAPACITY + 4;
+const BUFFER_POOL_CAPACITY: usize = FRAME_BUFFER_CAPACITY + 64;
 
 impl Shared {
     pub fn new(sample_rate: u32, channels: u16) -> Arc<Self> {
@@ -56,7 +62,10 @@ impl Shared {
         Arc::new(Self {
             decoded_buffer: Mutex::new(VecDeque::with_capacity(FRAME_BUFFER_CAPACITY)),
             decoded_condvar: Condvar::new(),
-            output_buffer: Mutex::new(VecDeque::with_capacity(OUTPUT_BUFFER_CAPACITY)),
+            output_buffer: Mutex::new(OutputBuffer {
+                chunks: VecDeque::with_capacity(OUTPUT_BUFFER_CAPACITY),
+                samples: 0,
+            }),
             output_condvar: Condvar::new(),
             player_buffer_pool: Mutex::new(Vec::with_capacity(BUFFER_POOL_CAPACITY)),
             fft_buffer_pool: Mutex::new(Vec::with_capacity(BUFFER_POOL_CAPACITY)),
@@ -155,7 +164,7 @@ impl Shared {
     }
 
     pub fn is_buffer_empty(&self) -> bool {
-        self.output_buffer.lock().is_empty()
+        self.output_buffer.lock().chunks.is_empty()
     }
 
     pub fn mark_all_consumed(&self) {
@@ -230,13 +239,20 @@ impl Shared {
 
     pub fn push_output(&self, chunk: AudioChunk) {
         let mut buffer = self.output_buffer.lock();
-        while buffer.len() >= OUTPUT_BUFFER_CAPACITY && !self.is_stopping.load(Ordering::Acquire) {
+        let target_samples = u64::from(self.sample_rate)
+            .saturating_mul(u64::from(self.channels))
+            .saturating_mul(OUTPUT_BUFFER_MS)
+            / 1000;
+        while (buffer.chunks.len() >= OUTPUT_BUFFER_CAPACITY || buffer.samples >= target_samples)
+            && !self.is_stopping.load(Ordering::Acquire)
+        {
             self.output_condvar.wait(&mut buffer);
         }
         if self.is_stopping.load(Ordering::Acquire) {
             return;
         }
-        buffer.push_back(chunk);
+        buffer.samples += chunk.player_samples.len() as u64;
+        buffer.chunks.push_back(chunk);
         self.output_condvar.notify_one();
     }
 
@@ -248,24 +264,21 @@ impl Shared {
         }
     }
 
-    fn playback_buffer_ready(&self, buffer: &VecDeque<AudioChunk>) -> bool {
+    fn playback_buffer_ready(&self, buffer: &OutputBuffer) -> bool {
         let target_samples = u64::from(self.sample_rate)
             .saturating_mul(u64::from(self.channels))
             .saturating_mul(STARTUP_BUFFER_MS)
             / 1000;
         self.is_stopping.load(Ordering::Acquire)
             || self.output_eof.load(Ordering::Acquire)
-            || buffer.len() >= OUTPUT_BUFFER_CAPACITY
-            || buffer
-                .iter()
-                .map(|chunk| chunk.player_samples.len() as u64)
-                .sum::<u64>()
-                >= target_samples
+            || buffer.chunks.len() >= OUTPUT_BUFFER_CAPACITY
+            || buffer.samples >= target_samples
     }
 
     pub fn try_pop(&self) -> PopResult {
         let mut buffer = self.output_buffer.lock();
-        if let Some(chunk) = buffer.pop_front() {
+        if let Some(chunk) = buffer.chunks.pop_front() {
+            buffer.samples -= chunk.player_samples.len() as u64;
             self.output_condvar.notify_one();
             return PopResult::Chunk(chunk);
         }
@@ -302,8 +315,9 @@ impl Shared {
         decoded.shrink_to_fit();
         drop(decoded);
         let mut output = self.output_buffer.lock();
-        let output_chunks = std::mem::take(&mut *output);
-        output.shrink_to_fit();
+        let output_chunks = std::mem::take(&mut output.chunks);
+        output.samples = 0;
+        output.chunks.shrink_to_fit();
         drop(output);
         for chunk in decoded_chunks.into_iter().chain(output_chunks) {
             self.recycle_player_buffer(chunk.player_samples);
@@ -344,5 +358,31 @@ mod tests {
             source_sample_count: 50,
         });
         assert!(shared.playback_buffer_ready(&shared.output_buffer.lock()));
+    }
+
+    #[test]
+    fn high_rate_output_buffers_by_duration_instead_of_chunk_count() {
+        let shared = Shared::new(384_000, 2);
+        for _ in 0..5 {
+            shared.push_output(AudioChunk {
+                player_samples: vec![0.0; 768],
+                fft_samples: Vec::new(),
+                source_sample_count: 768,
+            });
+        }
+        assert_eq!(shared.output_buffer.lock().chunks.len(), 5);
+        assert!(!shared.playback_buffer_ready(&shared.output_buffer.lock()));
+        for _ in 0..45 {
+            shared.push_output(AudioChunk {
+                player_samples: vec![0.0; 768],
+                fft_samples: Vec::new(),
+                source_sample_count: 768,
+            });
+        }
+        assert!(shared.playback_buffer_ready(&shared.output_buffer.lock()));
+        assert!(matches!(shared.try_pop(), PopResult::Chunk(_)));
+        assert_eq!(shared.output_buffer.lock().samples, 49 * 768);
+        shared.drain_buffer();
+        assert_eq!(shared.output_buffer.lock().samples, 0);
     }
 }

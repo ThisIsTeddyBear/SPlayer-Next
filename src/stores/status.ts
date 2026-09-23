@@ -22,6 +22,7 @@ export const useStatusStore = defineStore(
     const outerQueueOpen = ref(false);
     const fullQueueOpen = ref(false);
     const searchOpen = ref(false);
+    const audioInfoOpen = ref(false);
     const showLyric = ref(true);
     const playIndex = ref(-1);
     const repeatMode = ref<RepeatMode>("list");
@@ -76,6 +77,7 @@ export const useStatusStore = defineStore(
       outerQueueOpen,
       fullQueueOpen,
       searchOpen,
+      audioInfoOpen,
       showLyric,
       outputDevices,
       playIndex,

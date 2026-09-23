@@ -4,6 +4,7 @@ import { useMediaStore } from "@/stores/media";
 import { useSettingsStore } from "@/stores/settings";
 import { useOrpheusProtocol } from "@/composables/useOrpheusProtocol";
 import { useExternalFileHandler } from "@/composables/useExternalFileHandler";
+import AudioInfoDialog from "@/components/modals/AudioInfoDialog.vue";
 
 const route = useRoute();
 const status = useStatusStore();
@@ -174,4 +175,5 @@ const playerBarInnerClass = computed(() => {
   <!-- 更新弹窗 -->
   <UpdateDialog />
   <!-- 评论弹窗 -->
+  <AudioInfoDialog v-model:open="status.audioInfoOpen" />
 </template>

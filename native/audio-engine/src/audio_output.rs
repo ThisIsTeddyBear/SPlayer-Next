@@ -196,6 +196,30 @@ impl AudioOutput {
         }
     }
 
+    pub fn is_exclusive(&self) -> bool {
+        match &self.backend {
+            OutputBackend::Shared { .. } => false,
+            #[cfg(target_os = "windows")]
+            OutputBackend::Exclusive(_) => true,
+        }
+    }
+
+    pub fn output_bits(&self) -> u32 {
+        match &self.backend {
+            OutputBackend::Shared { config, .. } => config.sample_format().sample_size() as u32 * 8,
+            #[cfg(target_os = "windows")]
+            OutputBackend::Exclusive(config) => config.valid_bits_per_sample(),
+        }
+    }
+
+    pub fn output_format(&self) -> String {
+        match &self.backend {
+            OutputBackend::Shared { config, .. } => config.sample_format().to_string(),
+            #[cfg(target_os = "windows")]
+            OutputBackend::Exclusive(config) => config.sample_format_name().to_owned(),
+        }
+    }
+
     pub(crate) fn build_stream(
         &self,
         source: DecoderSource,
@@ -550,6 +574,7 @@ where
     let channels = usize::from(config.channels);
     let ramp_frames = (u64::from(config.sample_rate) * GAIN_RAMP_MS / 1000) as usize;
     let mut gain_smoother = GainSmoother::new(f32::from_bits(volume.load(Ordering::Relaxed)));
+    let mut xruns = 0u64;
     let stream = {
         #[cfg(target_os = "linux")]
         let _props_guard = pipewire_props::Guard::set_stream_props(config.sample_rate);
@@ -578,6 +603,25 @@ where
                 }
             },
             move |error| {
+                if matches!(
+                    error.kind(),
+                    cpal::ErrorKind::Xrun
+                        | cpal::ErrorKind::RealtimeDenied
+                        | cpal::ErrorKind::DeviceChanged
+                ) {
+                    if error.kind() == cpal::ErrorKind::Xrun {
+                        xruns += 1;
+                        if xruns.is_power_of_two() {
+                            warn!(xruns, "Audio output underrun; keeping the current stream");
+                        }
+                    } else if error.kind() == cpal::ErrorKind::RealtimeDenied {
+                        warn!(
+                            %error,
+                            "Real-time audio scheduling unavailable; keeping the current stream"
+                        );
+                    }
+                    return;
+                }
                 let err_msg = error.to_string();
                 let invalidated =
                     err_msg.contains("no longer valid") || err_msg.contains("-2004287484");

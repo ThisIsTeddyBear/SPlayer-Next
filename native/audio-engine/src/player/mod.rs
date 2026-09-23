@@ -568,6 +568,32 @@ impl InnerPlayer {
     pub fn pitch_sync(&self) -> bool {
         self.tempo.lock().pitch_sync()
     }
+
+    pub fn stream_info(&self) -> Option<crate::bindings::JsAudioStreamInfo> {
+        let output = self.output.as_ref()?;
+        let tempo = self.tempo.lock();
+        let is_tempo_active = !tempo.is_bypass();
+        let speed = f64::from(tempo.speed());
+        drop(tempo);
+        let bit_perfect_active = self.bit_perfect_active();
+        Some(crate::bindings::JsAudioStreamInfo {
+            is_exclusive: output.is_exclusive(),
+            bit_perfect_active,
+            output_sample_rate: output.sample_rate(),
+            output_channels: u32::from(output.channels()),
+            output_bits: output.output_bits(),
+            output_format: output.output_format(),
+            source_sample_rate: self.original_sample_rate,
+            source_channels: u32::from(self.original_channels),
+            source_bits: self.original_bits_per_sample,
+            is_resampling: output.sample_rate() != self.original_sample_rate,
+            is_equalizer_active: self.equalizer.lock().enabled(),
+            is_tempo_active,
+            is_normalization_active: self.normalization_enabled,
+            is_limiter_active: !bit_perfect_active,
+            speed,
+        })
+    }
 }
 
 #[cfg(test)]

@@ -30,6 +30,7 @@ export declare class AudioPlayer {
   getPosition(): number
   getDuration(): number
   getStatus(): JsPlayerStatus
+  getStreamInfo(): JsAudioStreamInfo | null
   setFftEnabled(enabled: boolean): void
   getFftEnabled(): boolean
   setNormalizationEnabled(enabled: boolean): void
@@ -75,6 +76,24 @@ export interface JsAudioDevice {
   id: string
   name: string
   isDefault: boolean
+}
+
+export interface JsAudioStreamInfo {
+  isExclusive: boolean
+  bitPerfectActive: boolean
+  outputSampleRate: number
+  outputChannels: number
+  outputBits: number
+  outputFormat: string
+  sourceSampleRate: number
+  sourceChannels: number
+  sourceBits: number
+  isResampling: boolean
+  isEqualizerActive: boolean
+  isTempoActive: boolean
+  isNormalizationActive: boolean
+  isLimiterActive: boolean
+  speed: number
 }
 
 export interface JsExternalLyric {

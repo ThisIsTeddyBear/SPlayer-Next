@@ -70,6 +70,7 @@ const api = {
     setFadeDuration: (ms: number) => ipcRenderer.invoke("player:setFadeDuration", ms),
     getFadeDuration: () => ipcRenderer.invoke("player:getFadeDuration"),
     getStatus: () => ipcRenderer.invoke("player:getStatus"),
+    getStreamInfo: () => ipcRenderer.invoke("player:getStreamInfo"),
     getFftData: () => ipcRenderer.invoke("player:getFftData"),
     setFftEnabled: (enabled: boolean) => ipcRenderer.invoke("player:setFftEnabled", enabled),
     setNormalizationEnabled: (enabled: boolean) =>
