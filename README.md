@@ -6,14 +6,14 @@
 
 **Your music, beautifully played.**
 
-A desktop music player with a carefully crafted layout, expressive lyrics, local and streaming libraries, and a Rust-powered audio engine. Successor to [SPlayer](https://github.com/SPlayer-Dev/SPlayer).
+A desktop music player with a carefully crafted layout, expressive lyrics, local and streaming libraries, and a Rust-powered audio engine. Successor to the original [SPlayer-Next](https://github.com/SPlayer-Dev/SPlayer-Next).
 
-[Download](https://github.com/SPlayer-Dev/SPlayer-Next/releases) · [Documentation](https://splayer-next.imsyy.top) · [Report an issue](https://github.com/SPlayer-Dev/SPlayer-Next/issues)
+[Download](https://github.com/ThisIsTeddyBear/SPlayer-Next/releases) · [Documentation](docs/en/index.md) · [Report an issue](https://github.com/ThisIsTeddyBear/SPlayer-Next/issues)
 
-[![Stars](https://img.shields.io/github/stars/SPlayer-Dev/SPlayer-Next?style=flat)](https://github.com/SPlayer-Dev/SPlayer-Next/stargazers)
-[![Release](https://img.shields.io/github/v/release/SPlayer-Dev/SPlayer-Next)](https://github.com/SPlayer-Dev/SPlayer-Next/releases)
-[![License](https://img.shields.io/github/license/SPlayer-Dev/SPlayer-Next)](LICENSE)
-[![CI](https://github.com/SPlayer-Dev/SPlayer-Next/actions/workflows/ci.yml/badge.svg)](https://github.com/SPlayer-Dev/SPlayer-Next/actions/workflows/ci.yml)
+[![Stars](https://img.shields.io/github/stars/ThisIsTeddyBear/SPlayer-Next?style=flat)](https://github.com/ThisIsTeddyBear/SPlayer-Next/stargazers)
+[![Release](https://img.shields.io/github/v/release/ThisIsTeddyBear/SPlayer-Next)](https://github.com/ThisIsTeddyBear/SPlayer-Next/releases)
+[![License](https://img.shields.io/github/license/ThisIsTeddyBear/SPlayer-Next)](LICENSE)
+[![CI](https://github.com/ThisIsTeddyBear/SPlayer-Next/actions/workflows/ci.yml/badge.svg)](https://github.com/ThisIsTeddyBear/SPlayer-Next/actions/workflows/ci.yml)
 
 </div>
 
@@ -53,11 +53,11 @@ A desktop music player with a carefully crafted layout, expressive lyrics, local
 - Extend music sources and playback control with plugins. Optional HTTP, WebSocket, and MCP interfaces support external integrations.
 - Offers English and Simplified Chinese interfaces.
 
-Some features depend on the operating system, a connected server, or a third-party service. See the [user guide](https://splayer-next.imsyy.top/en/guide) and [streaming guide](https://splayer-next.imsyy.top/en/streaming) for setup details.
+Some features depend on the operating system, a connected server, or a third-party service. See the [user guide](docs/en/guide.md) and [streaming guide](docs/en/streaming.md) for setup details.
 
 ## Get SPlayer-Next
 
-Download an installer or portable package from [GitHub Releases](https://github.com/SPlayer-Dev/SPlayer-Next/releases). Windows, macOS, and Linux packages are available; the [download guide](https://splayer-next.imsyy.top/en/download) explains package choices and release channels.
+Our first major release is on the way. When it is published, download the builds from [this repository's Releases page](https://github.com/ThisIsTeddyBear/SPlayer-Next/releases). Until then, you can build the app from source using the instructions below.
 
 ## Development
 
@@ -89,11 +89,11 @@ pnpm test
 pnpm prettier --check .
 ```
 
-Builds target the current architecture; cross-compilation is not supported. The audio engine bundles FFmpeg through its Rust dependency, so no system FFmpeg installation is required. Linux native builds need PulseAudio development files for audio capture. See [contributing](https://splayer-next.imsyy.top/en/contributing) for more details.
+Builds target the current architecture; cross-compilation is not supported. The audio engine bundles FFmpeg through its Rust dependency, so no system FFmpeg installation is required. Linux native builds need PulseAudio development files for audio capture.
 
 ## Acknowledgements
 
-SPlayer-Next builds on open-source work including [applemusic-like-lyrics](https://github.com/Steve-xmh/applemusic-like-lyrics) and [NeteaseCloudMusicApiEnhanced](https://github.com/neteasecloudmusicapienhanced/api-enhanced).
+SPlayer-Next builds on open-source work including [applemusic-like-lyrics](https://github.com/Steve-xmh/applemusic-like-lyrics).
 
 ## License and third-party services
 
