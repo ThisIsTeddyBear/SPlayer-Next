@@ -3,6 +3,7 @@ use std::sync::{
     mpsc, Arc,
 };
 use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use windows::core::{GUID, PCWSTR};
@@ -568,6 +569,7 @@ fn run_stream(
         &render_client,
         audio_event,
         buffer_frames,
+        config.sample_rate,
         config.channels,
         config.sample_format,
         &mut source,
@@ -583,6 +585,7 @@ fn run_loop(
     render_client: &IAudioRenderClient,
     audio_event: HANDLE,
     buffer_frames: u32,
+    sample_rate: u32,
     channels: u16,
     sample_format: ExclusiveSampleFormat,
     source: &mut DecoderSource,
@@ -602,6 +605,12 @@ fn run_loop(
 
     let _audio_event = AudioEvent(audio_event);
     let mut running = false;
+    let period = Duration::from_secs_f64(f64::from(buffer_frames) / f64::from(sample_rate));
+    let mut last_audio_wake = None;
+    let mut initial_gap_total = Duration::ZERO;
+    let mut initial_gaps = 0u32;
+    let mut baseline_gap = None;
+    let mut late_wakes = 0;
     // 控制事件优先，避免持续就绪的设备事件阻塞停止和流释放。
     let handles = [control.control_event, audio_event];
 
@@ -625,14 +634,66 @@ fn run_loop(
                 )?;
                 unsafe { client.Start() }.context("Failed to start exclusive audio output")?;
                 running = true;
+                last_audio_wake = None;
+                initial_gap_total = Duration::ZERO;
+                initial_gaps = 0;
+                baseline_gap = None;
+                late_wakes = 0;
             } else if !control.playing.load(Ordering::Acquire) && running {
                 stop_client(client)?;
                 running = false;
+                last_audio_wake = None;
+                baseline_gap = None;
+                late_wakes = 0;
             }
             continue;
         }
         if wait == WAIT_EVENT(WAIT_OBJECT_0.0 + 1) {
             if running {
+                let now = Instant::now();
+                if let Some(previous) = last_audio_wake {
+                    let gap = now.duration_since(previous);
+                    if let Some(baseline) = baseline_gap {
+                        late_wakes = if gap > baseline * 2 { late_wakes + 1 } else { 0 };
+                        // 部分 USB 驱动会在播放一段时间后改变事件周期，重置流才能恢复原有时序。
+                        if late_wakes >= 3
+                            && control.playing.load(Ordering::Acquire)
+                            && !control.stopped.load(Ordering::Acquire)
+                            && !stopped.load(Ordering::Acquire)
+                        {
+                            tracing::warn!(
+                                gap_ms = gap.as_secs_f64() * 1000.0,
+                                baseline_ms = baseline.as_secs_f64() * 1000.0,
+                                period_ms = period.as_secs_f64() * 1000.0,
+                                "WASAPI exclusive event cadence changed; resetting the audio client"
+                            );
+                            stop_client(client)?;
+                            write_buffer(
+                                render_client,
+                                buffer_frames,
+                                channels,
+                                sample_format,
+                                source,
+                                volume,
+                            )?;
+                            unsafe { client.Start() }
+                                .context("Failed to restart exclusive audio output")?;
+                            last_audio_wake = None;
+                            initial_gap_total = Duration::ZERO;
+                            initial_gaps = 0;
+                            baseline_gap = None;
+                            late_wakes = 0;
+                            continue;
+                        }
+                    } else {
+                        initial_gap_total += gap;
+                        initial_gaps += 1;
+                        if initial_gaps == 8 {
+                            baseline_gap = Some(initial_gap_total / initial_gaps);
+                        }
+                    }
+                }
+                last_audio_wake = Some(now);
                 write_buffer(
                     render_client,
                     buffer_frames,
