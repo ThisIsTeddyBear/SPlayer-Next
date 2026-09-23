@@ -148,6 +148,8 @@ const searchNetease = async (keyword: string): Promise<MetadataCandidate[]> => {
 
 const SPOTIFY_TOKEN_TRACK_ID = "4uLU6hMCjMI75M1A2tKUQC";
 const SPOTIFY_SEARCH_HASH = "1d021289df50166c61630e02f002ec91182b518e56bcd681ac6b0640390c0245";
+const SPOTIFY_ARTIST_SEARCH_HASH =
+  "4e7cdd33163874d9db5e08e6fabc51ac3a1c7f3588f4190fc04c5b863f6b82bd";
 const SPOTIFY_TRACK_HASH = "d208301e63ccb8504831114cb8db1201636a016187d7c832c8c00933e2cd64c6";
 const SPOTIFY_ALBUM_HASH = "46ae954ef2d2fe7732b4b2b4022157b2e18b7ea84f70591ceb164e4de1b5d5d3";
 
@@ -192,6 +194,22 @@ interface SpotifySearchResponse {
         items?: Array<{
           item?: {
             data?: SpotifySearchTrack;
+          };
+        }>;
+      };
+    };
+  };
+  errors?: unknown[];
+}
+
+interface SpotifyArtistSearchResponse {
+  data?: {
+    searchV2?: {
+      artists?: {
+        items?: Array<{
+          data?: {
+            profile?: { name?: string };
+            visuals?: { avatarImage?: { sources?: SpotifyImage[] } };
           };
         }>;
       };
@@ -465,6 +483,31 @@ const searchSpotify = async (keyword: string): Promise<MetadataCandidate[]> => {
       };
     })
     .filter((candidate): candidate is MetadataCandidate => candidate !== null);
+};
+
+/** 通过歌手名称查找 Spotify 头像，仅接受名称一致的结果 */
+export const searchSpotifyArtistImage = async (name: string): Promise<string | undefined> => {
+  const body = await spotifyRequest<SpotifyArtistSearchResponse>(
+    "searchArtists",
+    {
+      searchTerm: name,
+      offset: 0,
+      limit: 10,
+      numberOfTopResults: 20,
+      includeAudiobooks: false,
+    },
+    SPOTIFY_ARTIST_SEARCH_HASH,
+  );
+  if (body.errors?.length || !body.data?.searchV2?.artists) {
+    throw new Error("Spotify artist search returned an invalid response");
+  }
+
+  const normalizedName = name.trim().replace(/\s+/g, " ").toLowerCase();
+  const artist = body.data.searchV2.artists.items?.find(
+    (item) =>
+      item.data?.profile?.name?.trim().replace(/\s+/g, " ").toLowerCase() === normalizedName,
+  );
+  return spotifyCover(artist?.data?.visuals?.avatarImage?.sources);
 };
 
 const getSpotifyDetail = async (id: string): Promise<MetadataCandidateDetail> => {
