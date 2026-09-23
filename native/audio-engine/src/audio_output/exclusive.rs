@@ -613,7 +613,7 @@ fn run_loop(
     let mut last_audio_wake = None;
     let mut initial_gap_total = Duration::ZERO;
     let mut initial_gaps = 0u32;
-    let mut baseline_gap = None;
+    let mut baseline_gap: Option<Duration> = None;
     let mut late_wakes = 0;
     let mut total_late_wakes = 0u64;
     let mut longest_gap = Duration::ZERO;

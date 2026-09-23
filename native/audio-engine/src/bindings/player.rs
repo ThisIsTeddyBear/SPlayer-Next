@@ -417,6 +417,8 @@ impl AudioPlayer {
             tsfn.call(default_changed, ThreadsafeFunctionCallMode::NonBlocking);
         }))
         .into_napi()?;
+        let previous_watcher = self.device_watcher.lock().replace(watcher);
+        drop(previous_watcher);
         info!("Native audio device watcher started");
         Ok(())
     }
