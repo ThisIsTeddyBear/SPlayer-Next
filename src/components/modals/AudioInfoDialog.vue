@@ -17,8 +17,7 @@ const formatChannels = (channels: number): string => {
   const label = channels === 1 ? "mono" : channels === 2 ? "stereo" : "multiChannel";
   return `${t(`quality.${label}`)} · ${channels}`;
 };
-const stateLabel = (active: boolean): string =>
-  t(active ? "quality.active" : "quality.inactive");
+const stateLabel = (active: boolean): string => t(active ? "quality.active" : "quality.inactive");
 
 const refresh = async (): Promise<void> => {
   const currentRequest = ++requestId;
