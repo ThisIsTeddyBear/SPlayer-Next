@@ -8,12 +8,11 @@ use std::time::{Duration, Instant};
 use anyhow::{bail, Context, Result};
 use windows::core::{GUID, PCWSTR};
 use windows::Win32::{
-    Foundation::{CloseHandle, HANDLE, WAIT_EVENT, WAIT_OBJECT_0, WAIT_TIMEOUT},
+    Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
     Media::Audio::{
         eConsole, eRender, IAudioClient, IAudioClock, IAudioRenderClient, IMMDevice,
         IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED,
-        AUDCLNT_E_UNSUPPORTED_FORMAT,
-        AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, WAVEFORMATEX,
+        AUDCLNT_E_UNSUPPORTED_FORMAT, AUDCLNT_SHAREMODE_EXCLUSIVE, WAVEFORMATEX,
         WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0,
     },
     System::{
@@ -512,11 +511,14 @@ fn run_stream(
     if period_hns <= 0 {
         bail!("The exclusive audio device returned an invalid period");
     }
+    // 音乐播放优先留出缓冲余量，避开 USB 驱动的事件通知时序异常。
+    period_hns = period_hns.max(100_000);
+    let mut buffer_hns = period_hns.saturating_mul(4);
     let mut initialized = unsafe {
         client.Initialize(
             AUDCLNT_SHAREMODE_EXCLUSIVE,
-            AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-            period_hns,
+            0,
+            buffer_hns,
             period_hns,
             &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
             None,
@@ -528,7 +530,7 @@ fn run_stream(
     {
         let frames = unsafe { client.GetBufferSize() }
             .context("Failed to read the aligned exclusive audio buffer size")?;
-        period_hns = ((10_000_000_u64 * u64::from(frames) + u64::from(config.sample_rate) / 2)
+        buffer_hns = ((10_000_000_u64 * u64::from(frames) + u64::from(config.sample_rate) / 2)
             / u64::from(config.sample_rate)) as i64;
         // 初始化失败后的客户端不能复用，必须先释放再按驱动返回的帧数重建。
         drop(client);
@@ -537,8 +539,8 @@ fn run_stream(
         initialized = unsafe {
             client.Initialize(
                 AUDCLNT_SHAREMODE_EXCLUSIVE,
-                AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-                period_hns,
+                0,
+                buffer_hns,
                 period_hns,
                 &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
                 None,
@@ -571,25 +573,20 @@ fn run_stream(
                 None
             }
         };
-    let audio_event = unsafe { CreateEventW(None, false, false, PCWSTR::null()) }
-        .context("Failed to create the exclusive audio event")?;
-    if let Err(error) = unsafe { client.SetEventHandle(audio_event) } {
-        unsafe {
-            let _ = CloseHandle(audio_event);
-        }
-        return Err(error).context("Failed to set the exclusive audio event");
-    }
-
     ready_tx.send(Ok(())).map_err(|_| {
         anyhow::anyhow!("The exclusive audio initialization result receiver was closed")
     })?;
+    tracing::info!(
+        buffer_frames,
+        sample_rate = config.sample_rate,
+        "WASAPI exclusive timer-driven audio output initialized"
+    );
     run_loop(
         &client,
         &render_client,
         device_clock.as_ref().map(|(clock, frequency)| (clock, *frequency)),
-        audio_event,
         buffer_frames,
-        config.sample_rate,
+        (period_hns / 20_000).max(1) as u32,
         config.channels,
         config.sample_format,
         &mut source,
@@ -604,9 +601,8 @@ fn run_loop(
     client: &IAudioClient,
     render_client: &IAudioRenderClient,
     device_clock: Option<(&IAudioClock, u64)>,
-    audio_event: HANDLE,
     buffer_frames: u32,
-    sample_rate: u32,
+    poll_ms: u32,
     channels: u16,
     sample_format: ExclusiveSampleFormat,
     source: &mut DecoderSource,
@@ -614,48 +610,26 @@ fn run_loop(
     stopped: &AtomicBool,
     control: &StreamControl,
 ) -> Result<()> {
-    struct AudioEvent(HANDLE);
-
-    impl Drop for AudioEvent {
-        fn drop(&mut self) {
-            unsafe {
-                let _ = CloseHandle(self.0);
-            }
-        }
-    }
-
-    let _audio_event = AudioEvent(audio_event);
     let mut running = false;
-    let period = Duration::from_secs_f64(f64::from(buffer_frames) / f64::from(sample_rate));
-    let mut last_audio_wake = None;
-    let mut initial_gap_total = Duration::ZERO;
-    let mut initial_gaps = 0u32;
-    let mut baseline_gap: Option<Duration> = None;
-    let mut late_wakes = 0;
-    let mut total_late_wakes = 0u64;
-    let mut longest_gap = Duration::ZERO;
-    let mut last_late_wake = None;
     let mut clock_baseline: Option<(u64, u64)> = None;
     let mut last_clock_check = Instant::now();
     let mut clock_anomalies = 0u8;
-    // 控制事件优先，避免持续就绪的设备事件阻塞停止和流释放。
-    let handles = [control.control_event, audio_event];
+    let mut empty_buffer_count = 0u64;
+    let handles = [control.control_event];
 
     loop {
-        let wait = unsafe { WaitForMultipleObjects(&handles, false, INFINITE) };
+        let wait = unsafe {
+            WaitForMultipleObjects(&handles, false, if running { poll_ms } else { INFINITE })
+        };
         if wait == WAIT_OBJECT_0 {
             if control.stopped.load(Ordering::Acquire) || stopped.load(Ordering::Acquire) {
                 if running {
                     stop_client(client)?;
                 }
-                if total_late_wakes > 0 {
+                if empty_buffer_count > 0 {
                     tracing::warn!(
-                        total_late_wakes,
-                        longest_gap_ms = longest_gap.as_secs_f64() * 1000.0,
-                        last_gap_ago_ms = last_late_wake
-                            .map_or(0.0, |at: Instant| at.elapsed().as_secs_f64() * 1000.0),
-                        period_ms = period.as_secs_f64() * 1000.0,
-                        "WASAPI exclusive output missed device event periods"
+                        empty_buffer_count,
+                        "WASAPI exclusive output buffer ran empty during playback"
                     );
                 }
                 tracing::debug!("WASAPI exclusive audio stream stopped");
@@ -671,13 +645,8 @@ fn run_loop(
                     volume,
                 )?;
                 unsafe { client.Start() }.context("Failed to start exclusive audio output")?;
-                tracing::debug!(buffer_frames, sample_rate, "WASAPI exclusive audio stream started");
+                tracing::debug!(buffer_frames, "WASAPI exclusive audio stream started");
                 running = true;
-                last_audio_wake = None;
-                initial_gap_total = Duration::ZERO;
-                initial_gaps = 0;
-                baseline_gap = None;
-                late_wakes = 0;
                 clock_baseline = None;
                 last_clock_check = Instant::now();
                 clock_anomalies = 0;
@@ -685,84 +654,43 @@ fn run_loop(
                 stop_client(client)?;
                 tracing::debug!("WASAPI exclusive audio stream paused");
                 running = false;
-                last_audio_wake = None;
-                baseline_gap = None;
-                late_wakes = 0;
                 clock_baseline = None;
                 clock_anomalies = 0;
             }
             continue;
         }
-        if wait == WAIT_EVENT(WAIT_OBJECT_0.0 + 1) {
+        if wait == WAIT_TIMEOUT {
             if running {
-                let now = Instant::now();
-                if let Some(previous) = last_audio_wake {
-                    let gap = now.duration_since(previous);
-                    if gap > period + period / 2 {
-                        total_late_wakes += 1;
-                        longest_gap = longest_gap.max(gap);
-                        last_late_wake = Some(now);
-                    }
-                    if let Some(baseline) = baseline_gap {
-                        late_wakes = if gap > baseline + baseline / 2 {
-                            late_wakes + 1
-                        } else {
-                            0
-                        };
-                        // 部分 USB 驱动会在播放一段时间后改变事件周期，重置流才能恢复原有时序。
-                        if late_wakes >= 3
-                            && control.playing.load(Ordering::Acquire)
-                            && !control.stopped.load(Ordering::Acquire)
-                            && !stopped.load(Ordering::Acquire)
-                        {
-                            tracing::warn!(
-                                gap_ms = gap.as_secs_f64() * 1000.0,
-                                baseline_ms = baseline.as_secs_f64() * 1000.0,
-                                period_ms = period.as_secs_f64() * 1000.0,
-                                "WASAPI exclusive event cadence changed; resetting the audio client"
-                            );
-                            stop_client(client)?;
-                            write_buffer(
-                                render_client,
-                                buffer_frames,
-                                channels,
-                                sample_format,
-                                source,
-                                volume,
-                            )?;
-                            unsafe { client.Start() }
-                                .context("Failed to restart exclusive audio output")?;
-                            last_audio_wake = None;
-                            initial_gap_total = Duration::ZERO;
-                            initial_gaps = 0;
-                            baseline_gap = None;
-                            late_wakes = 0;
-                            clock_baseline = None;
-                            last_clock_check = Instant::now();
-                            clock_anomalies = 0;
-                            continue;
-                        }
-                    } else {
-                        initial_gap_total += gap;
-                        initial_gaps += 1;
-                        if initial_gaps == 8 {
-                            baseline_gap = Some(initial_gap_total / initial_gaps);
-                        }
+                let padding = unsafe { client.GetCurrentPadding() }
+                    .context("Failed to read the exclusive audio buffer padding")?;
+                if padding > buffer_frames {
+                    bail!("The exclusive audio device reported invalid buffer padding");
+                }
+                if padding == 0 {
+                    empty_buffer_count += 1;
+                    if empty_buffer_count == 1 {
+                        tracing::warn!(
+                            empty_buffer_count,
+                            "WASAPI exclusive output buffer ran empty"
+                        );
                     }
                 }
-                last_audio_wake = Some(now);
-                write_buffer(
-                    render_client,
-                    buffer_frames,
-                    channels,
-                    sample_format,
-                    source,
-                    volume,
-                )?;
+                let available = buffer_frames - padding;
+                if available > 0 {
+                    write_buffer(
+                        render_client,
+                        available,
+                        channels,
+                        sample_format,
+                        source,
+                        volume,
+                    )?;
+                }
+
                 if let Some((clock, clock_frequency)) = device_clock
-                    .filter(|_| now.duration_since(last_clock_check) >= Duration::from_millis(100))
+                    .filter(|_| last_clock_check.elapsed() >= Duration::from_millis(100))
                 {
-                    last_clock_check = now;
+                    last_clock_check = Instant::now();
                     let mut device_position = 0;
                     let mut qpc_position = 0;
                     unsafe { clock.GetPosition(&mut device_position, Some(&mut qpc_position)) }
@@ -804,11 +732,6 @@ fn run_loop(
                                 )?;
                                 unsafe { client.Start() }
                                     .context("Failed to restart exclusive audio output")?;
-                                last_audio_wake = None;
-                                initial_gap_total = Duration::ZERO;
-                                initial_gaps = 0;
-                                baseline_gap = None;
-                                late_wakes = 0;
                                 clock_baseline = None;
                                 last_clock_check = Instant::now();
                                 clock_anomalies = 0;
@@ -821,10 +744,7 @@ fn run_loop(
             }
             continue;
         }
-        if wait == WAIT_TIMEOUT {
-            continue;
-        }
-        bail!("Failed while waiting for the exclusive audio event");
+        bail!("Failed while waiting for the exclusive audio timer");
     }
 }
 
