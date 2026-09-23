@@ -14,7 +14,7 @@ const bgType = computed(() => settings.player.playerBgType as string);
 
 /**
  * 背景是否就绪
- * 展开后延迟 500ms 再挂载，收起后延迟 500ms 卸载以释放 WebGL 上下文 / 模糊位图
+ * 展开后立即挂载，收起后延迟 500ms 卸载以释放 WebGL 上下文 / 模糊位图
  */
 const bgReady = ref(false);
 let bgReadyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -24,12 +24,7 @@ watch(
   (expanded) => {
     clearTimeout(bgReadyTimer);
     if (expanded) {
-      // 已就绪（快速收起后又展开）则保留，避免无谓地卸载重建
-      if (!bgReady.value) {
-        bgReadyTimer = setTimeout(() => {
-          bgReady.value = true;
-        }, 500);
-      }
+      bgReady.value = true;
     } else {
       // 等收起动画结束后再卸载
       bgReadyTimer = setTimeout(() => {
@@ -47,6 +42,13 @@ const bgPlaying = computed(() => {
   if (!status.isPlayerExpanded) return false;
   if (!status.isPlaying && settings.player.playerBgFreezeOnPause) return false;
   return true;
+});
+
+// 动态背景播放态：仅在播放器展开且正在播放时渲染，收起时立即暂停 WebGL 循环
+const dynamicBgPlaying = computed(() => {
+  if (!status.isPlayerExpanded) return false;
+  if (!status.isPlaying && settings.player.playerBgFreezeOnPause) return false;
+  return status.isPlaying;
 });
 
 const dynamicLyricFocus = computed(() => {
@@ -147,7 +149,7 @@ onBeforeUnmount(() => {
     <div v-if="bgReady" class="absolute inset-0 overflow-hidden -z-1">
       <DynamicBackground
         :album="media.track?.cover || DEFAULT_COVER"
-        :playing="status.isPlaying"
+        :playing="dynamicBgPlaying"
         :lyric-focus="dynamicLyricFocus"
         :transition-profile="dynamicTransitionProfile"
         :preset="settings.player.dynamicBackgroundPreset"
@@ -165,6 +167,7 @@ onBeforeUnmount(() => {
         :render-scale="settings.player.playerBgRenderScale"
         :has-lyric="media.parsedLyric.length > 0"
         :enable-beat="settings.player.playerBgBeat"
+        :render-engine="settings.player.playerBgRenderer"
       />
     </div>
   </Transition>

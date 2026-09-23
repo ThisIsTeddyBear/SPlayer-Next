@@ -52,16 +52,7 @@ const initialLyricTimeMs = ref(0);
 const displayTrack = computed(() => media.track ?? status.currentTrack);
 const hasLyric = computed(() => media.parsedLyric.length > 0 || media.lyricLoading);
 const hasTrack = computed(() => !!displayTrack.value);
-const useAmlLyrics = computed(
-  () =>
-    settings.lyric.engine === "amll" &&
-    !media.parsedLyric.some(
-      (line) =>
-        line.singerRole === "response" ||
-        line.singerRole === "group" ||
-        line.singerRole === "background",
-    ),
-);
+const useAmlLyrics = computed(() => settings.lyric.engine === "amll");
 
 /** 精确播放时间（毫秒） */
 const { start: startTick, stop: stopTick } = usePlaybackTime((currentMs) => {
@@ -72,12 +63,16 @@ const { start: startTick, stop: stopTick } = usePlaybackTime((currentMs) => {
 
 /** 展开后 */
 const onAfterEnter = () => {
-  initialLyricTimeMs.value = getCurrentTime() + status.lyricOffsetMs;
-  lyricMounted.value = true;
   nextTick(() => {
     lyricRef.value?.resume();
     startTick();
   });
+};
+
+/** 展开动画开始时就挂载歌词，给引擎预留初始化时间 */
+const onBeforeEnter = () => {
+  initialLyricTimeMs.value = getCurrentTime() + status.lyricOffsetMs;
+  lyricMounted.value = true;
 };
 
 /** 收起前 */
@@ -208,6 +203,7 @@ const toggleLyric = (): void => {
       enter-from-class="translate-y-full"
       leave-to-class="translate-y-full"
       @after-enter="onAfterEnter"
+      @before-enter="onBeforeEnter"
       @before-leave="onBeforeLeave"
       @after-leave="onAfterLeave"
     >

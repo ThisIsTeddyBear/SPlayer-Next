@@ -87,6 +87,73 @@ describe("Google Translate romanization", () => {
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("translates multiple non-latin lines sequentially", async () => {
+    const line1 = "\u0924\u0941\u092e\u0915\u094b \u092d\u0940 \u0939\u0948 \u0916\u092c\u0930";
+    const line2 =
+      "\u092e\u0948\u0902 \u0924\u0941\u092e\u0938\u0947 \u092a\u094d\u092f\u093e\u0930";
+    mocks.fetch
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([[["", "", null, "tumko bhi hai khabar"]]])),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify([[["", "", null, "main tumse pyaar"]]])));
+
+    const res = await romanizeLines([line1, line2]);
+    expect(res).toEqual({
+      [line1]: "tumko bhi hai khabar",
+      [line2]: "main tumse pyaar",
+    });
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+    expect(mocks.fetch.mock.calls[0][0]).toContain("client=dict-chrome-ex");
+    expect(mocks.fetch.mock.calls[0][1]?.headers).toHaveProperty("User-Agent");
+  });
+
+  it("simplifies Indic scholarly diacritics and Gurmukhi contractions", async () => {
+    const line1 = "ਮਸਤੀ ’ਚ ਮਸਤਾਈ ਜ਼ਹਿਰੀ ਜਵਾਨੀ";
+    const line2 = "ਨੱਚਣਾ";
+    mocks.fetch
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify([[[null, null, null, "Masatī’ca masatā'ī zahirī javānī"]]])),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify([[[null, null, null, "nacaṇā"]]])));
+
+    const res = await romanizeLines([line1, line2]);
+    expect(res).toEqual({
+      [line1]: "Masati'ch masata'i zahiri javani",
+      [line2]: "nachana",
+    });
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("simplifies single-line Indic transliterations with Gurmukhi apostrophes", async () => {
+    const line = "ਮਸਤੀ ’ਚ ਮਸਤਾਈ ਜ਼ਹਿਰੀ ਜਵਾਨੀ";
+    mocks.fetch.mockResolvedValue(
+      new Response(JSON.stringify([[[null, null, null, "Masatī’ca masatā'ī zahirī javānī"]]])),
+    );
+
+    const res = await romanizeLines([line]);
+    expect(res).toEqual({
+      [line]: "Masati'ch masata'i zahiri javani",
+    });
+    expect(mocks.setCachedRomanizations).toHaveBeenCalledWith({
+      [line]: "Masati'ch masata'i zahiri javani",
+    });
+  });
+
+  it("preserves English words in mixed-script Indic lyric lines", async () => {
+    const line = "Music ਚੱਲਦਾ Club 'ਚ";
+    mocks.fetch.mockResolvedValue(
+      new Response(JSON.stringify([[[null, null, null, "Music caladā Club 'ca"]]])),
+    );
+
+    const res = await romanizeLines([line]);
+    expect(res).toEqual({
+      [line]: "Music chalada Club'ch",
+    });
+    expect(mocks.setCachedRomanizations).toHaveBeenCalledWith({
+      [line]: "Music chalada Club'ch",
+    });
+  });
+
   it("registers the renderer-only IPC handler", () => {
     registerRomanizationIpc();
     expect(mocks.handle).toHaveBeenCalledWith("lyrics:romanize", expect.any(Function));

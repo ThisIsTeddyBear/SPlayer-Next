@@ -9,7 +9,7 @@ import { toMs } from "@main/utils/time";
 import * as mediaService from "@main/services/media";
 import * as nowPlaying from "@main/services/nowPlaying";
 import { fetchBytes } from "@main/utils/fetchBytes";
-import { getPlayer, resetPlayer, onPlayerCreated } from "@main/services/engine";
+import { getPlayer, resetPlayer, shutdownPlayer, onPlayerCreated } from "@main/services/engine";
 import {
   cancelPendingReinit,
   setPauseOnDeviceSwitch,
@@ -31,6 +31,7 @@ import { appName, getSongCacheDir } from "@main/utils/config";
 import * as songCache from "@main/services/songCache";
 import { parseArtists, parseAlbum, formatArtists, artistNames } from "@main/utils/metadata";
 import { playerLog } from "@main/utils/logger";
+import { releasePowerBlocker, updatePowerBlocker } from "@main/utils/powerBlocker";
 import { ErrorCode } from "@shared/types/errors";
 import type {
   Artist,
@@ -94,6 +95,7 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
     switch (event.type) {
       case "stateChanged": {
         const state = (event.state ?? "idle") as PlayerState;
+        updatePowerBlocker(state === "playing" || state === "loading");
         getThumbar()?.updateThumbar(state === "playing");
         setTrayPlayState(state === "playing" ? "playing" : "paused");
         if (state === "playing") {
@@ -409,6 +411,24 @@ export const registerPlayerIpc = (): void => {
     };
   });
 
+  ipcMain.handle("player:getStreamInfo", () => {
+    try {
+      const inst = getPlayer();
+      const info = inst.getStreamInfo();
+      return {
+        success: true,
+        data: info
+          ? {
+              ...info,
+              deviceName: inst.getSelectedDeviceName() ?? inst.getDefaultDeviceName() ?? "Unknown",
+            }
+          : null,
+      };
+    } catch (error) {
+      return fail(ErrorCode.UNKNOWN, error);
+    }
+  });
+
   ipcMain.handle("player:reinit", async () => {
     try {
       await getPlayer().reinitOutput();
@@ -685,6 +705,15 @@ export const registerPlayerIpc = (): void => {
     } catch {}
   });
 
+  powerMonitor.on("suspend", () => {
+    try {
+      getPlayer().pause();
+      playerLog.info("系统进入睡眠，已暂停播放");
+    } catch (error) {
+      playerLog.warn("睡眠时暂停播放失败:", error);
+    }
+  });
+
   const resumeHandler = async (): Promise<void> => {
     const inst = getPlayer();
     const MAX_RETRIES = 3;
@@ -718,5 +747,9 @@ export const registerPlayerIpc = (): void => {
     wsBroadcast(stoppedEvent);
   };
   powerMonitor.on("resume", resumeHandler);
-  app.on("before-quit", stopDeviceMonitoring);
+  app.on("before-quit", () => {
+    stopDeviceMonitoring();
+    shutdownPlayer();
+    releasePowerBlocker();
+  });
 };

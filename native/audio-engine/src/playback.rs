@@ -41,10 +41,11 @@ impl PlaybackHandle {
         })
     }
 
-    pub fn play(&self) {
-        if let Err(error) = self.stream.play() {
-            warn!(%error, "Failed to resume audio output");
-        }
+    pub fn play(&self) -> Result<()> {
+        self.stream
+            .play()
+            .context("Failed to resume audio output")
+            .with_audio_kind(AudioErrorKind::Device)
     }
 
     pub fn pause(&self) {
@@ -61,5 +62,9 @@ impl PlaybackHandle {
 
     pub fn set_volume(&self, volume: f32) {
         self.volume.store(volume.to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn volume(&self) -> f32 {
+        f32::from_bits(self.volume.load(Ordering::Relaxed))
     }
 }

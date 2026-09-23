@@ -7,6 +7,7 @@
 
 import type { LyricInput, LyricFormat, LyricLine } from "@shared/types/lyrics";
 import type { DownloadLyricFormat } from "@shared/types/download";
+import { getWordText } from "@shared/utils/lyrics";
 import { parseLyric } from "./parse";
 
 const pad2 = (value: number): string => String(value).padStart(2, "0");
@@ -33,11 +34,7 @@ const formatTtmlTime = (ms: number): string => {
 };
 
 /** 行主文本 */
-const lineMainText = (line: LyricLine): string =>
-  line.words
-    .map((word) => word.word)
-    .join("")
-    .trim();
+const lineMainText = (line: LyricLine): string => line.words.map(getWordText).join("").trim();
 
 /** 逐行 LRC；双语时翻译行紧随主歌词、共用时间戳 */
 const toLrc = (lines: LyricLine[]): string => {
@@ -59,7 +56,7 @@ const toEnhancedLrc = (lines: LyricLine[]): string => {
     if (line.words.length === 0) continue;
     const lineTs = `[${formatLrcTime(line.startTime)}]`;
     const body = line.words
-      .map((word) => `<${formatLrcTime(word.startTime)}>${word.word}`)
+      .map((word) => `<${formatLrcTime(word.startTime)}>${getWordText(word)}`)
       .join("");
     if (!body.trim()) continue;
     out.push(`${lineTs}${body}`);
@@ -77,7 +74,7 @@ const wordSpans = (line: LyricLine): string =>
   line.words
     .map(
       (word) =>
-        `<span begin="${formatTtmlTime(word.startTime)}" end="${formatTtmlTime(word.endTime)}">${escapeXml(word.word)}</span>`,
+        `<span begin="${formatTtmlTime(word.startTime)}" end="${formatTtmlTime(word.endTime)}">${escapeXml(getWordText(word))}</span>`,
     )
     .join("");
 

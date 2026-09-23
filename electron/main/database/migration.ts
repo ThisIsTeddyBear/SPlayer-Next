@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 
 /** 当前 schema 版本 */
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 type TableInfoRow = { name: string };
 
@@ -74,6 +74,56 @@ export const migrate = (d: Database.Database): void => {
         ON lyric_romanization_cache(last_used_at);
     `);
     v = 7;
+  }
+
+  if (v < 8) {
+    d.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS tracks_fts USING fts5(
+        id UNINDEXED,
+        title,
+        artist,
+        album,
+        tokenize = 'unicode61'
+      );
+      CREATE TRIGGER IF NOT EXISTS tracks_ai AFTER INSERT ON tracks BEGIN
+        INSERT INTO tracks_fts(id, title, artist, album)
+        VALUES (
+          new.id,
+          new.title,
+          COALESCE((SELECT group_concat(json_extract(value, '$.name'), ' ') FROM json_each(new.artists)), ''),
+          COALESCE(json_extract(new.album, '$.name'), '')
+        );
+      END;
+      CREATE TRIGGER IF NOT EXISTS tracks_ad AFTER DELETE ON tracks BEGIN
+        DELETE FROM tracks_fts WHERE id = old.id;
+      END;
+      CREATE TRIGGER IF NOT EXISTS tracks_au AFTER UPDATE ON tracks BEGIN
+        DELETE FROM tracks_fts WHERE id = old.id;
+        INSERT INTO tracks_fts(id, title, artist, album)
+        VALUES (
+          new.id,
+          new.title,
+          COALESCE((SELECT group_concat(json_extract(value, '$.name'), ' ') FROM json_each(new.artists)), ''),
+          COALESCE(json_extract(new.album, '$.name'), '')
+        );
+      END;
+    `);
+
+    const countRow = d.prepare("SELECT COUNT(*) as count FROM tracks_fts").get() as {
+      count: number;
+    };
+    if (countRow.count === 0) {
+      d.exec(`
+        INSERT INTO tracks_fts(id, title, artist, album)
+        SELECT
+          id,
+          title,
+          COALESCE((SELECT group_concat(json_extract(value, '$.name'), ' ') FROM json_each(artists)), ''),
+          COALESCE(json_extract(album, '$.name'), '')
+        FROM tracks;
+      `);
+    }
+    v = 8;
   }
 
   // 版本无关部分

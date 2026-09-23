@@ -227,12 +227,6 @@ const lyricCategory: SettingCategory = {
           defaultValue: true,
         },
         {
-          key: "amllConvertExcessiveBackgroundLines",
-          type: "switch",
-          binding: { store: "settings", path: "lyric.amllConvertExcessiveBackgroundLines" },
-          defaultValue: true,
-        },
-        {
           key: "amllSyncMainAndBackgroundLines",
           type: "switch",
           binding: { store: "settings", path: "lyric.amllSyncMainAndBackgroundLines" },

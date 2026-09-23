@@ -1,8 +1,9 @@
+import { simplifyGoogleRomanization } from "@shared/utils/lyrics";
 import { getDb } from "./index";
 
 const MAX_CACHE_ENTRIES = 50_000;
 
-/** 获取已缓存的歌词罗马音。 */
+/** 获取已缓存的歌词罗马音。若命中旧版未简化罗马音，就地升级数据库记录并返回简化版本。 */
 export const getCachedRomanizations = (lines: string[]): Record<string, string> => {
   const result: Record<string, string> = {};
   const query = getDb().prepare(
@@ -11,13 +12,21 @@ export const getCachedRomanizations = (lines: string[]): Record<string, string> 
   const touch = getDb().prepare(
     "UPDATE lyric_romanization_cache SET last_used_at = ? WHERE lyric_text = ?",
   );
+  const update = getDb().prepare(
+    "UPDATE lyric_romanization_cache SET romanization = ?, last_used_at = ? WHERE lyric_text = ?",
+  );
   const now = Date.now();
 
   for (const line of lines) {
     const row = query.get(line) as { romanization: string } | undefined;
     if (!row) continue;
-    result[line] = row.romanization;
-    touch.run(now, line);
+    const simplified = simplifyGoogleRomanization(row.romanization, line);
+    result[line] = simplified;
+    if (simplified !== row.romanization) {
+      update.run(simplified, now, line);
+    } else {
+      touch.run(now, line);
+    }
   }
 
   return result;

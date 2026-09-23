@@ -206,6 +206,7 @@ pub fn start_prepared_decode(
 
     if let Some(db) = replay_gain_db {
         shared.set_normalization_gain(metadata::db_to_linear(db));
+        shared.set_has_replay_gain(true);
     }
     if let Some(handle) = &cancel_handle {
         shared.bind_cancel_handle(handle.clone());
@@ -218,32 +219,37 @@ pub fn start_prepared_decode(
         cancel_handle: cancel_handle.clone(),
     };
 
+    let decode_shared = Arc::clone(&shared);
     let handle = thread::Builder::new()
         .name("audio-decoder".to_string())
         .spawn(move || {
             priority::boost_current_audio_thread("audio-decoder");
             let mut data = data;
-            let dsp_shared = Arc::clone(&shared);
+            let dsp_shared = Arc::clone(&decode_shared);
             let dsp_handle = thread::Builder::new()
                 .name("audio-dsp".to_string())
-                .spawn(move || run_dsp_safely(dsp_shared, equalizer, tempo));
+                .spawn(move || {
+                    priority::boost_current_audio_thread("audio-dsp");
+                    run_dsp_safely(dsp_shared, equalizer, tempo);
+                });
             let Ok(dsp_handle) = dsp_handle else {
-                shared.mark_decode_failed();
-                shared.mark_output_eof();
+                decode_shared.mark_decode_failed();
+                decode_shared.mark_output_eof();
                 return data;
             };
-            run_decode_safely(&shared, || {
-                run_decoding_loop(&mut data, &shared);
+            run_decode_safely(&decode_shared, || {
+                run_decoding_loop(&mut data, &decode_shared);
             });
             if dsp_handle.join().is_err() {
-                shared.mark_decode_failed();
-                shared.mark_output_eof();
+                decode_shared.mark_decode_failed();
+                decode_shared.mark_output_eof();
             }
             data
         })
         .context("Failed to start the decoder thread")
         .with_audio_kind(AudioErrorKind::DecodeFailed)?;
 
+    shared.wait_for_playback_ready();
     Ok((metadata, handle, cancel_handle))
 }
 
@@ -256,31 +262,37 @@ pub fn resume_decode(
     if let Some(handle) = data.cancel_handle() {
         shared.bind_cancel_handle(handle);
     }
-    thread::Builder::new()
+    let decode_shared = Arc::clone(&shared);
+    let handle = thread::Builder::new()
         .name("audio-decoder".to_string())
         .spawn(move || {
             priority::boost_current_audio_thread("audio-decoder");
             let mut data = data;
-            let dsp_shared = Arc::clone(&shared);
+            let dsp_shared = Arc::clone(&decode_shared);
             let dsp_handle = thread::Builder::new()
                 .name("audio-dsp".to_string())
-                .spawn(move || run_dsp_safely(dsp_shared, equalizer, tempo));
+                .spawn(move || {
+                    priority::boost_current_audio_thread("audio-dsp");
+                    run_dsp_safely(dsp_shared, equalizer, tempo);
+                });
             let Ok(dsp_handle) = dsp_handle else {
-                shared.mark_decode_failed();
-                shared.mark_output_eof();
+                decode_shared.mark_decode_failed();
+                decode_shared.mark_output_eof();
                 return data;
             };
-            run_decode_safely(&shared, || {
-                run_decoding_loop(&mut data, &shared);
+            run_decode_safely(&decode_shared, || {
+                run_decoding_loop(&mut data, &decode_shared);
             });
             if dsp_handle.join().is_err() {
-                shared.mark_decode_failed();
-                shared.mark_output_eof();
+                decode_shared.mark_decode_failed();
+                decode_shared.mark_output_eof();
             }
             data
         })
         .context("Failed to start the decoder thread")
-        .with_audio_kind(AudioErrorKind::DecodeFailed)
+        .with_audio_kind(AudioErrorKind::DecodeFailed)?;
+    shared.wait_for_playback_ready();
+    Ok(handle)
 }
 
 fn process_audio_chunk(
@@ -314,7 +326,23 @@ fn process_audio_chunk(
 fn run_dsp_loop(shared: &Shared, equalizer: &Mutex<Equalizer>, tempo: &Mutex<StretchProcessor>) {
     let mut limiter = OutputLimiter::new();
     let mut tempo_scratch = shared.take_player_buffer();
-    while let Some(chunk) = shared.pop_decoded() {
+    let has_replay_gain = shared.has_replay_gain();
+    let mut loudness = LoudnessAnalyzer::new(shared.sample_rate(), shared.channels());
+    loudness.set_has_replay_gain(has_replay_gain);
+    let mut applied_normalization_gain = 1.0;
+    while let Some(mut chunk) = shared.pop_decoded() {
+        for sample in &mut chunk.player_samples {
+            if !sample.is_finite() {
+                *sample = 0.0;
+            }
+        }
+        apply_normalization(
+            &mut chunk.player_samples,
+            shared,
+            &mut loudness,
+            has_replay_gain,
+            &mut applied_normalization_gain,
+        );
         let chunk = process_audio_chunk(
             chunk,
             equalizer,
@@ -344,6 +372,47 @@ fn run_dsp_safely(
         shared.mark_decode_failed();
     }
     shared.mark_output_eof();
+}
+
+fn apply_gain_ramp(samples: &mut [f32], channels: u16, from: f32, to: f32) {
+    let channels = usize::from(channels);
+    let frame_count = samples.len() / channels;
+    if frame_count == 0 {
+        return;
+    }
+    for (index, frame) in samples.chunks_exact_mut(channels).enumerate() {
+        let progress = (index + 1) as f32 / frame_count as f32;
+        let gain = from + (to - from) * progress;
+        for sample in frame {
+            *sample *= gain;
+        }
+    }
+}
+
+fn apply_normalization(
+    samples: &mut [f32],
+    shared: &Shared,
+    loudness: &mut LoudnessAnalyzer,
+    has_replay_gain: bool,
+    applied_gain: &mut f32,
+) {
+    if shared.is_bit_perfect() || samples.is_empty() {
+        return;
+    }
+    let target_gain = if !shared.is_normalization_enabled() {
+        1.0
+    } else if has_replay_gain {
+        shared.normalization_gain()
+    } else {
+        loudness.process(samples)
+    };
+    apply_gain_ramp(
+        samples,
+        shared.channels(),
+        *applied_gain,
+        target_gain,
+    );
+    *applied_gain = target_gain;
 }
 
 ///
@@ -399,10 +468,6 @@ fn build_resamplers(
 }
 
 fn run_decoding_loop(data: &mut DecoderData, shared: &Shared) {
-    let has_replay_gain = (shared.normalization_gain() - 1.0).abs() > f32::EPSILON;
-    let mut loudness = LoudnessAnalyzer::new(shared.sample_rate(), shared.channels());
-    loudness.set_has_replay_gain(has_replay_gain);
-
     let mut had_success = false;
 
     loop {
@@ -435,22 +500,6 @@ fn run_decoding_loop(data: &mut DecoderData, shared: &Shared) {
                     continue;
                 }
                 had_success = true;
-
-                if !shared.is_bit_perfect()
-                    && shared.is_normalization_enabled()
-                    && !player_samples.is_empty()
-                {
-                    let gain = if has_replay_gain {
-                        shared.normalization_gain()
-                    } else {
-                        loudness.process(&player_samples)
-                    };
-                    if (gain - 1.0).abs() > f32::EPSILON {
-                        for s in &mut player_samples {
-                            *s *= gain;
-                        }
-                    }
-                }
 
                 shared.push(AudioChunk {
                     source_sample_count: player_samples.len() as u64,
@@ -616,6 +665,18 @@ mod tests {
             assert!((actual / input - gain).abs() < 1e-6);
         }
         assert!(samples.iter().all(|sample| sample.abs() <= OUTPUT_CEILING));
+    }
+
+    #[test]
+    fn normalization_gain_changes_are_ramped_per_frame() {
+        let mut samples = [1.0_f32; 8];
+
+        apply_gain_ramp(&mut samples, 2, 1.0, 0.5);
+
+        assert_eq!(samples[0], samples[1]);
+        assert_eq!(samples[6], samples[7]);
+        assert!((samples[0] - 0.875).abs() < 1e-6);
+        assert!((samples[6] - 0.5).abs() < 1e-6);
     }
 
     #[test]

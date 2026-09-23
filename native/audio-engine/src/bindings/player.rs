@@ -6,7 +6,7 @@ use napi::bindgen_prelude::*;
 use napi::threadsafe_function::ThreadsafeFunctionCallMode;
 use napi_derive::napi;
 use parking_lot::Mutex;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::player::{self, InnerPlayer, PlayerEvent, PlayerState, SeekTake};
 use crate::{audio_output, decoder, device_watcher};
@@ -102,6 +102,25 @@ pub struct JsPlayerStatus {
     pub bit_perfect_active: bool,
 }
 
+#[napi(object)]
+pub struct JsAudioStreamInfo {
+    pub is_exclusive: bool,
+    pub bit_perfect_active: bool,
+    pub output_sample_rate: u32,
+    pub output_channels: u32,
+    pub output_bits: u32,
+    pub output_format: String,
+    pub source_sample_rate: u32,
+    pub source_channels: u32,
+    pub source_bits: u32,
+    pub is_resampling: bool,
+    pub is_equalizer_active: bool,
+    pub is_tempo_active: bool,
+    pub is_normalization_active: bool,
+    pub is_limiter_active: bool,
+    pub speed: f64,
+}
+
 fn state_to_str(state: PlayerState) -> &'static str {
     match state {
         PlayerState::Idle => "idle",
@@ -170,6 +189,7 @@ impl AudioPlayer {
                 old_threads,
                 normalization_enabled,
                 normalization_gain,
+                has_replay_gain,
                 bit_perfect: _,
                 current_source,
                 was_playing,
@@ -224,6 +244,7 @@ impl AudioPlayer {
                 shared.set_bit_perfect(output.is_bit_perfect());
                 shared.set_normalization_enabled(normalization_enabled);
                 shared.set_normalization_gain(normalization_gain);
+                shared.set_has_replay_gain(has_replay_gain);
                 equalizer
                     .lock()
                     .set_output_format(output.sample_rate(), output.channels());
@@ -396,6 +417,8 @@ impl AudioPlayer {
             tsfn.call(default_changed, ThreadsafeFunctionCallMode::NonBlocking);
         }))
         .into_napi()?;
+        let previous_watcher = self.device_watcher.lock().replace(watcher);
+        drop(previous_watcher);
         info!("Native audio device watcher started");
         Ok(())
     }
@@ -600,6 +623,11 @@ impl AudioPlayer {
     pub async fn seek(&self, position: f64) -> Result<()> {
         use crate::shared::Shared;
 
+        if !position.is_finite() || position < 0.0 {
+            return Err(Error::from_reason("Seek position must be a finite non-negative number"));
+        }
+        debug!(position, "Seeking audio source");
+
         let take = {
             let mut player = self.inner.lock();
             player.take_for_async_seek()
@@ -612,6 +640,7 @@ impl AudioPlayer {
             old_threads,
             normalization_enabled,
             normalization_gain,
+            has_replay_gain,
             bit_perfect,
             current_source,
             was_playing,
@@ -638,6 +667,7 @@ impl AudioPlayer {
             shared.set_bit_perfect(bit_perfect);
             shared.set_normalization_enabled(normalization_enabled);
             shared.set_normalization_gain(normalization_gain);
+            shared.set_has_replay_gain(has_replay_gain);
             equalizer
                 .lock()
                 .set_output_format(output_sample_rate, output_channels);
@@ -708,7 +738,9 @@ impl AudioPlayer {
 
     #[napi]
     pub fn set_fade_duration(&self, duration_ms: f64) {
-        self.inner.lock().set_fade_duration(duration_ms as u64);
+        if duration_ms.is_finite() && duration_ms >= 0.0 {
+            self.inner.lock().set_fade_duration(duration_ms as u64);
+        }
     }
 
     #[napi]
@@ -737,6 +769,11 @@ impl AudioPlayer {
             is_finished: player.is_finished(),
             bit_perfect_active: player.bit_perfect_active(),
         }
+    }
+
+    #[napi]
+    pub fn get_stream_info(&self) -> Option<JsAudioStreamInfo> {
+        self.inner.lock().stream_info()
     }
 
     #[napi]
@@ -834,8 +871,32 @@ impl AudioPlayer {
 
     #[napi]
     pub async fn set_output_device(&self, device_id: Option<String>) -> Result<()> {
+        let (previous, was_playing) = {
+            let player = self.inner.lock();
+            (
+                player.selected_device().map(String::from),
+                player.state() == PlayerState::Playing,
+            )
+        };
+        if previous == device_id {
+            return Ok(());
+        }
+
         self.inner.lock().set_output_device(device_id);
-        self.reinit_output().await
+        if let Err(error) = self.reinit_output().await {
+            self.inner.lock().set_output_device(previous);
+            match self.reinit_output().await {
+                Ok(()) if was_playing => {
+                    let _ = self.play().await;
+                }
+                Ok(()) => {}
+                Err(recovery_error) => {
+                    warn!(error = %recovery_error, "Could not restore the previous output device");
+                }
+            }
+            return Err(error);
+        }
+        Ok(())
     }
 
     #[napi]

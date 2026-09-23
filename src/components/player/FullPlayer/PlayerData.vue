@@ -160,6 +160,12 @@ const alignItems = computed(() => {
         <template #trigger>
           <span
             class="inline-flex items-center gap-1 leading-none px-1.5 py-1.2 rounded-md border border-solid border-cover/30 cursor-pointer transition-colors hover:border-cover/60"
+            role="button"
+            tabindex="0"
+            :aria-label="t('quality.outputInfo')"
+            @click="status.audioInfoOpen = true"
+            @keydown.enter="status.audioInfoOpen = true"
+            @keydown.space.prevent="status.audioInfoOpen = true"
           >
             <IconSpLossless v-if="showLosslessIcon" class="text-[1.4em] -my-[0.4em]" />
             {{ qualityLabel }}

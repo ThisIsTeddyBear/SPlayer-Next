@@ -18,6 +18,12 @@ const canSelfInstall = !isMac && !isPortable && !isAppX;
 /** Releases page URL */
 const RELEASES_URL = "https://github.com/SPlayer-Dev/SPlayer-Next/releases";
 
+/** GitHub provider repository */
+const GITHUB_REPO = { owner: "SPlayer-Dev", repo: "SPlayer-Next" } as const;
+
+/** Nightly rolling release feed */
+const NIGHTLY_FEED_URL = `${RELEASES_URL}/download/nightly`;
+
 /** Microsoft Store updates URL */
 const STORE_UPDATES_URL = "ms-windows-store://updates";
 
@@ -59,6 +65,11 @@ const applyChannel = (): void => {
   autoUpdater.channel = channel === "stable" ? "latest" : channel;
   autoUpdater.allowPrerelease = channel !== "stable";
   autoUpdater.allowDowngrade = false;
+  autoUpdater.setFeedURL(
+    channel === "nightly"
+      ? { provider: "generic", url: NIGHTLY_FEED_URL }
+      : { provider: "github", ...GITHUB_REPO },
+  );
 };
 
 /**
@@ -174,9 +185,8 @@ export const quitAndInstall = (): void => {
 
 /** Open download page: AppX navigates to Microsoft Store, other builds open GitHub Releases */
 export const openDownloadPage = (): void => {
-  const releaseUrl = availableVersion
-    ? `${RELEASES_URL}/tag/v${encodeURIComponent(availableVersion)}`
-    : RELEASES_URL;
+  const tag = getChannel() === "nightly" ? "nightly" : availableVersion && `v${availableVersion}`;
+  const releaseUrl = tag ? `${RELEASES_URL}/tag/${encodeURIComponent(tag)}` : RELEASES_URL;
   void shell.openExternal(isAppX ? STORE_UPDATES_URL : releaseUrl);
 };
 

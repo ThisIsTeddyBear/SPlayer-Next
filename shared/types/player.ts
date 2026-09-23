@@ -133,6 +133,25 @@ export interface AudioDevice {
   isDefault: boolean;
 }
 
+export interface AudioStreamInfo {
+  deviceName: string;
+  isExclusive: boolean;
+  bitPerfectActive: boolean;
+  outputSampleRate: number;
+  outputChannels: number;
+  outputBits: number;
+  outputFormat: string;
+  sourceSampleRate: number;
+  sourceChannels: number;
+  sourceBits: number;
+  isResampling: boolean;
+  isEqualizerActive: boolean;
+  isTempoActive: boolean;
+  isNormalizationActive: boolean;
+  isLimiterActive: boolean;
+  speed: number;
+}
+
 export type PlayerEvent =
   | { type: "status"; data: PlayerStatus }
   | { type: "position"; data: { position: number; duration: number } }
@@ -173,6 +192,7 @@ export interface PlayerApi {
   setPauseOnDeviceSwitch: (enabled: boolean) => Promise<IpcResponse>;
   getVolume: () => Promise<IpcResponse<number>>;
   getStatus: () => Promise<IpcResponse<PlayerStatus>>;
+  getStreamInfo: () => Promise<IpcResponse<AudioStreamInfo | null>>;
   setFftEnabled: (enabled: boolean) => Promise<IpcResponse>;
   getFftData: () => Promise<IpcResponse<FftData>>;
   setFadeDuration: (ms: number) => Promise<IpcResponse>;

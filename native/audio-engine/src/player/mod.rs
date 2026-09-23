@@ -24,6 +24,16 @@ use events::playback_completion_event;
 pub use events::{EventEmitter, PlayerEvent, PlayerState};
 pub use transition::{LoadedPlayback, SeekTake};
 
+struct ProcessingState {
+    volume: f32,
+    fade_duration_ms: u64,
+    normalization_enabled: bool,
+    equalizer_enabled: bool,
+    speed: f32,
+    pitch: i8,
+    pitch_sync: bool,
+}
+
 pub struct InnerPlayer {
     output: Option<AudioOutput>,
     playback: Option<Arc<PlaybackHandle>>,
@@ -57,6 +67,7 @@ pub struct InnerPlayer {
     original_channels: u16,
     original_bits_per_sample: u32,
     pending_load_handle: Option<HttpCancelHandle>,
+    exclusive_restore: Option<ProcessingState>,
 }
 
 const _: fn() = || {
@@ -158,6 +169,7 @@ impl InnerPlayer {
             original_channels: decoder::DEFAULT_OUTPUT_CHANNELS,
             original_bits_per_sample: 24,
             pending_load_handle: None,
+            exclusive_restore: None,
         })
     }
 
@@ -171,8 +183,25 @@ impl InnerPlayer {
     }
 
     pub fn set_exclusive_audio(&mut self, enabled: bool) {
+        if enabled == self.exclusive_audio {
+            return;
+        }
         self.exclusive_audio = enabled;
         if enabled {
+            let equalizer_enabled = self.equalizer.lock().enabled();
+            let (speed, pitch, pitch_sync) = {
+                let tempo = self.tempo.lock();
+                (tempo.speed(), tempo.pitch(), tempo.pitch_sync())
+            };
+            self.exclusive_restore = Some(ProcessingState {
+                volume: self.target_volume,
+                fade_duration_ms: self.fade_duration_ms,
+                normalization_enabled: self.normalization_enabled,
+                equalizer_enabled,
+                speed,
+                pitch,
+                pitch_sync,
+            });
             self.cancel_fade();
             self.target_volume = 1.0;
             self.fade_duration_ms = 0;
@@ -189,6 +218,22 @@ impl InnerPlayer {
             tempo.set_speed(1.0);
             tempo.set_pitch(0);
             tempo.set_pitch_sync(true);
+            tempo.reset();
+        } else if let Some(state) = self.exclusive_restore.take() {
+            self.target_volume = state.volume;
+            self.fade_duration_ms = state.fade_duration_ms;
+            self.normalization_enabled = state.normalization_enabled;
+            if let Some(shared) = &self.shared {
+                shared.set_normalization_enabled(state.normalization_enabled);
+            }
+            let mut equalizer = self.equalizer.lock();
+            equalizer.set_enabled(state.equalizer_enabled);
+            equalizer.reset_state();
+            drop(equalizer);
+            let mut tempo = self.tempo.lock();
+            tempo.set_speed(state.speed);
+            tempo.set_pitch(state.pitch);
+            tempo.set_pitch_sync(state.pitch_sync);
             tempo.reset();
         }
     }
@@ -256,13 +301,14 @@ impl InnerPlayer {
                 }
 
                 self.cancel_fade();
+                let mut fade_from = 0.0;
                 if let Some(ref playback) = self.playback {
                     if self.exclusive_audio {
                         playback.set_volume(1.0);
                     } else {
-                        playback.set_volume(0.0);
+                        fade_from = playback.volume();
                     }
-                    playback.play();
+                    playback.play()?;
                 }
 
                 self.state = PlayerState::Playing;
@@ -273,7 +319,7 @@ impl InnerPlayer {
                 self.start_fft_timer();
 
                 if !self.exclusive_audio {
-                    self.start_fade(0.0, self.target_volume, None);
+                    self.start_fade(fade_from, self.target_volume, None);
                 }
                 Ok(None)
             }
@@ -290,14 +336,19 @@ impl InnerPlayer {
             return;
         }
 
+        self.cancel_fade();
         self.state = PlayerState::Paused;
         self.emit(PlayerEvent::StateChanged {
             state: PlayerState::Paused,
         });
 
+        let fade_from = self
+            .playback
+            .as_ref()
+            .map_or(self.target_volume, |playback| playback.volume());
         let playback_for_callback = self.playback.as_ref().map(Arc::clone);
         self.start_fade(
-            self.target_volume,
+            fade_from,
             0.0,
             Some(Box::new(move || {
                 if let Some(playback) = playback_for_callback {
@@ -338,6 +389,7 @@ impl InnerPlayer {
 
     pub fn stop(&mut self) {
         self.load_token.fetch_add(1, Ordering::AcqRel);
+        self.output_generation.fetch_add(1, Ordering::AcqRel);
         if let Some(handle) = self.pending_load_handle.take() {
             handle.cancel();
         }
@@ -378,6 +430,10 @@ impl InnerPlayer {
             }
             return;
         }
+        if !volume.is_finite() {
+            return;
+        }
+        let volume = volume.clamp(0.0, 1.0);
         self.target_volume = volume;
         if let Some(ref playback) = self.playback {
             playback.set_volume(volume);
@@ -412,7 +468,11 @@ impl InnerPlayer {
     }
 
     pub fn state(&self) -> PlayerState {
-        self.state
+        if self.state == PlayerState::Playing && self.is_finished() {
+            PlayerState::Stopped
+        } else {
+            self.state
+        }
     }
 
     pub fn fft_data(&self) -> (Vec<f32>, Vec<f32>) {
@@ -508,6 +568,32 @@ impl InnerPlayer {
     pub fn pitch_sync(&self) -> bool {
         self.tempo.lock().pitch_sync()
     }
+
+    pub fn stream_info(&self) -> Option<crate::bindings::JsAudioStreamInfo> {
+        let output = self.output.as_ref()?;
+        let tempo = self.tempo.lock();
+        let is_tempo_active = !tempo.is_bypass();
+        let speed = f64::from(tempo.speed());
+        drop(tempo);
+        let bit_perfect_active = self.bit_perfect_active();
+        Some(crate::bindings::JsAudioStreamInfo {
+            is_exclusive: output.is_exclusive(),
+            bit_perfect_active,
+            output_sample_rate: output.sample_rate(),
+            output_channels: u32::from(output.channels()),
+            output_bits: output.output_bits(),
+            output_format: output.output_format(),
+            source_sample_rate: self.original_sample_rate,
+            source_channels: u32::from(self.original_channels),
+            source_bits: self.original_bits_per_sample,
+            is_resampling: output.sample_rate() != self.original_sample_rate,
+            is_equalizer_active: self.equalizer.lock().enabled(),
+            is_tempo_active,
+            is_normalization_active: self.normalization_enabled,
+            is_limiter_active: !bit_perfect_active,
+            speed,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -564,8 +650,36 @@ mod tests {
         callback();
         assert_eq!(calls.load(Ordering::Relaxed), 1);
 
-        player.reserve_output_generation();
+        player.stop();
         callback();
         assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn exclusive_mode_restores_processing_settings_when_disabled() {
+        let mut player = InnerPlayer::new().unwrap();
+        player.set_volume(0.4);
+        player.set_fade_duration(350);
+        player.set_normalization_enabled(true);
+        player.set_equalizer_enabled(true);
+        player.set_speed(1.25);
+        player.set_pitch(3);
+        player.set_pitch_sync(true);
+
+        player.set_exclusive_audio(true);
+        assert_eq!(player.volume(), 1.0);
+        assert_eq!(player.fade_duration(), 0);
+        assert!(!player.normalization_enabled());
+        assert!(!player.equalizer_enabled());
+        assert_eq!(player.speed(), 1.0);
+
+        player.set_exclusive_audio(false);
+        assert_eq!(player.volume(), 0.4);
+        assert_eq!(player.fade_duration(), 350);
+        assert!(player.normalization_enabled());
+        assert!(player.equalizer_enabled());
+        assert_eq!(player.speed(), 1.25);
+        assert_eq!(player.pitch(), 3);
+        assert!(player.pitch_sync());
     }
 }

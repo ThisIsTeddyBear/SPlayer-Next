@@ -10,12 +10,61 @@ use tracing::{debug, info, warn};
 
 use crate::decoder;
 use crate::error::{AudioErrorKind, AudioResultExt};
+#[cfg(target_os = "windows")]
+use crate::priority;
 use crate::source::DecoderSource;
 
 #[cfg(target_os = "windows")]
 mod exclusive;
 
 pub type OutputFailureCallback = Arc<dyn Fn() + Send + Sync + 'static>;
+
+const GAIN_RAMP_MS: u64 = 5;
+
+#[cfg(target_os = "windows")]
+thread_local! {
+    // CPAL 的回调线程由后端创建，在首次回调时为每个线程只提升一次优先级。
+    static CPAL_OUTPUT_PRIORITY: () = priority::boost_current_audio_thread("cpal-output");
+}
+
+struct GainSmoother {
+    current: f32,
+    target: f32,
+    step: f32,
+    remaining_frames: usize,
+}
+
+impl GainSmoother {
+    fn new(initial: f32) -> Self {
+        Self {
+            current: initial,
+            target: initial,
+            step: 0.0,
+            remaining_frames: 0,
+        }
+    }
+
+    fn set_target(&mut self, target: f32, ramp_frames: usize) {
+        if (target - self.target).abs() <= f32::EPSILON {
+            return;
+        }
+        self.target = target;
+        self.remaining_frames = ramp_frames.max(1);
+        self.step = (target - self.current) / self.remaining_frames as f32;
+    }
+
+    fn next_frame(&mut self) -> f32 {
+        if self.remaining_frames == 0 {
+            return self.current;
+        }
+        self.current += self.step;
+        self.remaining_frames -= 1;
+        if self.remaining_frames == 0 {
+            self.current = self.target;
+        }
+        self.current
+    }
+}
 
 pub enum OutputStream {
     Shared(cpal::Stream),
@@ -144,6 +193,30 @@ impl AudioOutput {
             OutputBackend::Shared { .. } => false,
             #[cfg(target_os = "windows")]
             OutputBackend::Exclusive(config) => config.is_bit_perfect(),
+        }
+    }
+
+    pub fn is_exclusive(&self) -> bool {
+        match &self.backend {
+            OutputBackend::Shared { .. } => false,
+            #[cfg(target_os = "windows")]
+            OutputBackend::Exclusive(_) => true,
+        }
+    }
+
+    pub fn output_bits(&self) -> u32 {
+        match &self.backend {
+            OutputBackend::Shared { config, .. } => config.sample_format().sample_size() as u32 * 8,
+            #[cfg(target_os = "windows")]
+            OutputBackend::Exclusive(config) => config.valid_bits_per_sample(),
+        }
+    }
+
+    pub fn output_format(&self) -> String {
+        match &self.backend {
+            OutputBackend::Shared { config, .. } => config.sample_format().to_string(),
+            #[cfg(target_os = "windows")]
+            OutputBackend::Exclusive(config) => config.sample_format_name().to_owned(),
         }
     }
 
@@ -430,13 +503,16 @@ fn build_typed_stream_for_format(
 
 #[cfg(any(target_os = "linux", test))]
 fn format_pipewire_props(sample_rate: u32) -> String {
+    let mut props = serde_json::json!({
+        "application.id": "top.imsyy.splayer_next",
+        "application.name": "SPlayer-Next",
+        "application.icon-name": "top.imsyy.splayer_next",
+        "media.name": "Playback",
+    });
     if sample_rate > 0 {
-        format!(
-            r#"{{"node.rate":"1/{sample_rate}","application.id":"top.imsyy.splayer_next","application.name":"SPlayer-Next","application.icon-name":"top.imsyy.splayer_next","media.name":"Playback"}}"#
-        )
-    } else {
-        r#"{"application.id":"top.imsyy.splayer_next","application.name":"SPlayer-Next","application.icon-name":"top.imsyy.splayer_next","media.name":"Playback"}"#.to_string()
+        props["node.rate"] = format!("1/{sample_rate}").into();
     }
+    props.to_string()
 }
 
 #[cfg(target_os = "linux")]
@@ -495,6 +571,10 @@ fn build_typed_stream<T>(
 where
     T: SizedSample + Sample + FromSample<f32>,
 {
+    let channels = usize::from(config.channels);
+    let ramp_frames = (u64::from(config.sample_rate) * GAIN_RAMP_MS / 1000) as usize;
+    let mut gain_smoother = GainSmoother::new(f32::from_bits(volume.load(Ordering::Relaxed)));
+    let mut xruns = 0u64;
     let stream = {
         #[cfg(target_os = "linux")]
         let _props_guard = pipewire_props::Guard::set_stream_props(config.sample_rate);
@@ -502,16 +582,46 @@ where
         device.build_output_stream(
             config,
             move |data: &mut [T], _| {
-                let gain = f32::from_bits(volume.load(Ordering::Relaxed));
+                #[cfg(target_os = "windows")]
+                CPAL_OUTPUT_PRIORITY.with(|_| {});
+
                 if stopped.load(Ordering::Acquire) {
                     data.fill(T::EQUILIBRIUM);
                     return;
                 }
-                for output in data {
-                    *output = T::from_sample(source.next().unwrap_or(0.0) * gain);
+                let previous_buffer_finished = source.is_finished();
+                let target_gain = f32::from_bits(volume.load(Ordering::Relaxed));
+                gain_smoother.set_target(target_gain, ramp_frames);
+                for frame in data.chunks_mut(channels) {
+                    let gain = gain_smoother.next_frame();
+                    for output in frame {
+                        *output = T::from_sample(source.next().unwrap_or(0.0) * gain);
+                    }
+                }
+                if previous_buffer_finished {
+                    source.mark_finished_played();
                 }
             },
             move |error| {
+                if matches!(
+                    error.kind(),
+                    cpal::ErrorKind::Xrun
+                        | cpal::ErrorKind::RealtimeDenied
+                        | cpal::ErrorKind::DeviceChanged
+                ) {
+                    if error.kind() == cpal::ErrorKind::Xrun {
+                        xruns += 1;
+                        if xruns.is_power_of_two() {
+                            warn!(xruns, "Audio output underrun; keeping the current stream");
+                        }
+                    } else if error.kind() == cpal::ErrorKind::RealtimeDenied {
+                        warn!(
+                            %error,
+                            "Real-time audio scheduling unavailable; keeping the current stream"
+                        );
+                    }
+                    return;
+                }
                 let err_msg = error.to_string();
                 let invalidated =
                     err_msg.contains("no longer valid") || err_msg.contains("-2004287484");
@@ -578,5 +688,16 @@ mod tests {
         assert!(props_without_rate.contains(r#""application.name":"SPlayer-Next""#));
         assert!(props_without_rate.contains(r#""application.icon-name":"top.imsyy.splayer_next""#));
         assert!(props_without_rate.contains(r#""media.name":"Playback""#));
+    }
+
+    #[test]
+    fn gain_changes_are_ramped_without_overshooting() {
+        let mut smoother = GainSmoother::new(0.0);
+        smoother.set_target(1.0, 5);
+
+        for expected in [0.2, 0.4, 0.6, 0.8, 1.0] {
+            assert!((smoother.next_frame() - expected).abs() < 1e-6);
+        }
+        assert_eq!(smoother.next_frame(), 1.0);
     }
 }

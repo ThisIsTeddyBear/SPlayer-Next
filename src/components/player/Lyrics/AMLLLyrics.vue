@@ -82,10 +82,12 @@ const nextFrame = (): Promise<void> =>
 const processedLyrics = computed(() => {
   if (!props.lyricLines) return [];
   return props.lyricLines.map((line) => {
+    const hasWordRoman = line.words?.some((word) => Boolean(word.romanWord?.trim())) ?? false;
+    const showWordRomanForLine = props.showWordRomanization && hasWordRoman;
     const newLine = {
       ...line,
       translatedLyric: props.showTranslation ? line.translatedLyric : "",
-      romanLyric: props.showLineRomanization ? line.romanLyric : "",
+      romanLyric: props.showLineRomanization && !showWordRomanForLine ? line.romanLyric : "",
     };
     if (line.words) {
       newLine.words = line.words.map((word) => {
@@ -203,7 +205,6 @@ onMounted(async () => {
   player.setOptimizeOptions({
     cleanUnintentionalOverlaps: settings.lyric.amllCleanUnintentionalOverlaps,
     tryAdvanceStartTime: settings.lyric.amllTryAdvanceStartTime,
-    convertExcessiveBackgroundLines: settings.lyric.amllConvertExcessiveBackgroundLines,
     syncMainAndBackgroundLines: settings.lyric.amllSyncMainAndBackgroundLines,
     normalizeSpaces: settings.lyric.amllNormalizeSpaces,
     resetLineTimestamps: settings.lyric.amllResetLineTimestamps,
@@ -311,7 +312,6 @@ watch(
   () => ({
     cleanUnintentionalOverlaps: settings.lyric.amllCleanUnintentionalOverlaps,
     tryAdvanceStartTime: settings.lyric.amllTryAdvanceStartTime,
-    convertExcessiveBackgroundLines: settings.lyric.amllConvertExcessiveBackgroundLines,
     syncMainAndBackgroundLines: settings.lyric.amllSyncMainAndBackgroundLines,
     normalizeSpaces: settings.lyric.amllNormalizeSpaces,
     resetLineTimestamps: settings.lyric.amllResetLineTimestamps,
@@ -320,8 +320,6 @@ watch(
     if (!playerRef.value) return;
     playerRef.value.setOptimizeOptions(options);
     if (processedLyrics.value.length > 0 && !isFrozen.value) {
-      const currentTime = getCurrentTime() + status.lyricOffsetMs;
-      playerRef.value.setLyricLines(processedLyrics.value, currentTime);
       processLyricLanguage();
     }
   },

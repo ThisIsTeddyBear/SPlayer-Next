@@ -76,7 +76,10 @@ impl FftAnalyzer {
 
     /// 直接从交织立体声样本推入（由播放线程调用），一次遍历无需中间分配
     pub fn push_interleaved_samples(&self, interleaved: &[f32]) {
-        let mut buffer = self.sample_buffer.lock();
+        // 频谱允许丢帧，音频输出线程不能等待分析线程持有的锁。
+        let Some(mut buffer) = self.sample_buffer.try_lock() else {
+            return;
+        };
         for pair in interleaved.chunks_exact(2) {
             let write_pos = buffer.write_pos;
             buffer.left[write_pos] = pair[0];

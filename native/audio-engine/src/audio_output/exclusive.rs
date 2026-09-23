@@ -3,15 +3,17 @@ use std::sync::{
     mpsc, Arc,
 };
 use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use windows::core::{GUID, PCWSTR};
 use windows::Win32::{
-    Foundation::{CloseHandle, HANDLE, WAIT_EVENT, WAIT_OBJECT_0, WAIT_TIMEOUT},
+    Foundation::{CloseHandle, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
     Media::Audio::{
-        eConsole, eRender, IAudioClient, IAudioRenderClient, IMMDevice, IMMDeviceEnumerator,
-        MMDeviceEnumerator, AUDCLNT_SHAREMODE_EXCLUSIVE, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-        WAVEFORMATEX, WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0,
+        eConsole, eRender, IAudioClient, IAudioClock, IAudioRenderClient, IMMDevice,
+        IMMDeviceEnumerator, MMDeviceEnumerator, AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED,
+        AUDCLNT_E_UNSUPPORTED_FORMAT, AUDCLNT_SHAREMODE_EXCLUSIVE, WAVEFORMATEX,
+        WAVEFORMATEXTENSIBLE, WAVEFORMATEXTENSIBLE_0,
     },
     System::{
         Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_MULTITHREADED},
@@ -28,12 +30,13 @@ const WAVE_FORMAT_EXTENSIBLE: u16 = 0xfffe;
 const SPEAKER_FRONT_LEFT: u32 = 0x1;
 const SPEAKER_FRONT_RIGHT: u32 = 0x2;
 const SPEAKER_FRONT_CENTER: u32 = 0x4;
-const KSDATAFORMAT_SUBTYPE_PCM: GUID =
-    GUID::from_u128(0x00000001_0000_0010_8000_00aa00389b71);
+const SPEAKER_5POINT1: u32 = 0x3f;
+const SPEAKER_7POINT1: u32 = 0x63f;
+const KSDATAFORMAT_SUBTYPE_PCM: GUID = GUID::from_u128(0x00000001_0000_0010_8000_00aa00389b71);
 const KSDATAFORMAT_SUBTYPE_IEEE_FLOAT: GUID =
     GUID::from_u128(0x00000003_0000_0010_8000_00aa00389b71);
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ExclusiveSampleFormat {
     Pcm16,
     Pcm24In32,
@@ -86,6 +89,7 @@ pub struct ExclusiveConfig {
     sample_rate: u32,
     channels: u16,
     sample_format: ExclusiveSampleFormat,
+    legacy_format: bool,
     bit_perfect: bool,
 }
 
@@ -104,13 +108,7 @@ impl ExclusiveConfig {
         let device = open_device(device_id)?;
         let client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None) }
             .context("Failed to activate the exclusive audio device")?;
-        if bit_perfect && !matches!(source_bits_per_sample, 16 | 24) {
-            bail!(
-                "Bit-perfect playback supports 16-bit and 24-bit integer PCM sources only; this track reports {source_bits_per_sample}-bit audio"
-            );
-        }
-
-        if bit_perfect {
+        if bit_perfect && matches!(source_bits_per_sample, 16 | 24) {
             if let Some(config) = find_supported_config(
                 &client,
                 device_id,
@@ -118,12 +116,28 @@ impl ExclusiveConfig {
                 source_channels,
                 source_bits_per_sample,
                 true,
-            ) {
+            )? {
                 return Ok(config);
             }
+
+            tracing::warn!(
+                sample_rate,
+                source_channels,
+                source_bits_per_sample,
+                "Bit-perfect exclusive output is unsupported; falling back to converted exclusive output"
+            );
+        } else if bit_perfect {
+            tracing::warn!(
+                sample_rate,
+                source_channels,
+                source_bits_per_sample,
+                "Bit-perfect exclusive output is unavailable for this source format; falling back to converted exclusive output"
+            );
         }
 
-        // 保留独占输出，但在设备不接受源格式时协商可用格式并交给解码器重采样。
+        // Keep exclusive output active even when the device cannot accept the source format.
+        // The selected rate/channel layout is propagated to the decoder, whose playback
+        // resampler converts the decoded PCM before it reaches this WASAPI stream.
         for output_rate in candidate_sample_rates(sample_rate) {
             if let Some(config) = find_supported_config(
                 &client,
@@ -132,13 +146,13 @@ impl ExclusiveConfig {
                 source_channels,
                 source_bits_per_sample,
                 false,
-            ) {
+            )? {
                 return Ok(config);
             }
         }
 
         bail!(
-            "The selected output device does not support exclusive playback for {} Hz audio. Close other applications using audio or select a compatible device.",
+            "The selected output device does not support exclusive playback for {} Hz audio.",
             sample_rate
         )
     }
@@ -155,6 +169,10 @@ impl ExclusiveConfig {
         self.sample_format.name()
     }
 
+    pub fn valid_bits_per_sample(&self) -> u32 {
+        u32::from(self.sample_format.valid_bits_per_sample())
+    }
+
     pub fn is_bit_perfect(&self) -> bool {
         self.bit_perfect
     }
@@ -164,13 +182,17 @@ impl ExclusiveConfig {
         let block_align = self.channels * (bits_per_sample / 8);
         WAVEFORMATEXTENSIBLE {
             Format: WAVEFORMATEX {
-                wFormatTag: WAVE_FORMAT_EXTENSIBLE,
+                wFormatTag: if self.legacy_format {
+                    1
+                } else {
+                    WAVE_FORMAT_EXTENSIBLE
+                },
                 nChannels: self.channels,
                 nSamplesPerSec: self.sample_rate,
                 nAvgBytesPerSec: self.sample_rate * u32::from(block_align),
                 nBlockAlign: block_align,
                 wBitsPerSample: bits_per_sample,
-                cbSize: 22,
+                cbSize: if self.legacy_format { 0 } else { 22 },
             },
             Samples: WAVEFORMATEXTENSIBLE_0 {
                 wValidBitsPerSample: self.sample_format.valid_bits_per_sample(),
@@ -188,31 +210,46 @@ fn find_supported_config(
     source_channels: u16,
     source_bits_per_sample: u32,
     bit_perfect: bool,
-) -> Option<ExclusiveConfig> {
+) -> Result<Option<ExclusiveConfig>> {
     for channels in candidate_channels(source_channels, bit_perfect) {
         for sample_format in candidate_formats(source_bits_per_sample, bit_perfect) {
-            let config = ExclusiveConfig {
+            let mut config = ExclusiveConfig {
                 device_id: device_id.map(str::to_owned),
                 sample_rate,
                 channels,
                 sample_format: *sample_format,
+                legacy_format: false,
                 bit_perfect,
             };
-            let wave_format = config.wave_format();
-            let supported = unsafe {
-                client.IsFormatSupported(
-                    AUDCLNT_SHAREMODE_EXCLUSIVE,
-                    &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
-                    None,
-                )
-            }
-            .is_ok();
-            if supported {
-                return Some(config);
+            // 部分驱动只接受传统 PCM 描述，不能把一次格式拒绝当成设备不支持。
+            let supports_legacy = channels <= 2
+                && sample_format.sub_format() == KSDATAFORMAT_SUBTYPE_PCM
+                && sample_format.bits_per_sample() == sample_format.valid_bits_per_sample();
+            for legacy_format in [false, true] {
+                if legacy_format && !supports_legacy {
+                    continue;
+                }
+                config.legacy_format = legacy_format;
+                let wave_format = config.wave_format();
+                let result = unsafe {
+                    client.IsFormatSupported(
+                        AUDCLNT_SHAREMODE_EXCLUSIVE,
+                        &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
+                        None,
+                    )
+                };
+                if result == windows::Win32::Foundation::S_OK {
+                    return Ok(Some(config));
+                }
+                if result != AUDCLNT_E_UNSUPPORTED_FORMAT {
+                    result
+                        .ok()
+                        .context("Failed to query exclusive audio format support")?;
+                }
             }
         }
     }
-    None
+    Ok(None)
 }
 
 fn candidate_sample_rates(source_rate: u32) -> Vec<u32> {
@@ -230,17 +267,12 @@ fn candidate_sample_rates(source_rate: u32) -> Vec<u32> {
             .into_iter()
             .filter(|rate| *rate < source_rate),
     );
-    rates.extend(
-        other_family
-            .into_iter()
-            .filter(|rate| *rate < source_rate),
-    );
-    let remaining =
-        preferred_family
-            .into_iter()
-            .chain(other_family)
-            .filter(|rate| !rates.contains(rate))
-            .collect::<Vec<_>>();
+    rates.extend(other_family.into_iter().filter(|rate| *rate < source_rate));
+    let remaining = preferred_family
+        .into_iter()
+        .chain(other_family)
+        .filter(|rate| !rates.contains(rate))
+        .collect::<Vec<_>>();
     rates.extend(remaining);
     rates
 }
@@ -249,6 +281,8 @@ fn channel_mask(channels: u16) -> u32 {
     match channels {
         1 => SPEAKER_FRONT_CENTER,
         2 => SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT,
+        6 => SPEAKER_5POINT1,
+        8 => SPEAKER_7POINT1,
         _ => 0,
     }
 }
@@ -271,10 +305,17 @@ fn candidate_formats(
 ) -> &'static [ExclusiveSampleFormat] {
     if bit_perfect {
         return match source_bits_per_sample {
-            16 => &[ExclusiveSampleFormat::Pcm16],
+            // 整数零填充可以保留所有源位，HDMI 驱动可能只接受更宽的容器。
+            16 => &[
+                ExclusiveSampleFormat::Pcm16,
+                ExclusiveSampleFormat::Pcm24In32,
+                ExclusiveSampleFormat::Pcm24Packed,
+                ExclusiveSampleFormat::Pcm32,
+            ],
             24 => &[
                 ExclusiveSampleFormat::Pcm24In32,
                 ExclusiveSampleFormat::Pcm24Packed,
+                ExclusiveSampleFormat::Pcm32,
             ],
             _ => unreachable!("bit-perfect source format was validated before negotiation"),
         };
@@ -395,7 +436,8 @@ impl ExclusiveStream {
                     ready_tx.clone(),
                 );
                 if let Err(error) = result {
-                    if ready_tx.send(Err(error.to_string())).is_err() {
+                    tracing::warn!(error = %format!("{error:#}"), "WASAPI 独占输出失败");
+                    if ready_tx.send(Err(format!("{error:#}"))).is_err() {
                         on_failure();
                     }
                 }
@@ -424,12 +466,14 @@ impl ExclusiveStream {
 
     pub fn play(&self) -> Result<()> {
         self.control.playing.store(true, Ordering::Release);
-        unsafe { SetEvent(self.control.control_event) }.context("Failed to resume exclusive audio output")
+        unsafe { SetEvent(self.control.control_event) }
+            .context("Failed to resume exclusive audio output")
     }
 
     pub fn pause(&self) -> Result<()> {
         self.control.playing.store(false, Ordering::Release);
-        unsafe { SetEvent(self.control.control_event) }.context("Failed to pause exclusive audio output")
+        unsafe { SetEvent(self.control.control_event) }
+            .context("Failed to pause exclusive audio output")
     }
 
     pub fn stop(&self) {
@@ -456,9 +500,9 @@ fn run_stream(
     ready_tx: mpsc::SyncSender<std::result::Result<(), String>>,
 ) -> Result<()> {
     let _com = ComApartmentGuard::init()?;
-    priority::boost_current_audio_thread("wasapi-exclusive-output");
+    let _priority = priority::RenderThreadPriority::new();
     let device = open_device(config.device_id.as_deref())?;
-    let client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None) }
+    let mut client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None) }
         .context("Failed to activate the exclusive audio device")?;
     let wave_format = config.wave_format();
     let mut period_hns = 0;
@@ -467,38 +511,82 @@ fn run_stream(
     if period_hns <= 0 {
         bail!("The exclusive audio device returned an invalid period");
     }
-    unsafe {
+    // 音乐播放优先留出缓冲余量，避开 USB 驱动的事件通知时序异常。
+    period_hns = period_hns.max(100_000);
+    let mut buffer_hns = period_hns.saturating_mul(4);
+    let mut initialized = unsafe {
         client.Initialize(
             AUDCLNT_SHAREMODE_EXCLUSIVE,
-            AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-            period_hns,
+            0,
+            buffer_hns,
             period_hns,
             &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
             None,
         )
+    };
+    if initialized
+        .as_ref()
+        .is_err_and(|error| error.code() == AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED)
+    {
+        let frames = unsafe { client.GetBufferSize() }
+            .context("Failed to read the aligned exclusive audio buffer size")?;
+        buffer_hns = ((10_000_000_u64 * u64::from(frames) + u64::from(config.sample_rate) / 2)
+            / u64::from(config.sample_rate)) as i64;
+        // 初始化失败后的客户端不能复用，必须先释放再按驱动返回的帧数重建。
+        drop(client);
+        client = unsafe { device.Activate(CLSCTX_ALL, None) }
+            .context("Failed to reactivate the exclusive audio device")?;
+        initialized = unsafe {
+            client.Initialize(
+                AUDCLNT_SHAREMODE_EXCLUSIVE,
+                0,
+                buffer_hns,
+                period_hns,
+                &wave_format as *const WAVEFORMATEXTENSIBLE as *const WAVEFORMATEX,
+                None,
+            )
+        };
     }
-    .context("The device rejected exclusive audio output")?;
+    initialized.map_err(|error| {
+        anyhow::anyhow!(
+            "The device rejected exclusive audio output (HRESULT 0x{:08X}): {}",
+            error.code().0 as u32,
+            error
+        )
+    })?;
 
-    let buffer_frames = unsafe { client.GetBufferSize() }.context("Failed to read the exclusive audio buffer")?;
-    let render_client: IAudioRenderClient =
-        unsafe { client.GetService() }.context("Failed to get the exclusive audio render interface")?;
-    let audio_event = unsafe { CreateEventW(None, false, false, PCWSTR::null()) }
-        .context("Failed to create the exclusive audio event")?;
-    if let Err(error) = unsafe { client.SetEventHandle(audio_event) } {
-        unsafe {
-            let _ = CloseHandle(audio_event);
-        }
-        return Err(error).context("Failed to set the exclusive audio event");
-    }
-
-    ready_tx
-        .send(Ok(()))
-        .map_err(|_| anyhow::anyhow!("The exclusive audio initialization result receiver was closed"))?;
+    let buffer_frames =
+        unsafe { client.GetBufferSize() }.context("Failed to read the exclusive audio buffer")?;
+    let render_client: IAudioRenderClient = unsafe { client.GetService() }
+        .context("Failed to get the exclusive audio render interface")?;
+    let device_clock: Option<(IAudioClock, u64)> =
+        match unsafe { client.GetService::<IAudioClock>() } {
+            Ok(clock) => match unsafe { clock.GetFrequency() } {
+                Ok(frequency) if frequency > 0 => Some((clock, frequency)),
+                result => {
+                    tracing::warn!(?result, "WASAPI exclusive device clock is unavailable");
+                    None
+                }
+            },
+            Err(error) => {
+                tracing::warn!(%error, "WASAPI exclusive device clock is unavailable");
+                None
+            }
+        };
+    ready_tx.send(Ok(())).map_err(|_| {
+        anyhow::anyhow!("The exclusive audio initialization result receiver was closed")
+    })?;
+    tracing::info!(
+        buffer_frames,
+        sample_rate = config.sample_rate,
+        "WASAPI exclusive timer-driven audio output initialized"
+    );
     run_loop(
         &client,
         &render_client,
-        audio_event,
+        device_clock.as_ref().map(|(clock, frequency)| (clock, *frequency)),
         buffer_frames,
+        (period_hns / 20_000).max(1) as u32,
         config.channels,
         config.sample_format,
         &mut source,
@@ -512,8 +600,9 @@ fn run_stream(
 fn run_loop(
     client: &IAudioClient,
     render_client: &IAudioRenderClient,
-    audio_event: HANDLE,
+    device_clock: Option<(&IAudioClock, u64)>,
     buffer_frames: u32,
+    poll_ms: u32,
     channels: u16,
     sample_format: ExclusiveSampleFormat,
     source: &mut DecoderSource,
@@ -521,27 +610,29 @@ fn run_loop(
     stopped: &AtomicBool,
     control: &StreamControl,
 ) -> Result<()> {
-    struct AudioEvent(HANDLE);
-
-    impl Drop for AudioEvent {
-        fn drop(&mut self) {
-            unsafe {
-                let _ = CloseHandle(self.0);
-            }
-        }
-    }
-
-    let _audio_event = AudioEvent(audio_event);
     let mut running = false;
-    let handles = [audio_event, control.control_event];
+    let mut clock_baseline: Option<(u64, u64)> = None;
+    let mut last_clock_check = Instant::now();
+    let mut clock_anomalies = 0u8;
+    let mut empty_buffer_count = 0u64;
+    let handles = [control.control_event];
 
     loop {
-        let wait = unsafe { WaitForMultipleObjects(&handles, false, INFINITE) };
-        if wait == WAIT_EVENT(WAIT_OBJECT_0.0 + 1) {
+        let wait = unsafe {
+            WaitForMultipleObjects(&handles, false, if running { poll_ms } else { INFINITE })
+        };
+        if wait == WAIT_OBJECT_0 {
             if control.stopped.load(Ordering::Acquire) || stopped.load(Ordering::Acquire) {
                 if running {
                     stop_client(client)?;
                 }
+                if empty_buffer_count > 0 {
+                    tracing::warn!(
+                        empty_buffer_count,
+                        "WASAPI exclusive output buffer ran empty during playback"
+                    );
+                }
+                tracing::debug!("WASAPI exclusive audio stream stopped");
                 return Ok(());
             }
             if control.playing.load(Ordering::Acquire) && !running {
@@ -554,30 +645,106 @@ fn run_loop(
                     volume,
                 )?;
                 unsafe { client.Start() }.context("Failed to start exclusive audio output")?;
+                tracing::debug!(buffer_frames, "WASAPI exclusive audio stream started");
                 running = true;
+                clock_baseline = None;
+                last_clock_check = Instant::now();
+                clock_anomalies = 0;
             } else if !control.playing.load(Ordering::Acquire) && running {
                 stop_client(client)?;
+                tracing::debug!("WASAPI exclusive audio stream paused");
                 running = false;
-            }
-            continue;
-        }
-        if wait == WAIT_OBJECT_0 {
-            if running {
-                write_buffer(
-                    render_client,
-                    buffer_frames,
-                    channels,
-                    sample_format,
-                    source,
-                    volume,
-                )?;
+                clock_baseline = None;
+                clock_anomalies = 0;
             }
             continue;
         }
         if wait == WAIT_TIMEOUT {
+            if running {
+                let padding = unsafe { client.GetCurrentPadding() }
+                    .context("Failed to read the exclusive audio buffer padding")?;
+                if padding > buffer_frames {
+                    bail!("The exclusive audio device reported invalid buffer padding");
+                }
+                if padding == 0 {
+                    empty_buffer_count += 1;
+                    if empty_buffer_count == 1 {
+                        tracing::warn!(
+                            empty_buffer_count,
+                            "WASAPI exclusive output buffer ran empty"
+                        );
+                    }
+                }
+                let available = buffer_frames - padding;
+                if available > 0 {
+                    write_buffer(
+                        render_client,
+                        available,
+                        channels,
+                        sample_format,
+                        source,
+                        volume,
+                    )?;
+                }
+
+                if let Some((clock, clock_frequency)) = device_clock
+                    .filter(|_| last_clock_check.elapsed() >= Duration::from_millis(100))
+                {
+                    last_clock_check = Instant::now();
+                    let mut device_position = 0;
+                    let mut qpc_position = 0;
+                    unsafe { clock.GetPosition(&mut device_position, Some(&mut qpc_position)) }
+                        .context("Failed to read the exclusive audio device clock position")?;
+                    if let Some((previous_device, previous_qpc)) = clock_baseline {
+                        let device_delta = device_position.saturating_sub(previous_device);
+                        let qpc_delta = qpc_position.saturating_sub(previous_qpc);
+                        if qpc_delta > 0 {
+                            // QPC 时间戳单位是 100ns；用设备频率换算后比较两种时钟。
+                            let device_ticks = u128::from(device_delta) * 10_000_000;
+                            let reference_ticks =
+                                u128::from(qpc_delta) * u128::from(clock_frequency);
+                            let drifted = device_ticks * 4 < reference_ticks * 3
+                                || device_ticks * 4 > reference_ticks * 5;
+                            clock_anomalies = if drifted {
+                                clock_anomalies.saturating_add(1)
+                            } else {
+                                0
+                            };
+                            if clock_anomalies >= 2
+                                && control.playing.load(Ordering::Acquire)
+                                && !control.stopped.load(Ordering::Acquire)
+                                && !stopped.load(Ordering::Acquire)
+                            {
+                                tracing::warn!(
+                                    clock_ratio = device_ticks as f64 / reference_ticks as f64,
+                                    device_delta,
+                                    qpc_delta,
+                                    "WASAPI exclusive device clock drifted; resetting the audio client"
+                                );
+                                stop_client(client)?;
+                                write_buffer(
+                                    render_client,
+                                    buffer_frames,
+                                    channels,
+                                    sample_format,
+                                    source,
+                                    volume,
+                                )?;
+                                unsafe { client.Start() }
+                                    .context("Failed to restart exclusive audio output")?;
+                                clock_baseline = None;
+                                last_clock_check = Instant::now();
+                                clock_anomalies = 0;
+                                continue;
+                            }
+                        }
+                    }
+                    clock_baseline = Some((device_position, qpc_position));
+                }
+            }
             continue;
         }
-        bail!("Failed while waiting for the exclusive audio event");
+        bail!("Failed while waiting for the exclusive audio timer");
     }
 }
 
@@ -594,7 +761,9 @@ fn write_buffer(
     source: &mut DecoderSource,
     volume: &AtomicU32,
 ) -> Result<()> {
-    let buffer = unsafe { render_client.GetBuffer(frames) }.context("Failed to get the exclusive audio buffer")?;
+    let previous_buffer_finished = source.is_finished();
+    let buffer = unsafe { render_client.GetBuffer(frames) }
+        .context("Failed to get the exclusive audio buffer")?;
     let gain = f32::from_bits(volume.load(Ordering::Relaxed));
     let samples = match sample_format {
         ExclusiveSampleFormat::Pcm16 => {
@@ -660,7 +829,12 @@ fn write_buffer(
         }
     };
     debug_assert_eq!(samples, frames as usize * channels as usize);
-    unsafe { render_client.ReleaseBuffer(frames, 0) }.context("Failed to release the exclusive audio buffer")
+    unsafe { render_client.ReleaseBuffer(frames, 0) }
+        .context("Failed to release the exclusive audio buffer")?;
+    if previous_buffer_finished {
+        source.mark_finished_played();
+    }
+    Ok(())
 }
 
 fn to_i16(value: f32) -> i16 {
@@ -687,7 +861,82 @@ fn to_i32(value: f32) -> i32 {
 
 #[cfg(test)]
 mod tests {
-    use super::candidate_sample_rates;
+    use super::*;
+
+    #[test]
+    fn bit_perfect_candidates_allow_wider_integer_containers_only() {
+        for bits in [16, 24] {
+            let formats = candidate_formats(bits, true);
+            assert!(formats.contains(&ExclusiveSampleFormat::Pcm32));
+            assert!(formats.contains(&ExclusiveSampleFormat::Pcm24In32));
+            assert!(formats.contains(&ExclusiveSampleFormat::Pcm24Packed));
+            for format in formats {
+                assert_eq!(format.sub_format(), KSDATAFORMAT_SUBTYPE_PCM);
+                assert!(u32::from(format.valid_bits_per_sample()) >= bits);
+            }
+        }
+    }
+
+    #[test]
+    fn bit_perfect_channels_are_never_remixed() {
+        for channels in [1, 2, 6, 8] {
+            assert_eq!(candidate_channels(channels, true), vec![channels]);
+        }
+    }
+
+    #[test]
+    fn multichannel_layouts_use_matching_speaker_masks() {
+        assert_eq!(channel_mask(6), SPEAKER_5POINT1);
+        assert_eq!(channel_mask(6).count_ones(), 6);
+        assert_eq!(channel_mask(8), SPEAKER_7POINT1);
+        assert_eq!(channel_mask(8).count_ones(), 8);
+    }
+
+    #[test]
+    fn legacy_pcm_descriptor_preserves_the_audio_format() {
+        let mut config = ExclusiveConfig {
+            device_id: None,
+            sample_rate: 192_000,
+            channels: 2,
+            sample_format: ExclusiveSampleFormat::Pcm24Packed,
+            legacy_format: false,
+            bit_perfect: true,
+        };
+        let extended = config.wave_format();
+        config.legacy_format = true;
+        let legacy = config.wave_format();
+        // Windows 格式结构为紧凑布局，断言前先复制字段以避免未对齐引用。
+        assert_eq!({ extended.Format.wFormatTag }, WAVE_FORMAT_EXTENSIBLE);
+        assert_eq!({ extended.Format.cbSize }, 22);
+        assert_eq!({ legacy.Format.wFormatTag }, 1);
+        assert_eq!({ legacy.Format.cbSize }, 0);
+        assert_eq!({ legacy.Format.nSamplesPerSec }, 192_000);
+        assert_eq!({ legacy.Format.nChannels }, 2);
+        assert_eq!({ legacy.Format.wBitsPerSample }, 24);
+        assert_eq!({ legacy.Format.nBlockAlign }, 6);
+        assert_eq!({ legacy.Format.nAvgBytesPerSec }, 1_152_000);
+    }
+
+    #[test]
+    fn every_16_bit_sample_survives_integer_container_widening() {
+        for value in i16::MIN..=i16::MAX {
+            let sample = f32::from(value) / 32_768.0;
+            assert_eq!(to_i16(sample), value);
+            assert_eq!(to_i24(sample), i32::from(value) << 8);
+            assert_eq!(to_i24_in_i32(sample), i32::from(value) << 16);
+            assert_eq!(to_i32(sample), i32::from(value) << 16);
+        }
+    }
+
+    #[test]
+    fn preserves_24_bit_samples_in_packed_and_wide_containers() {
+        for value in [-8_388_608, -8_388_607, -65_537, -1, 0, 1, 65_537, 8_388_607] {
+            let sample = value as f32 / 8_388_608.0;
+            assert_eq!(to_i24(sample), value);
+            assert_eq!(to_i24_in_i32(sample), value << 8);
+            assert_eq!(to_i32(sample), value << 8);
+        }
+    }
 
     #[test]
     fn keeps_the_source_rate_before_resampling() {

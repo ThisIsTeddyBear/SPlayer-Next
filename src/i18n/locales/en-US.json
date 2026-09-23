@@ -576,6 +576,26 @@
   },
   "quality": {
     "details": "Audio Quality",
+    "outputInfo": "Audio Output Info",
+    "noOutput": "No audio stream is open",
+    "loadFailed": "Could not load audio output information",
+    "refresh": "Refresh",
+    "device": "Output Device",
+    "mode": "Output Mode",
+    "exclusive": "WASAPI Exclusive",
+    "shared": "Shared",
+    "source": "Source Audio",
+    "output": "Output Stream",
+    "format": "Sample Format",
+    "resampling": "Resampling",
+    "bitPerfect": "Bit Perfect",
+    "processing": "Audio Processing",
+    "equalizer": "Equalizer",
+    "tempo": "Speed or Pitch",
+    "normalization": "Loudness Normalization",
+    "limiter": "Limiter",
+    "active": "Active",
+    "inactive": "Off",
     "codec": "Codec",
     "sampleRate": "Sample Rate",
     "bitDepth": "Bit Depth",
@@ -811,9 +831,22 @@
       "label": "Auto Play",
       "description": "Automatically start playback after loading a track"
     },
-    "fuckDjMode": {
-      "label": "Fuck DJ Mode",
-      "description": "Auto skip songs with DJ, TikTok, 0.9, 0.8, viral, car, hot, slow rock in the title"
+    "skipKeywordsSongs": {
+      "label": "Skip Songs by Keywords",
+      "description": "Automatically skip tracks when title or artist matches specified keywords",
+      "button": "Manage",
+      "enable": "Enable Skip by Keywords",
+      "enableDesc": "Automatically skip to the next track when keywords match"
+    },
+    "skipKeywordsRules": {
+      "label": "Keyword List",
+      "description": "Customize song keywords to skip",
+      "hint": "Tracks containing these keywords in the title or artist will be skipped",
+      "placeholder": "Enter keyword",
+      "add": "Add",
+      "clear": "Clear list",
+      "empty": "No keywords configured",
+      "duplicate": "Keyword already exists"
     },
     "uncensorProfanity": {
       "label": "Fuck ** Mode",
@@ -1122,10 +1155,6 @@
     "amllTryAdvanceStartTime": {
       "label": "Advance Animation Start Time",
       "description": "Advance lyric entry animation (up to 1s) for smoother transitions"
-    },
-    "amllConvertExcessiveBackgroundLines": {
-      "label": "Convert Excessive Background Lines",
-      "description": "Convert consecutive multi-line background vocals into a single-line background vocal attached to the main line"
     },
     "amllSyncMainAndBackgroundLines": {
       "label": "Sync Background Lines Timing",
@@ -1457,6 +1486,13 @@
       "solid": "Solid",
       "dynamic": "Dynamic",
       "animation": "Fluid"
+    },
+    "playerBgRenderer": {
+      "label": "Render Engine",
+      "description": "Select the rendering engine for the fluid animation background",
+      "mesh": "Mesh Gradient Renderer",
+      "isolation": "Isolation Renderer",
+      "pixi": "PixiJS Renderer"
     },
     "dynamicBackgroundPreset": {
       "label": "Dynamic Style",

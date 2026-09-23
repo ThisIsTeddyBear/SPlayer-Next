@@ -41,6 +41,17 @@ const appearanceCategory: SettingCategory = {
           hideChildren: true,
           children: [
             {
+              key: "playerBgRenderer",
+              type: "select",
+              binding: { store: "settings", path: "player.playerBgRenderer" },
+              options: [
+                { value: "mesh", labelKey: "settings.playerBgRenderer.mesh" },
+                { value: "isolation", labelKey: "settings.playerBgRenderer.isolation" },
+                { value: "pixi", labelKey: "settings.playerBgRenderer.pixi" },
+              ],
+              defaultValue: "mesh",
+            },
+            {
               key: "customColor",
               type: "color",
               binding: { store: "theme", path: "customColor" },
@@ -281,6 +292,7 @@ const appearanceCategory: SettingCategory = {
               key: "playerBgBeat",
               type: "switch",
               binding: { store: "settings", path: "player.playerBgBeat" },
+              visible: () => useSettingsStore().player.playerBgRenderer === "mesh",
               defaultValue: false,
             },
           ],
