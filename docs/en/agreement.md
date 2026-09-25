@@ -2,8 +2,8 @@
 
 # SPlayer Next User Agreement and Disclaimer
 
-**Version: v1.2**  
-**Effective: May 29, 2026**  
+**Version: v1.2**
+**Effective: May 29, 2026**
 **Last updated: August 12, 2026**
 
 SPlayer Next is a free and open-source cross-platform desktop music player. Read this agreement, especially limitations of liability, governing law, and dispute provisions, before downloading or using it. If you do not agree, stop using and delete the software. Minors should review it with a guardian.
@@ -120,10 +120,3 @@ This agreement is governed by the laws of mainland China, excluding conflict-of-
 ## 18. General terms
 
 If a provision is invalid or unenforceable, the remaining provisions continue to apply. This agreement, the Privacy Policy, AGPL-3.0, and third-party licenses form the relevant terms. Failure to enforce a right is not a waiver. No agency, partnership, employment, joint venture, or endorsement relationship is created.
-
-## 19. Contact
-
-- [GitHub repository](https://github.com/SPlayer-Dev/SPlayer-Next)
-- [Issue tracker](https://github.com/SPlayer-Dev/SPlayer-Next/issues)
-- [Official website](https://splayer-next.imsyy.top)
-- Email: imsyy1024@gmail.com

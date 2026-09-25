@@ -212,7 +212,7 @@ const alignItems = computed(() => {
     <!-- 歌手 -->
     <div class="max-w-full flex items-center gap-1.5 text-[1.2em] text-cover/60">
       <IconLucideMic class="shrink-0 translate-y-px text-cover/40" />
-      <span class="truncate">
+      <SMarquee fit class="min-w-0">
         <template v-if="artists.length">
           <template v-for="(artist, index) in artists" :key="artist.id ?? index">
             <span
@@ -227,7 +227,7 @@ const alignItems = computed(() => {
           </template>
         </template>
         <span v-else class="opacity-50">{{ t("playlist.unknownArtist") }}</span>
-      </span>
+      </SMarquee>
     </div>
     <!-- 专辑 -->
     <div v-if="albumText" class="max-w-full flex items-center gap-1.5 text-[1.2em] text-cover/60">
