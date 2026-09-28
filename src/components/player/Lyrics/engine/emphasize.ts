@@ -1,30 +1,19 @@
 /**
- * Word floating and long syllable emphasis animations
- *
- * Uses the Web Animations API to add:
- * 1. Base float (all words): subtle upward translation (0.05em) while singing.
- * 2. Emphasis effect (sustained syllables): scale + glow + sine floating + per-character stagger.
+ * 长音节强调动画与歌词浮动动画
+ * 分层辉光的视觉设计参考 Jellyfin-LyricMotion（MPL-2.0）。
  */
 
 import type { LyricWord } from "@shared/types/lyrics";
 import { splitGraphemes } from "@shared/utils/lyrics";
 import { isCJK } from "../utils/split-words";
 
-const FRAME_COUNT = 32;
-const EMP_MID = 0.5;
-
-/** Smoothstep easing curve */
 const smoothstep = (x: number): number => x * x * (3 - 2 * x);
 
 const normalize = (min: number, max: number, x: number) =>
   Math.min(1, Math.max(0, (x - min) / (max - min)));
 
-/** Symmetric 0 -> peak -> 0 emphasis easing */
-const empEasing = (x: number): number =>
-  x < EMP_MID ? smoothstep(normalize(0, EMP_MID, x)) : 1 - smoothstep(normalize(EMP_MID, 1, x));
-
-const scaleMatrix3dCSS = (s: number): string =>
-  `matrix3d(${s},0,0,0,0,${s},0,0,0,0,${s},0,0,0,0,1)`;
+const glowPulse = (t: number, start: number, peak: number, release: number, end: number) =>
+  smoothstep(normalize(start, peak, t)) * (1 - smoothstep(normalize(release, end, t)));
 
 const LETTER_OR_DIGIT_RE = /[\p{L}\p{N}]/u;
 
@@ -96,13 +85,13 @@ export const createFloatAnimation = (
 };
 
 /**
- * Create glow, scale, and sine float animations for each character of an emphasized word
- * @param charElements - Character span elements array
- * @param duration - Total merged word duration (ms)
- * @param delay - Delay relative to line start (ms)
- * @param isLastWord - Whether this is the final word of the line
- * @param isBG - Whether this is a background vocal line
- * @returns Array of Animation instances
+ * 为强调词的每个字符创建抬升、放大和分层辉光动画
+ * @param charElements - 字符元素
+ * @param duration - 合并后的词时长，单位毫秒
+ * @param delay - 相对歌词行起点的延迟，单位毫秒
+ * @param isLastWord - 是否为歌词行的最后一个词
+ * @param isBG - 是否为背景人声
+ * @returns 动画实例数组
  */
 export const createEmphasizeAnimations = (
   charElements: HTMLElement[],
@@ -118,76 +107,74 @@ export const createEmphasizeAnimations = (
 
   let amount = du / 2000;
   amount = amount > 1 ? Math.sqrt(amount) : amount ** 3;
-  let blur = du / 3000;
-  blur = blur > 1 ? Math.sqrt(blur) : blur ** 3;
   amount *= 0.6;
-  blur *= 0.5;
 
   if (isLastWord) {
     amount *= 1.6;
-    blur *= 1.5;
     du *= 1.2;
   }
-  amount = Math.min(1.2, amount);
-  blur = Math.min(0.8, blur);
-
-  const animDu = Number.isFinite(du) ? du : 0;
+  amount = Math.min(1.2, Math.max(isLastWord ? 0.7 : 0.55, amount));
+  const animDu = Number.isFinite(du) ? du * 1.5 : 0;
+  const glowStrength = Math.min(1, Math.max(0.55, duration / 2000)) * (isLastWord ? 1.1 : 1);
+  const glowOffsets = [
+    0, 0.025, 0.1, 0.11, 0.19, 0.28, 0.32, 0.44, 0.56, 0.6, 0.75, 0.8, 0.98, 1,
+  ];
 
   for (let i = 0; i < charElements.length; i++) {
     const el = charElements[i];
-    const wordDe = de + (du / 2.5 / charCount) * i;
+    const wordDe = de + du * 0.09 * i;
+    const position = (i + 0.5) / charCount - 0.5;
+    const peakScale = 1 + amount * 0.12;
+    const peakX = position * amount * 0.08;
+    const peakY = -amount * (isBG ? 0.09 : 0.065);
+    const transformFrames: Keyframe[] = [
+      { offset: 0, transform: "translate3d(0, 0, 0) scale3d(1, 1, 1)" },
+      {
+        offset: 0.25,
+        transform: `translate3d(${peakX}em, ${peakY}em, 0) scale3d(${peakScale}, ${peakScale}, 1)`,
+      },
+      {
+        offset: 0.3,
+        transform: `translate3d(${peakX}em, ${peakY}em, 0) scale3d(${peakScale}, ${peakScale}, 1)`,
+      },
+      {
+        offset: 0.75,
+        transform: `translate3d(0, ${-amount * 0.035}em, 0) scale3d(1, 1, 1)`,
+      },
+      { offset: 1, transform: `translate3d(0, ${-amount * 0.035}em, 0) scale3d(1, 1, 1)` },
+    ];
 
-    // 1. Glow + Scale + Translate keyframes
-    const glowFrames: Keyframe[] = new Array(FRAME_COUNT).fill(0).map((_, j) => {
-      const x = (j + 1) / FRAME_COUNT;
-      const transX = empEasing(x);
-      const glowLevel = empEasing(x) * blur;
-
-      const scale = 1 + transX * 0.1 * amount;
-      const offsetX = -transX * 0.03 * amount * (charElements.length / 2 - i);
-      const offsetY = -transX * 0.025 * amount;
-
-      return {
-        offset: x,
-        transform: `${scaleMatrix3dCSS(scale)} translate(${offsetX}em, ${offsetY}em)`,
-        textShadow: `0 0 ${Math.min(0.3, blur * 0.3)}em rgba(255, 255, 255, ${glowLevel})`,
-      };
-    });
-
-    const glow = el.animate(glowFrames, {
+    const motion = el.animate(transformFrames, {
       duration: animDu,
       delay: Number.isFinite(wordDe) ? wordDe : 0,
-      id: `emphasize-glow-${i}`,
-      iterations: 1,
-      composite: "replace",
+      id: `emphasize-motion-${i}`,
       fill: "both",
+      easing: "ease-in-out",
     });
-    glow.onfinish = () => glow.pause();
-    glow.pause();
-    result.push(glow);
+    motion.pause();
+    result.push(motion);
 
-    // 2. Sine floating keyframes
-    const floatFrames: Keyframe[] = new Array(FRAME_COUNT).fill(0).map((_, j) => {
-      const x = (j + 1) / FRAME_COUNT;
-      let y = Math.sin(x * Math.PI);
-      if (isBG) y *= 2;
-      return {
-        offset: x,
-        transform: `translateY(${-y * 0.05}em)`,
-      };
-    });
-
-    const float = el.animate(floatFrames, {
-      duration: animDu * 1.4,
-      delay: Number.isFinite(wordDe) ? wordDe - 400 : 0,
-      id: "emphasize-float",
-      iterations: 1,
-      composite: "add",
-      fill: "both",
-    });
-    float.onfinish = () => float.pause();
-    float.pause();
-    result.push(float);
+    const layers = el.querySelectorAll<HTMLElement>(".lp-emp-glow");
+    for (let layerIndex = 0; layerIndex < layers.length; layerIndex++) {
+      const isCore = layerIndex === 0;
+      const frames: Keyframe[] = glowOffsets.map((offset) => {
+        const spark = glowPulse(offset, 0, 0.1, 0.28, 0.56);
+        const bloom = glowPulse(offset, 0.025, 0.19, 0.44, 0.8);
+        const afterglow = glowPulse(offset, 0.11, 0.32, 0.6, 0.98);
+        const energy = isCore
+          ? 0.78 * spark + 0.22 * bloom
+          : 0.72 * bloom + 0.28 * afterglow;
+        return { offset, opacity: Math.min(0.9, energy * glowStrength) };
+      });
+      const glow = layers[layerIndex].animate(frames, {
+        duration: animDu,
+        delay: Number.isFinite(wordDe) ? wordDe : 0,
+        id: `emphasize-${isCore ? "core" : "halo"}-${i}`,
+        fill: "both",
+      });
+      glow.pause();
+      result.push(glow);
+    }
   }
 
   return result;

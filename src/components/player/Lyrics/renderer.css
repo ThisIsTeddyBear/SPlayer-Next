@@ -190,7 +190,7 @@
     }
   }
 
-  /* Word emphasis wrapper */
+  /* 长音节强调与分层辉光，视觉设计参考 Jellyfin-LyricMotion（MPL-2.0）。 */
   & > span.lp-emp-wrapper {
     display: inline-block;
     white-space: pre;
@@ -199,10 +199,41 @@
     padding: 1em;
     margin: -1em;
 
-    & > span {
+    & > .lp-emp-char {
+      position: relative;
       display: inline-block;
       padding: 1em;
       margin: -1em;
+      transform-origin: 50% 80%;
+    }
+
+    .lp-emp-glow {
+      position: absolute;
+      inset: 1em;
+      display: block;
+      pointer-events: none;
+      user-select: none;
+      color: transparent;
+      -webkit-text-fill-color: transparent;
+      opacity: 0;
+      white-space: pre;
+    }
+
+    .lp-emp-glow-core {
+      text-shadow:
+        0 0 0.045em rgb(255 255 255 / 54%),
+        0 0 0.125em var(--lp-singer-color, var(--lp-color, #fff)),
+        0 0 0.22em
+          color-mix(in srgb, var(--lp-singer-color, var(--lp-color, #fff)) 35%, transparent);
+    }
+
+    .lp-emp-glow-halo {
+      text-shadow:
+        0 0 0.26em
+          color-mix(in srgb, var(--lp-singer-color, var(--lp-color, #fff)) 65%, transparent),
+        0 0 0.49em
+          color-mix(in srgb, var(--lp-singer-color, var(--lp-color, #fff)) 40%, transparent),
+        0 0 0.7em rgb(255 255 255 / 12%);
     }
   }
 }
