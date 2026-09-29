@@ -259,15 +259,7 @@ const buildEmphasizedChunk = (
   const charElements: HTMLElement[] = [];
   for (const char of splitGraphemes(trimmed)) {
     const charSpan = document.createElement("span");
-    charSpan.className = "lp-emp-char";
     charSpan.textContent = char;
-    for (const layer of ["core", "halo"]) {
-      const glow = document.createElement("span");
-      glow.className = `lp-emp-glow lp-emp-glow-${layer}`;
-      glow.textContent = char;
-      glow.setAttribute("aria-hidden", "true");
-      charSpan.appendChild(glow);
-    }
     wrapper.appendChild(charSpan);
     charElements.push(charSpan);
   }
