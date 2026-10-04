@@ -107,8 +107,8 @@ const start = (): void => void session.start();
     :open="props.open"
     :destroy-on-close="true"
     :title="t(showHistory ? 'recognition.history.title' : 'recognition.title')"
-    width="440px"
-    height="440px"
+    width="min(440px, calc(100vw - 32px))"
+    height="min(440px, calc(100vh - 32px))"
     :content-style="{ padding: '0 24px' }"
     @update:open="onOpenUpdate"
   >
@@ -152,7 +152,7 @@ const start = (): void => void session.start();
             <p class="text-base font-semibold text-on-surface">
               {{ isBusy ? t("recognition.listeningTitle") : t("recognition.description") }}
             </p>
-            <p class="mt-1 max-w-72 text-xs leading-5 text-on-surface-variant/65 text-pretty">
+            <p class="mt-1 max-w-72 text-xs leading-5 text-on-surface/70 text-pretty">
               {{ isBusy ? t("recognition.listeningDescription") : t("recognition.hint") }}
             </p>
           </div>
@@ -179,7 +179,7 @@ const start = (): void => void session.start();
             </p>
             <p
               v-if="candidate.artists.length"
-              class="mt-1.5 truncate text-sm font-medium text-on-surface-variant/75"
+              class="mt-1.5 truncate text-sm font-medium text-on-surface/75"
             >
               {{ candidate.artists.join(" / ") }}
             </p>
@@ -271,6 +271,7 @@ const start = (): void => void session.start();
       </SButton>
       <SButton
         v-if="!showHistory && !isBusy"
+        class="shrink-0"
         variant="secondary"
         size="large"
         circle

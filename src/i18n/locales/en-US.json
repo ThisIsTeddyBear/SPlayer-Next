@@ -251,6 +251,7 @@
     "searching": "Search this song",
     "history": {
       "title": "Recognition History",
+      "count": "{count} song | {count} songs",
       "empty": "No identified songs yet",
       "remove": "Remove from recognition history",
       "clear": "Clear history",

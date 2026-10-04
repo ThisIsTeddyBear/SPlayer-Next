@@ -56,23 +56,22 @@ onMounted(() => void load());
 
 <template>
   <div class="flex h-full min-h-0 flex-col">
-    <div v-if="loading" class="flex flex-1 items-center justify-center">
+    <div v-if="loading" class="flex flex-1 items-center justify-center text-on-surface">
       <SLoading />
     </div>
     <div v-else-if="loadFailed" class="flex flex-1 flex-col items-center justify-center gap-3">
-      <p class="text-on-surface-variant/65">{{ t("recognition.history.loadFailed") }}</p>
+      <p class="text-on-surface/70">{{ t("recognition.history.loadFailed") }}</p>
       <SButton variant="secondary" @click="load">{{ t("recognition.retry") }}</SButton>
     </div>
     <template v-else>
-      <div v-if="entries.length" class="mb-2 flex shrink-0 items-center justify-between">
-        <span class="text-xs text-on-surface-variant/65">
-          {{ t("common.totalSongs", { count: entries.length }) }}
+      <div v-if="entries.length" class="mb-2 flex shrink-0 items-center justify-between pt-1">
+        <span class="text-xs text-on-surface/70">
+          {{ t("recognition.history.count", entries.length) }}
         </span>
         <SButton
-          type="error"
           variant="text"
           size="small"
-          :disabled="deleting !== null"
+          :disabled="deleting !== null || clearing"
           @click="clearConfirmOpen = true"
         >
           {{ t("recognition.history.clear") }}
@@ -86,10 +85,13 @@ onMounted(() => void load());
         class="min-h-0 flex-1"
       >
         <template #default="{ item }">
-          <div class="flex h-20 items-center gap-2">
+          <div
+            class="flex h-20 items-center gap-1 rounded-xl px-1.5 py-1.5 transition-colors hover:bg-on-surface/5 focus-within:bg-on-surface/5"
+          >
             <button
               type="button"
-              class="flex h-full min-w-0 flex-1 items-center gap-3 rounded-lg px-2 text-left hover:bg-on-surface/6 focus-visible:outline-primary"
+              :title="item.candidate.title"
+              class="recognition-history-select flex h-full min-w-0 flex-1 appearance-none items-center gap-3 rounded-lg border-none bg-transparent px-2 text-left text-on-surface cursor-pointer"
               @click="emit('select', item.candidate)"
             >
               <SImg
@@ -98,22 +100,26 @@ onMounted(() => void load());
                 class="size-12 shrink-0 rounded-lg"
               />
               <div class="min-w-0 flex-1">
-                <p class="truncate font-semibold text-on-surface">
+                <p class="truncate text-sm font-semibold leading-5 text-on-surface">
                   {{ item.candidate.title }}
                 </p>
-                <p class="truncate text-xs text-on-surface-variant/75">
+                <p
+                  v-if="item.candidate.artists.length"
+                  class="truncate text-xs leading-5 text-on-surface/75"
+                >
                   {{ item.candidate.artists.join(" / ") }}
                 </p>
                 <time
                   :datetime="new Date(item.recognizedAt).toISOString()"
-                  class="text-xs text-on-surface-variant/50"
+                  class="mt-0.5 block text-xs leading-4 text-on-surface/70"
                 >
                   {{ dateFormat.format(item.recognizedAt) }}
                 </time>
               </div>
             </button>
             <SButton
-              variant="text"
+              class="recognition-history-remove shrink-0"
+              variant="ghost"
               size="small"
               circle
               :title="t('recognition.history.remove')"
@@ -127,7 +133,7 @@ onMounted(() => void load());
           </div>
         </template>
         <template #empty>
-          <div class="text-center text-on-surface-variant/50">
+          <div class="text-center text-on-surface/70">
             <IconLucideHistory class="mx-auto mb-3 size-10 opacity-30" />
             <p>{{ t("recognition.history.empty") }}</p>
           </div>
@@ -147,3 +153,12 @@ onMounted(() => void load());
     </SDialog>
   </div>
 </template>
+
+<style scoped>
+/* 虚拟列表限制绘制范围，焦点描边放在按钮内部以避免被裁切。 */
+.recognition-history-select:focus-visible,
+.recognition-history-remove:focus-visible {
+  outline: 2px solid rgb(var(--s-primary));
+  outline-offset: -2px;
+}
+</style>
