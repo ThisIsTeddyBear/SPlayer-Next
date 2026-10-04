@@ -249,6 +249,16 @@
     "play": "Play",
     "unavailable": "Music recognition is not supported on this device",
     "searching": "Search this song",
+    "history": {
+      "title": "Recognition History",
+      "empty": "No identified songs yet",
+      "remove": "Remove from recognition history",
+      "clear": "Clear history",
+      "clearConfirmTitle": "Clear recognition history",
+      "clearConfirmContent": "Clear all identified songs? This cannot be undone.",
+      "loadFailed": "Could not load recognition history",
+      "updateFailed": "Could not update recognition history"
+    },
     "error": {
       "unsupported": "System audio capture is not supported on this platform",
       "no-device": "No system audio device found",

@@ -413,6 +413,9 @@ const api = {
      */
     start: (config: RecognitionConfig) => ipcRenderer.invoke("recognition:start", config),
     cancel: () => ipcRenderer.invoke("recognition:cancel"),
+    getHistory: () => ipcRenderer.invoke("recognition:getHistory"),
+    removeHistory: (songId: string) => ipcRenderer.invoke("recognition:removeHistory", songId),
+    clearHistory: () => ipcRenderer.invoke("recognition:clearHistory"),
     /**
      */
     onEvent: (callback: (event: RecognitionEvent) => void) => {

@@ -29,6 +29,13 @@ export interface RecognitionCandidate {
   tagCount?: number;
 }
 
+/** 单条识别历史，同一首歌曲只保留最近一次成功识别 */
+export interface RecognitionHistoryEntry {
+  candidate: RecognitionCandidate;
+  /** 最近一次识别时间（unix ms） */
+  recognizedAt: number;
+}
+
 /** 识别错误 */
 export interface RecognitionError {
   code: RecognitionErrorCode;
@@ -57,5 +64,8 @@ export interface RecognitionApi {
   isSupported: () => Promise<boolean>;
   start: (config: RecognitionConfig) => Promise<unknown>;
   cancel: () => Promise<unknown>;
+  getHistory: () => Promise<RecognitionHistoryEntry[]>;
+  removeHistory: (songId: string) => Promise<void>;
+  clearHistory: () => Promise<void>;
   onEvent: (callback: (event: RecognitionEvent) => void) => () => void;
 }

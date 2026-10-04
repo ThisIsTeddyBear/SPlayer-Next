@@ -3,6 +3,7 @@
 import { loadNativeModule } from "@main/utils/nativeLoader";
 import { broadcast } from "@main/utils/broadcast";
 import { recognitionLog } from "@main/utils/logger";
+import { recordRecognition } from "@main/database/recognitionHistory";
 import type { JsCaptureEvent } from "@splayer/audio-capture";
 import { matchAudio } from "./match";
 import { createSignature, isSignatureAvailable } from "./signature";
@@ -173,6 +174,12 @@ const recognizeSnapshot = async (
     recognitionLog.info(`Shazam 识别完成，候选 ${candidates.length} 个`);
     sessionToken++;
     activeSession?.cancel();
+    try {
+      recordRecognition(candidates[0]);
+    } catch (error) {
+      // 保存失败不影响已完成的识别结果。
+      recognitionLog.error("保存识别历史失败:", error);
+    }
     emit({ phase: "done", candidates });
     finishSession();
   } finally {

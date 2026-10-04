@@ -158,6 +158,14 @@ export const initDatabase = (): void => {
     CREATE INDEX IF NOT EXISTS idx_play_history_started ON play_history(started_at);
     CREATE INDEX IF NOT EXISTS idx_play_history_track ON play_history(source, track_id);
 
+    CREATE TABLE IF NOT EXISTS recognition_history (
+      song_id TEXT PRIMARY KEY,
+      candidate_json TEXT NOT NULL,
+      recognized_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_recognition_history_recognized
+      ON recognition_history(recognized_at DESC);
+
     CREATE TABLE IF NOT EXISTS favorite_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       track_id TEXT NOT NULL,

@@ -2,6 +2,7 @@
 import type { RecognitionCandidate } from "@shared/types/recognition";
 import { toast } from "@/composables/useToast";
 import { useRecognitionSession } from "@/composables/useRecognitionSession";
+import RecognitionHistory from "@/components/recognition/RecognitionHistory.vue";
 import { openExternal } from "@/utils/url";
 import IconLucideArrowLeft from "~icons/lucide/arrow-left";
 import IconLucideAudioWaveform from "~icons/lucide/audio-waveform";
@@ -16,19 +17,31 @@ const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ "update:open": [value: boolean] }>();
 const session = useRecognitionSession();
 const { phase, level, candidates, error, supported } = session;
+const showHistory = ref(false);
+const selectedCandidate = shallowRef<RecognitionCandidate | null>(null);
 
 const isBusy = computed(() => ["capturing", "fingerprinting", "matching"].includes(phase.value));
-const candidate = computed(() => candidates.value[0] ?? null);
+const candidate = computed(() => selectedCandidate.value ?? candidates.value[0] ?? null);
+
+const reset = (): void => {
+  selectedCandidate.value = null;
+  session.reset();
+};
+
+const selectHistory = (value: RecognitionCandidate): void => {
+  selectedCandidate.value = value;
+  showHistory.value = false;
+};
 
 watch(phase, (value) => {
   if (value === "error") {
     toast.error(t(`recognition.error.${error.value?.code ?? "unknown"}`));
-    session.reset();
+    reset();
     return;
   }
   if (value === "done" && candidates.value.length === 0) {
     toast.info(t("recognition.empty"));
-    session.reset();
+    reset();
     return;
   }
 });
@@ -36,8 +49,12 @@ watch(phase, (value) => {
 watch(
   () => props.open,
   (value) => {
-    if (value) session.reset();
-    else session.stop(false);
+    showHistory.value = false;
+    if (value) reset();
+    else {
+      selectedCandidate.value = null;
+      session.stop(false);
+    }
   },
 );
 
@@ -89,15 +106,16 @@ const start = (): void => void session.start();
   <SDialog
     :open="props.open"
     :destroy-on-close="true"
-    :title="t('recognition.title')"
+    :title="t(showHistory ? 'recognition.history.title' : 'recognition.title')"
     width="440px"
     height="440px"
     :content-style="{ padding: '0 24px' }"
     @update:open="onOpenUpdate"
   >
     <div class="flex h-full min-h-0 flex-col">
+      <RecognitionHistory v-if="showHistory" @select="selectHistory" />
       <div
-        v-if="phase === 'idle' || isBusy"
+        v-else-if="!candidate && (phase === 'idle' || isBusy)"
         class="flex min-h-0 flex-1 flex-col text-center"
         aria-live="polite"
       >
@@ -141,7 +159,7 @@ const start = (): void => void session.start();
         </div>
       </div>
 
-      <div v-else-if="phase === 'done' && candidate" class="flex min-h-0 flex-1 flex-col pt-4">
+      <div v-else-if="candidate" class="flex min-h-0 flex-1 flex-col pt-4">
         <div
           class="relative flex items-center gap-4 overflow-hidden rounded-2xl bg-on-surface/6 p-4"
         >
@@ -218,11 +236,21 @@ const start = (): void => void session.start();
 
     <template #footer>
       <SButton
-        v-if="phase === 'idle'"
+        v-if="showHistory"
+        variant="secondary"
+        size="large"
+        block
+        @click="showHistory = false"
+      >
+        <template #icon><IconLucideArrowLeft /></template>
+        {{ t("common.back") }}
+      </SButton>
+      <SButton
+        v-else-if="phase === 'idle' && !candidate"
         type="primary"
         size="large"
         block
-        :disabled="supported === null"
+        :disabled="supported !== true"
         @click="start"
       >
         <template #icon><IconLucideAudioWaveform /></template>
@@ -232,14 +260,25 @@ const start = (): void => void session.start();
         {{ t("recognition.cancel") }}
       </SButton>
       <SButton
-        v-else-if="phase === 'done'"
+        v-else-if="candidate"
         variant="secondary"
         size="large"
         block
-        @click="session.reset()"
+        @click="reset"
       >
         <template #icon><IconLucideArrowLeft /></template>
         {{ t("common.back") }}
+      </SButton>
+      <SButton
+        v-if="!showHistory && !isBusy"
+        variant="secondary"
+        size="large"
+        circle
+        :title="t('recognition.history.title')"
+        :aria-label="t('recognition.history.title')"
+        @click="showHistory = true"
+      >
+        <template #icon><IconLucideHistory /></template>
       </SButton>
     </template>
   </SDialog>
