@@ -64,8 +64,9 @@ export interface RecognitionApi {
   isSupported: () => Promise<boolean>;
   start: (config: RecognitionConfig) => Promise<unknown>;
   cancel: () => Promise<unknown>;
-  getHistory: () => Promise<RecognitionHistoryEntry[]>;
+  getHistory: (limit?: number) => Promise<RecognitionHistoryEntry[]>;
   removeHistory: (songId: string) => Promise<void>;
   clearHistory: () => Promise<void>;
+  onHistoryChanged: (callback: () => void) => () => void;
   onEvent: (callback: (event: RecognitionEvent) => void) => () => void;
 }

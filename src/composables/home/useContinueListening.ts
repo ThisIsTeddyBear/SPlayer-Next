@@ -17,6 +17,8 @@ export const useContinueListening = () => {
 
   // shallowRef：不深度代理 TopTrack 内的 Track，入队列后 IDB 持久化才不报 DataCloneError
   const items = shallowRef<TopTrack[]>([]);
+  const loading = ref(true);
+  const loadFailed = ref(false);
   /** 是否呈现为「反复聆听」 */
   const isRepeat = ref(false);
 
@@ -36,14 +38,19 @@ export const useContinueListening = () => {
 
   /** 拉取最常播放曲目 */
   const load = async (): Promise<void> => {
+    loading.value = true;
+    loadFailed.value = false;
     try {
       const top = await window.api.stats.getTopTracks(MAX_ITEMS);
       items.value = top;
       isRepeat.value = (top[0]?.playCount ?? 0) >= REPEAT_TITLE_THRESHOLD;
     } catch (error) {
+      loadFailed.value = true;
       console.warn("[home] getTopTracks failed:", error);
+    } finally {
+      loading.value = false;
     }
   };
 
-  return { items, title, subtitle, load };
+  return { items, title, subtitle, loading, loadFailed, load };
 };

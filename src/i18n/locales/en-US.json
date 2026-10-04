@@ -285,7 +285,8 @@
       "listenStreak": "Streak",
       "unitHour": "h",
       "unitSong": "songs",
-      "unitDay": "days"
+      "unitDay": "days",
+      "open": "View listening statistics"
     },
     "duration": {
       "hm": "{hours} h {minutes} min",
@@ -328,7 +329,8 @@
       "continueTitle": "Continue Listening",
       "continueSubtitle": "{count} tracks you recently played",
       "empty": "No play history yet — go listen to something",
-      "playCount": "Played {count} time | Played {count} times"
+      "playCount": "Played {count} time | Played {count} times",
+      "loadFailed": "Could not load your listening history"
     },
     "recommend": {
       "title": "Made For You",
@@ -355,19 +357,39 @@
       "added": "Added {count} tracks to the queue",
       "daily": {
         "tag": "Daily Mix",
-        "title": "Start with “{song}”",
+        "title": "Your daily mix",
         "subtitle": "Picked for your taste · {count} tracks"
       },
       "local": {
         "tag": "Local",
-        "title": "Randomly landed on “{song}”",
+        "title": "Rediscover your collection",
         "subtitle": "Random picks from your library · {count} tracks"
       },
       "liked": {
         "tag": "Favorites",
-        "title": "Revisit your favorites~",
+        "title": "Favorites for today",
         "subtitle": "All your liked music · {count} tracks"
-      }
+      },
+      "refresh": "Find another mix",
+      "surprise": "Surprise me",
+      "loadFailed": "Could not load your music",
+      "retryDescription": "Try again to find something to play.",
+      "emptyTitle": "Your music starts here",
+      "emptyDescription": "Add songs to your library and discover a fresh mix of your collection.",
+      "openLibrary": "Open library"
+    },
+    "playTrack": "Play {title}",
+    "recent": {
+      "title": "Jump back in",
+      "viewHistory": "View listening history",
+      "emptyTitle": "Your next favorite starts here",
+      "emptyDescription": "Play a song and come back to it here whenever you like."
+    },
+    "recognition": {
+      "title": "Recently identified",
+      "subtitle": "Songs you discovered with music recognition",
+      "viewHistory": "View history",
+      "openTrack": "View details for {title}"
     }
   },
   "login": {

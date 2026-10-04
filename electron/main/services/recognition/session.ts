@@ -1,7 +1,7 @@
 /** Shazam 听歌识曲会话：驱动系统回环采集、3 / 6 / 9 / 12 秒签名与匹配。 */
 
 import { loadNativeModule } from "@main/utils/nativeLoader";
-import { broadcast } from "@main/utils/broadcast";
+import { broadcast, sendToMain } from "@main/utils/broadcast";
 import { recognitionLog } from "@main/utils/logger";
 import { recordRecognition } from "@main/database/recognitionHistory";
 import type { JsCaptureEvent } from "@splayer/audio-capture";
@@ -176,6 +176,7 @@ const recognizeSnapshot = async (
     activeSession?.cancel();
     try {
       recordRecognition(candidates[0]);
+      sendToMain("recognition:historyChanged");
     } catch (error) {
       // 保存失败不影响已完成的识别结果。
       recognitionLog.error("保存识别历史失败:", error);

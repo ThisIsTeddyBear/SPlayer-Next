@@ -34,6 +34,7 @@ export const useHomeHeader = () => {
   const { t } = useI18n();
   const user = useUserStore();
   const history = useHistoryStore();
+  const currentHour = ref(new Date().getHours());
 
   /** 时长格式化：X 小时 Y 分钟 */
   const formatHm = (ms: number): string => {
@@ -47,7 +48,7 @@ export const useHomeHeader = () => {
 
   /** 按时段问候 key */
   const greetingKey = computed(() => {
-    const hour = new Date().getHours();
+    const hour = currentHour.value;
     if (hour < 6) return "home.greeting.dawn";
     if (hour < 12) return "home.greeting.morning";
     if (hour < 14) return "home.greeting.noon";
@@ -69,17 +70,17 @@ export const useHomeHeader = () => {
     const data = stats.value;
     return [
       {
-        value: data ? (data.weekListenedMs / 3600000).toFixed(1) : "0",
+        value: data ? (data.weekListenedMs / 3600000).toFixed(1) : "—",
         unit: t("home.stats.unitHour"),
         label: t("home.stats.weekDuration"),
       },
       {
-        value: String(data?.weekFavoriteAdds ?? 0),
+        value: data ? String(data.weekFavoriteAdds) : "—",
         unit: t("home.stats.unitSong"),
         label: t("home.stats.newFavorites"),
       },
       {
-        value: String(data?.streakDays ?? 0),
+        value: data ? String(data.streakDays) : "—",
         unit: t("home.stats.unitDay"),
         label: t("home.stats.listenStreak"),
       },
@@ -130,6 +131,7 @@ export const useHomeHeader = () => {
 
   /** 拉取统计并重挑副标题 */
   const load = async (): Promise<void> => {
+    currentHour.value = new Date().getHours();
     await history.load();
     try {
       stats.value = await window.api.stats.getStatsSummary();

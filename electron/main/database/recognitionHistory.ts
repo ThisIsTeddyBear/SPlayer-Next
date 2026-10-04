@@ -1,7 +1,7 @@
 import type { RecognitionCandidate, RecognitionHistoryEntry } from "@shared/types/recognition";
 import { getDb } from "./index";
 
-const MAX_HISTORY = 500;
+export const MAX_RECOGNITION_HISTORY = 500;
 
 interface RecognitionHistoryRow {
   candidate_json: string;
@@ -27,18 +27,21 @@ export const recordRecognition = (candidate: RecognitionCandidate): void => {
          SELECT song_id FROM recognition_history
          ORDER BY recognized_at DESC, rowid DESC LIMIT -1 OFFSET ?
        )`,
-    ).run(MAX_HISTORY);
+    ).run(MAX_RECOGNITION_HISTORY);
   })();
 };
 
-/** 获取按最近识别时间倒序排列的歌曲历史 */
-export const getRecognitionHistory = (): RecognitionHistoryEntry[] => {
+/**
+ * 获取按最近识别时间倒序排列的歌曲历史
+ * @param limit - 返回条数上限，首页只读取少量最近记录
+ */
+export const getRecognitionHistory = (limit = MAX_RECOGNITION_HISTORY): RecognitionHistoryEntry[] => {
   const rows = getDb()
     .prepare(
       `SELECT candidate_json, recognized_at FROM recognition_history
        ORDER BY recognized_at DESC, rowid DESC LIMIT ?`,
     )
-    .all(MAX_HISTORY) as RecognitionHistoryRow[];
+    .all(limit) as RecognitionHistoryRow[];
   return rows.map((row) => ({
     candidate: JSON.parse(row.candidate_json) as RecognitionCandidate,
     recognizedAt: row.recognized_at,

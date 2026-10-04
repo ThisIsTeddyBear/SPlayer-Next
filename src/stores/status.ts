@@ -3,6 +3,7 @@ import type { Platform } from "@shared/types/platform";
 import type { ContentScope } from "@/types/collection";
 import type { SortField, SortOrder } from "@/types/list";
 import type { PersonalFmOptions } from "@/types/netease";
+import type { RecognitionCandidate } from "@shared/types/recognition";
 export type { RepeatMode, ShuffleMode } from "@shared/types/player";
 export type { SortField, SortOrder } from "@/types/list";
 import * as queue from "./queue";
@@ -22,6 +23,9 @@ export const useStatusStore = defineStore(
     const outerQueueOpen = ref(false);
     const fullQueueOpen = ref(false);
     const searchOpen = ref(false);
+    const recognitionOpen = ref(false);
+    const recognitionView = ref<"recognize" | "history">("recognize");
+    const recognitionCandidate = shallowRef<RecognitionCandidate | null>(null);
     const audioInfoOpen = ref(false);
     const showLyric = ref(true);
     const playIndex = ref(-1);
@@ -77,6 +81,9 @@ export const useStatusStore = defineStore(
       outerQueueOpen,
       fullQueueOpen,
       searchOpen,
+      recognitionOpen,
+      recognitionView,
+      recognitionCandidate,
       audioInfoOpen,
       showLyric,
       outputDevices,

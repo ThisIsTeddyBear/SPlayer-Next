@@ -13,7 +13,9 @@ import {
   clearRecognitionHistory,
   getRecognitionHistory,
   removeRecognitionHistory,
+  MAX_RECOGNITION_HISTORY,
 } from "@main/database/recognitionHistory";
+import { sendToMain } from "@main/utils/broadcast";
 
 /** 注册听歌识曲 IPC 处理 */
 export const registerRecognitionIpc = (): void => {
@@ -26,12 +28,21 @@ export const registerRecognitionIpc = (): void => {
     cancelRecognition();
     return { success: true };
   });
-  ipcMain.handle("recognition:getHistory", getRecognitionHistory);
+  ipcMain.handle("recognition:getHistory", (_event, limit = MAX_RECOGNITION_HISTORY) => {
+    if (!Number.isInteger(limit) || limit < 1 || limit > MAX_RECOGNITION_HISTORY) {
+      throw new Error("Invalid recognition history limit");
+    }
+    return getRecognitionHistory(limit);
+  });
   ipcMain.handle("recognition:removeHistory", (_event, songId: string) => {
     if (typeof songId !== "string" || !songId) {
       throw new Error("Invalid recognition song ID");
     }
     removeRecognitionHistory(songId);
+    sendToMain("recognition:historyChanged");
   });
-  ipcMain.handle("recognition:clearHistory", clearRecognitionHistory);
+  ipcMain.handle("recognition:clearHistory", () => {
+    clearRecognitionHistory();
+    sendToMain("recognition:historyChanged");
+  });
 };

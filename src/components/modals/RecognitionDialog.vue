@@ -13,7 +13,14 @@ import IconSpYoutubeMusic from "~icons/sp/youtube-music";
 
 const { t } = useI18n();
 const router = useRouter();
-const props = defineProps<{ open: boolean }>();
+const props = withDefaults(
+  defineProps<{
+    open: boolean;
+    initialView?: "recognize" | "history";
+    initialCandidate?: RecognitionCandidate | null;
+  }>(),
+  { initialView: "recognize", initialCandidate: null },
+);
 const emit = defineEmits<{ "update:open": [value: boolean] }>();
 const session = useRecognitionSession();
 const { phase, level, candidates, error, supported } = session;
@@ -50,8 +57,11 @@ watch(
   () => props.open,
   (value) => {
     showHistory.value = false;
-    if (value) reset();
-    else {
+    if (value) {
+      reset();
+      showHistory.value = props.initialView === "history";
+      selectedCandidate.value = props.initialCandidate;
+    } else {
       selectedCandidate.value = null;
       session.stop(false);
     }

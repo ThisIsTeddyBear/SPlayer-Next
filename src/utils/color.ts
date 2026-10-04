@@ -315,7 +315,7 @@ export const extractColorFromImageUrl = (url: string): Promise<string | null> =>
  * 从 HTMLImageElement 提取主色 HEX，纯计算，不操作 store
  * @returns 主色 HEX 或 null（单调/低彩度时）
  */
-const extractColorFromImageElement = (img: HTMLImageElement): CoverColorExtraction => {
+export const extractColorFromImageElement = (img: HTMLImageElement): CoverColorExtraction => {
   const canvas = document.createElement("canvas");
   canvas.width = COVER_SAMPLE_SIZE;
   canvas.height = COVER_SAMPLE_SIZE;

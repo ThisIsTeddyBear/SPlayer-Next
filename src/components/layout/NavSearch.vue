@@ -18,7 +18,6 @@ const dialogOpen = computed({
   set: (value: boolean) => (status.searchOpen = value),
 });
 const searchQuery = ref("");
-const recognitionOpen = ref(false);
 const query = computed(() => searchQuery.value.trim().toLocaleLowerCase());
 
 const suggestions = computed(() => {
@@ -83,13 +82,23 @@ watch(dialogOpen, (open) => {
       circle
       :size="40"
       :icon-size="20"
-      @click="recognitionOpen = true"
+      :title="t('recognition.title')"
+      :aria-label="t('recognition.title')"
+      @click="
+        status.recognitionView = 'recognize';
+        status.recognitionCandidate = null;
+        status.recognitionOpen = true;
+      "
     >
       <template #icon><IconLucideAudioWaveform /></template>
     </SButton>
   </div>
 
-  <RecognitionDialog v-model:open="recognitionOpen" />
+  <RecognitionDialog
+    v-model:open="status.recognitionOpen"
+    :initial-view="status.recognitionView"
+    :initial-candidate="status.recognitionCandidate"
+  />
   <SDialog
     v-model:open="dialogOpen"
     :closable="false"
