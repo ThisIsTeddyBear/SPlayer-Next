@@ -7,6 +7,7 @@ mod editor;
 mod folder_cover;
 mod lyrics;
 mod tag_fields;
+mod wav;
 
 pub use cover::{
     cover_thumb_path, extract_cover_thumbnail, make_thumbnail_jpeg, read_cover_raw,

@@ -1,6 +1,6 @@
 //! 本地文件标签读写（lofty）
 //!
-//! 写入安全策略：复制原文件到同目录临时文件 → 修改临时文件 → 原子 rename 覆盖原文件。
+//! 写入安全策略：同目录临时文件 → 校验并落盘 → 原子 rename 覆盖原文件。
 //! Windows 下 std::fs::rename 使用 MOVEFILE_REPLACE_EXISTING，可覆盖已存在目标。
 //!
 //! 字段语义：
@@ -12,9 +12,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 
 use anyhow::{Context, Result};
-use lofty::config::WriteOptions;
+use lofty::config::{ParseOptions, ParsingMode, WriteOptions};
 use lofty::file::TaggedFile;
 use lofty::file::{FileType, TaggedFileExt};
 use lofty::picture::{Picture, PictureType};
@@ -54,7 +55,7 @@ pub struct TagWriteRequest {
 }
 
 /// 选择读写操作的目标 tag 类型。
-/// WAV 的 primary 是 RIFF INFO，存不了歌词和封面，统一走 ID3v2 chunk
+/// WAV 的 RIFF INFO 存不了歌词和封面，统一编辑 ID3v2 chunk
 fn editing_tag_type(file_type: FileType) -> TagType {
     match file_type {
         FileType::Wav => TagType::Id3v2,
@@ -64,10 +65,20 @@ fn editing_tag_type(file_type: FileType) -> TagType {
 
 /// 打开并解析文件，按内容嗅探格式（不信任扩展名，临时文件无正确扩展名）
 fn open_tagged(path: &Path) -> Result<TaggedFile> {
-    Probe::open(path)
+    let probe = Probe::open(path)
         .context("Failed to open file")?
         .guess_file_type()
-        .context("Failed to identify file format")?
+        .context("Failed to identify file format")?;
+    let mut options = ParseOptions::new().read_properties(false);
+    if probe.file_type() == Some(FileType::Wav) {
+        return Probe::new(super::wav::RiffReader::new(probe.into_inner())?)
+            .set_file_type(FileType::Wav)
+            .options(options.parsing_mode(ParsingMode::Strict))
+            .read()
+            .context("Failed to parse WAV tags");
+    }
+    probe
+        .options(options)
         .read()
         .context("Failed to parse audio file")
 }
@@ -75,6 +86,9 @@ fn open_tagged(path: &Path) -> Result<TaggedFile> {
 /// 读取文件的全部可编辑标签
 pub fn read_tags(path: &str) -> Result<TrackTags> {
     let tagged = open_tagged(Path::new(path))?;
+    if tagged.file_type() == FileType::Wav {
+        return Ok(tags_from_tag(&super::wav::merged_tag(&tagged)));
+    }
     let tag = tagged
         .tag(editing_tag_type(tagged.file_type()))
         .or_else(|| tagged.primary_tag())
@@ -82,7 +96,12 @@ pub fn read_tags(path: &str) -> Result<TrackTags> {
     let Some(tag) = tag else {
         return Ok(TrackTags::default());
     };
-    Ok(TrackTags {
+    Ok(tags_from_tag(tag))
+}
+
+/// 将有效标签转换成编辑器字段，用于读取及写入后的语义校验。
+fn tags_from_tag(tag: &Tag) -> TrackTags {
+    TrackTags {
         title: tag.title().map(|v| v.into_owned()),
         artist: tag.artist().map(|v| v.into_owned()),
         album: tag.album().map(|v| v.into_owned()),
@@ -93,7 +112,7 @@ pub fn read_tags(path: &str) -> Result<TrackTags> {
         disc_number: tag.disk(),
         lyrics: read_lyrics_from_tag(tag),
         has_cover: !tag.pictures().is_empty(),
-    })
+    }
 }
 
 /// 读年份：Year 优先，回退 RecordingDate（取前 4 位数字）
@@ -147,11 +166,14 @@ fn apply_text(tag: &mut Tag, key: ItemKey, value: &Option<String>) {
     }
 }
 
-/// 把写入请求应用到指定文件（直接修改该文件，调用方负责 temp + rename）
-fn apply_to_file(path: &Path, request: &TagWriteRequest) -> Result<()> {
-    let mut tagged = open_tagged(path)?;
+/// 在临时文件上应用请求，WAV 按块流式复制，其他格式由 lofty 写入。
+fn apply_to_file(source: &Path, destination: &Path, request: &TagWriteRequest) -> Result<()> {
+    let mut tagged = open_tagged(source)?;
+    let is_wav = tagged.file_type() == FileType::Wav;
     let tag_type = editing_tag_type(tagged.file_type());
-    if tagged.tag(tag_type).is_none() {
+    if is_wav {
+        tagged.insert_tag(super::wav::merged_tag(&tagged));
+    } else if tagged.tag(tag_type).is_none() {
         tagged.insert_tag(Tag::new(tag_type));
     }
     let tag = tagged.tag_mut(tag_type).expect("tag 必然存在");
@@ -206,7 +228,8 @@ fn apply_to_file(path: &Path, request: &TagWriteRequest) -> Result<()> {
 
     if let Some(ref data) = request.cover {
         // from_reader 校验图片签名并识别 mime，非图片数据直接报错
-        let mut picture = Picture::from_reader(&mut data.as_slice()).context("Cover image data is invalid")?;
+        let mut picture = Picture::from_reader(&mut data.as_slice())
+            .context("Cover image data is invalid")?;
         picture.set_pic_type(PictureType::CoverFront);
         while !tag.pictures().is_empty() {
             tag.remove_picture(0);
@@ -214,13 +237,30 @@ fn apply_to_file(path: &Path, request: &TagWriteRequest) -> Result<()> {
         tag.push_picture(picture);
     }
 
-    tagged
-        .save_to_path(path, WriteOptions::default())
-        .context("Failed to write tags")?;
+    if is_wav {
+        let expected = tags_from_tag(tag);
+        super::wav::write(source, destination, tag).context("Failed to write WAV tags")?;
+        let saved = open_tagged(destination).context("Failed to verify edited WAV")?;
+        let saved_tag = super::wav::merged_tag(&saved);
+        anyhow::ensure!(
+            tags_from_tag(&saved_tag) == expected,
+            "WAV metadata verification failed"
+        );
+        anyhow::ensure!(
+            saved_tag.pictures() == tag.pictures(),
+            "WAV artwork verification failed"
+        );
+    } else {
+        fs::copy(source, destination).context("Failed to create temporary copy")?;
+        tagged
+            .save_to_path(destination, WriteOptions::default())
+            .context("Failed to write tags")?;
+    }
     Ok(())
 }
 
 static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+static TAG_WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 /// 生成同目录且进程内唯一的临时文件路径
 fn temp_path(original: &Path) -> PathBuf {
@@ -235,15 +275,38 @@ fn temp_path(original: &Path) -> PathBuf {
 
 /// 写入标签（temp + rename，崩溃不损坏原文件）
 pub fn write_tags(request: &TagWriteRequest) -> Result<()> {
-    let original = Path::new(&request.path);
-    anyhow::ensure!(original.is_file(), "文件不存在: {}", request.path);
+    // 串行化读改写，避免并发编辑同一文件时后一次替换丢掉前一次修改。
+    let _lock = TAG_WRITE_LOCK
+        .lock()
+        .map_err(|_| anyhow::anyhow!("Tag writer lock poisoned"))?;
+    let original = fs::canonicalize(&request.path).context("Failed to resolve audio file")?;
+    let before = fs::metadata(&original)?;
+    anyhow::ensure!(before.is_file(), "文件不存在: {}", request.path);
+    anyhow::ensure!(!before.permissions().readonly(), "Audio file is read-only");
 
-    let temp = temp_path(original);
-    fs::copy(original, &temp).context("Failed to create temporary copy")?;
-
-    let applied = apply_to_file(&temp, request)
-        // Windows 下 rename 可原子覆盖已存在目标（MOVEFILE_REPLACE_EXISTING）
-        .and_then(|()| fs::rename(&temp, original).context("Failed to replace original file"));
+    let temp = temp_path(&original);
+    // 不复用崩溃残留或其他进程创建的路径。
+    let temporary = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temp)
+        .context("Failed to create temporary audio file")?;
+    drop(temporary);
+    let applied = (|| {
+        apply_to_file(&original, &temp, request)?;
+        fs::set_permissions(&temp, before.permissions())?;
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&temp)?
+            .sync_all()
+            .context("Failed to flush edited audio file")?;
+        let current = fs::metadata(&original)?;
+        anyhow::ensure!(
+            current.len() == before.len() && current.modified()? == before.modified()?,
+            "Audio file changed during tag editing"
+        );
+        fs::rename(&temp, &original).context("Failed to replace original file")
+    })();
     if applied.is_err() {
         let _ = fs::remove_file(&temp);
     }
@@ -251,11 +314,15 @@ pub fn write_tags(request: &TagWriteRequest) -> Result<()> {
 }
 
 #[cfg(test)]
+#[path = "wav_tests.rs"]
+mod wav_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;
 
-    /// 生成一个最小可用的 48k 立体声 16bit WAV（含 0.1s 静音数据）
+    /// 生成 48k 立体声 16bit WAV，使用非零采样检测音频字节是否改变。
     fn make_wav(path: &Path) {
         let sample_rate: u32 = 48000;
         let frames: u32 = sample_rate / 10;
@@ -275,10 +342,13 @@ mod tests {
         buf.extend_from_slice(b"data");
         buf.extend_from_slice(&data_size.to_le_bytes());
         buf.resize(44 + data_size as usize, 0);
+        for (index, byte) in buf[44..].iter_mut().enumerate() {
+            *byte = (index % 251) as u8;
+        }
         std::fs::write(path, buf).unwrap();
     }
 
-    fn temp_wav(name: &str) -> std::path::PathBuf {
+    pub(super) fn temp_wav(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join("splayer-tag-editor-tests");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(name);
