@@ -70,6 +70,9 @@ fn open_tagged(path: &Path) -> Result<TaggedFile> {
         .guess_file_type()
         .context("Failed to identify file format")?;
     let mut options = ParseOptions::new().read_properties(false);
+    if probe.file_type() == Some(FileType::Flac) {
+        return super::flac::read_tagged(path);
+    }
     if probe.file_type() == Some(FileType::Wav) {
         return Probe::new(super::wav::RiffReader::new(probe.into_inner())?)
             .set_file_type(FileType::Wav)
@@ -86,6 +89,10 @@ fn open_tagged(path: &Path) -> Result<TaggedFile> {
 /// 读取文件的全部可编辑标签
 pub fn read_tags(path: &str) -> Result<TrackTags> {
     let tagged = open_tagged(Path::new(path))?;
+    if tagged.file_type() == FileType::Flac {
+        drop(tagged);
+        return super::flac::read_tags(Path::new(path));
+    }
     if tagged.file_type() == FileType::Wav {
         return Ok(tags_from_tag(&super::wav::merged_tag(&tagged)));
     }
@@ -100,7 +107,7 @@ pub fn read_tags(path: &str) -> Result<TrackTags> {
 }
 
 /// 将有效标签转换成编辑器字段，用于读取及写入后的语义校验。
-fn tags_from_tag(tag: &Tag) -> TrackTags {
+pub(super) fn tags_from_tag(tag: &Tag) -> TrackTags {
     TrackTags {
         title: tag.title().map(|v| v.into_owned()),
         artist: tag.artist().map(|v| v.into_owned()),
@@ -123,34 +130,11 @@ fn read_year(tag: &Tag) -> Option<u32> {
         .and_then(|raw| raw.parse::<u32>().ok())
 }
 
-/// 从 tag 读取歌词，优先使用 ItemKey，回退时对未知/自定义 key 进行归一化匹配（如 "UNSYNCED LYRICS"）
+/// 读取通用标签中的歌词，作词者等文本字段不参与歌词回退。
 fn read_lyrics_from_tag(tag: &Tag) -> Option<String> {
-    if let Some(lyrics) = tag
-        .get_string(ItemKey::UnsyncLyrics)
+    tag.get_string(ItemKey::UnsyncLyrics)
         .or_else(|| tag.get_string(ItemKey::Lyrics))
-    {
-        return Some(lyrics.to_string());
-    }
-
-    // 遍历所有 items 寻找最优歌词标签
-    tag.items()
-        .filter_map(|item| {
-            let key_str = format!("{:?}", item.key());
-            let norm = super::tag_fields::normalize_tag_key(&key_str);
-            if super::tag_fields::is_lyric_field_key(&norm) {
-                if let Some(val) = item.value().text() {
-                    if !val.is_empty() {
-                        return Some((
-                            val.to_string(),
-                            super::tag_fields::get_lyric_priority(&norm),
-                        ));
-                    }
-                }
-            }
-            None
-        })
-        .max_by_key(|(_, priority)| *priority)
-        .map(|(val, _)| val)
+        .map(str::to_string)
 }
 
 /// 文本字段语义：None 不动，空串清除，非空覆盖
@@ -166,9 +150,14 @@ fn apply_text(tag: &mut Tag, key: ItemKey, value: &Option<String>) {
     }
 }
 
-/// 在临时文件上应用请求，WAV 按块流式复制，其他格式由 lofty 写入。
+/// 在临时文件上应用请求，WAV 和 FLAC 按块流式复制，其他格式由 lofty 写入。
 fn apply_to_file(source: &Path, destination: &Path, request: &TagWriteRequest) -> Result<()> {
     let mut tagged = open_tagged(source)?;
+    if tagged.file_type() == FileType::Flac {
+        drop(tagged);
+        return super::flac::write(source, destination, request)
+            .context("Failed to write or verify FLAC tags");
+    }
     let is_wav = tagged.file_type() == FileType::Wav;
     let tag_type = editing_tag_type(tagged.file_type());
     if is_wav {
@@ -321,6 +310,15 @@ mod wav_tests;
 mod tests {
     use super::*;
     use std::path::Path;
+
+    #[test]
+    fn lyricist_is_not_reported_as_lyrics() {
+        let mut tag = Tag::new(TagType::VorbisComments);
+        tag.insert_text(ItemKey::Lyricist, "作词者".into());
+        assert_eq!(read_lyrics_from_tag(&tag), None);
+        tag.insert_text(ItemKey::UnsyncLyrics, "[00:01.00]歌词".into());
+        assert_eq!(read_lyrics_from_tag(&tag).as_deref(), Some("[00:01.00]歌词"));
+    }
 
     /// 生成 48k 立体声 16bit WAV，使用非零采样检测音频字节是否改变。
     fn make_wav(path: &Path) {
