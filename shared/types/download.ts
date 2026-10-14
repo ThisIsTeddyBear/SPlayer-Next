@@ -69,7 +69,7 @@ export interface DownloadTask {
   filePath?: string;
   /** 失败原因码 */
   errorCode?: string;
-  /** 写标签失败但音频已落盘 */
+  /** 标签、封面或歌词保存失败，但音频已落盘 */
   tagWarning?: boolean;
   createdAt: number;
   finishedAt?: number;

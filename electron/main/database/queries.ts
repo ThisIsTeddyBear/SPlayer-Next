@@ -151,10 +151,32 @@ export const upsertTracks = (tracks: UpsertTrack[]): void => {
   if (tracks.length === 0) return;
   const d = getDb();
   const stmt = d.prepare(`
-    INSERT OR REPLACE INTO tracks
+    INSERT INTO tracks
       (id, path, cue_path, cue_audio_path, cue_start_ms, cue_end_ms, title, isrc, track, artists, album, duration, cover, codec, sample_rate, bit_rate, channels, bits_per_sample, file_size, file_mtime, file_ctime, scanned_at)
     VALUES
       (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      path = excluded.path,
+      cue_path = excluded.cue_path,
+      cue_audio_path = excluded.cue_audio_path,
+      cue_start_ms = excluded.cue_start_ms,
+      cue_end_ms = excluded.cue_end_ms,
+      title = excluded.title,
+      isrc = excluded.isrc,
+      track = excluded.track,
+      artists = excluded.artists,
+      album = excluded.album,
+      duration = excluded.duration,
+      cover = excluded.cover,
+      codec = excluded.codec,
+      sample_rate = excluded.sample_rate,
+      bit_rate = excluded.bit_rate,
+      channels = excluded.channels,
+      bits_per_sample = excluded.bits_per_sample,
+      file_size = excluded.file_size,
+      file_mtime = excluded.file_mtime,
+      file_ctime = excluded.file_ctime,
+      scanned_at = excluded.scanned_at
   `);
   const now = Date.now();
   const tx = d.transaction(() => {

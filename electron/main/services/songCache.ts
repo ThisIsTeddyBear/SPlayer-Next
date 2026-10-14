@@ -58,6 +58,7 @@ interface InFlight {
 }
 
 let cacheDir = getSongCacheDir();
+let clearing: Promise<void> | null = null;
 const inFlight = new Map<string, InFlight>();
 const waiting: Array<() => void> = [];
 
@@ -277,7 +278,7 @@ export const fetchAsync = (
   source: TrackSource,
   streamUrl: string,
 ): Promise<string | null> => {
-  if (!isCacheEnabled()) return Promise.resolve(null);
+  if (clearing || !isCacheEnabled()) return Promise.resolve(null);
   const existing = inFlight.get(cacheKey);
   if (existing) return existing.promise;
 
@@ -313,15 +314,34 @@ export const invalidate = async (sourcePath: string): Promise<void> => {
   songCacheLog.info(`[invalidate] path=${sourcePath}`);
 };
 
-export const clearAll = async (): Promise<void> => {
-  for (const entry of inFlight.values()) entry.controller.abort();
-  inFlight.clear();
-  dbClearAll();
-  try {
-    const entries = await fsp.readdir(cacheDir);
-    await Promise.all(entries.map((name) => fsp.unlink(path.join(cacheDir, name)).catch(() => {})));
-  } catch {}
-  songCacheLog.info("[clearAll] done");
+export const clearAll = (): Promise<void> => {
+  clearing ??= (async () => {
+    try {
+      const pending = [...inFlight.values()];
+      for (const entry of pending) entry.controller.abort();
+      await Promise.allSettled(pending.map((entry) => entry.promise));
+      inFlight.clear();
+      let entries: string[];
+      try {
+        entries = await fsp.readdir(cacheDir);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        entries = [];
+      }
+      await Promise.all(
+        entries.map((name) =>
+          fsp.unlink(path.join(cacheDir, name)).catch((error: NodeJS.ErrnoException) => {
+            if (error.code !== "ENOENT") throw error;
+          }),
+        ),
+      );
+      dbClearAll();
+      songCacheLog.info("[clearAll] done");
+    } finally {
+      clearing = null;
+    }
+  })();
+  return clearing;
 };
 
 export const stats = (): { size: number; path: string } => ({

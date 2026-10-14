@@ -7,11 +7,12 @@
  * - 归一化标题 → 候选列表
  * 命中返回文件原文，交由渲染层 parseTTML 解析。
  *
- * 索引以（目录, 目录 mtime）为缓存边界：目录或其 mtime 变化（增删文件）时重建。
+ * 递归监听目录变化并按需重建索引；不支持监听时可由设置页手动刷新。
  * 仅保留路径与小键，不驻留文件内容；命中时按需读盘。
  */
 
 import { readdir, stat } from "node:fs/promises";
+import { watch, type FSWatcher } from "node:fs";
 import { join, extname } from "node:path";
 import { readFileAutoEncoding } from "@main/utils/encoding";
 import { store } from "@main/store";
@@ -41,7 +42,19 @@ interface IndexCache {
 }
 
 let cache: IndexCache | null = null;
-let building: Promise<RepoIndex | null> | null = null;
+let generation = 0;
+let watcher: FSWatcher | null = null;
+let watchedDir = "";
+let building: { dir: string; generation: number; promise: Promise<RepoIndex | null> } | null = null;
+
+/** 清除歌词索引并释放目录监听，配置切换或数据清理时调用。 */
+export const invalidateLocalLyricRepo = (): void => {
+  ++generation;
+  cache = null;
+  watcher?.close();
+  watcher = null;
+  watchedDir = "";
+};
 
 /** 从 TTML 文本头部提取 AMLL 元信息 */
 const extractMeta = (
@@ -111,7 +124,27 @@ const buildIndex = async (dir: string): Promise<RepoIndex> => {
 /** 取当前生效索引；目录或 mtime 变化时懒重建 */
 const getIndex = async (): Promise<RepoIndex | null> => {
   const dir = store.get("localLyric.repoDir") || "";
-  if (!dir) return null;
+  if (!dir) {
+    invalidateLocalLyricRepo();
+    return null;
+  }
+  if (watchedDir !== dir) {
+    invalidateLocalLyricRepo();
+    watchedDir = dir;
+    try {
+      watcher = watch(dir, { recursive: true, persistent: false }, () => {
+        if (watchedDir !== dir) return;
+        ++generation;
+        cache = null;
+      });
+      watcher.on("error", (error) => {
+        invalidateLocalLyricRepo();
+        coreLog.warn("[localLyric] 目录监听失败", error);
+      });
+    } catch (error) {
+      coreLog.warn("[localLyric] 无法监听目录，请刷新歌词索引", error);
+    }
+  }
   let mtimeMs: number;
   try {
     mtimeMs = (await stat(dir)).mtimeMs;
@@ -119,20 +152,23 @@ const getIndex = async (): Promise<RepoIndex | null> => {
     return null;
   }
   if (cache && cache.dir === dir && cache.mtimeMs === mtimeMs) return cache.index;
-  if (building) return building;
-  building = (async () => {
+  if (building?.dir === dir && building.generation === generation) return building.promise;
+  const myGeneration = generation;
+  const promise: Promise<RepoIndex | null> = (async () => {
     try {
       const index = await buildIndex(dir);
+      if (myGeneration !== generation || store.get("localLyric.repoDir") !== dir) return null;
       cache = { dir, mtimeMs, index };
       return index;
     } catch (err) {
       coreLog.warn("[localLyric] 索引构建失败：", err);
       return null;
     } finally {
-      building = null;
+      if (building?.dir === dir && building.generation === myGeneration) building = null;
     }
   })();
-  return building;
+  building = { dir, generation: myGeneration, promise };
+  return promise;
 };
 
 /** 读取文件，失败返回 null */

@@ -57,6 +57,7 @@ interface Pending {
 const tasks = new Map<string, Pending>();
 const queue: string[] = [];
 let active: string | null = null;
+let activeRun: Promise<void> | null = null;
 
 interface ResolutionGate {
   resolve: (res: DownloadResolution) => void;
@@ -79,7 +80,18 @@ const broadcastState = (task: DownloadTask): void => {
   broadcast("download:state", task);
 };
 
-const moveFile = async (src: string, dest: string): Promise<void> => {
+const moveFile = async (src: string, dest: string, overwrite: boolean): Promise<void> => {
+  if (!overwrite) {
+    try {
+      await fsp.link(src, dest);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EXDEV" && code !== "EPERM" && code !== "ENOTSUP") throw error;
+      await fsp.copyFile(src, dest, fs.constants.COPYFILE_EXCL);
+    }
+    await fsp.unlink(src);
+    return;
+  }
   try {
     await fsp.rename(src, dest);
   } catch (err) {
@@ -129,6 +141,7 @@ const applyTags = async (req: DownloadRequest, filePath: string): Promise<boolea
   const { tagOptions } = req;
   const writeRequest: JsTagWriteRequest = { path: filePath };
   let hasWrite = false;
+  let complete = !tagOptions.embedLyric || Boolean(req.lyricText);
   if (tagOptions.embedMeta) {
     writeRequest.title = req.track.title;
     writeRequest.artist = artistString(req);
@@ -145,31 +158,41 @@ const applyTags = async (req: DownloadRequest, filePath: string): Promise<boolea
       writeRequest.cover = cover;
       hasWrite = true;
     } else {
+      complete = false;
       downloadLog.warn(`封面下载失败，跳过封面: ${req.coverUrl}`);
     }
   }
-  if (!hasWrite) return true;
+  if (!hasWrite) return complete;
   try {
     const results = await getEngine().writeTrackTags([writeRequest], getCoverCacheDir());
-    return results[0]?.success === true;
+    return results[0]?.success === true && complete;
   } catch (err) {
     downloadLog.warn(`写标签失败 ${filePath}:`, err);
     return false;
   }
 };
 
-const writeSidecar = async (filePath: string, text: string): Promise<void> => {
+const writeSidecar = async (filePath: string, text: string): Promise<boolean> => {
   try {
     await fsp.writeFile(filePath, text, "utf-8");
+    return true;
   } catch (err) {
     downloadLog.warn(`写歌词文件失败 ${filePath}:`, err);
+    return false;
   }
 };
 
-const writeLyricFiles = async (req: DownloadRequest, audioPath: string): Promise<void> => {
+const writeLyricFiles = async (req: DownloadRequest, audioPath: string): Promise<boolean> => {
   const base = audioPath.slice(0, audioPath.length - path.extname(audioPath).length);
-  if (req.tagOptions.writeLrc && req.lyricText) await writeSidecar(`${base}.lrc`, req.lyricText);
-  if (req.tagOptions.saveTtml && req.ttmlText) await writeSidecar(`${base}.ttml`, req.ttmlText);
+  let complete = true;
+  if (req.tagOptions.writeLrc) {
+    complete = Boolean(req.lyricText && (await writeSidecar(`${base}.lrc`, req.lyricText)));
+  }
+  if (req.tagOptions.saveTtml) {
+    const saved = Boolean(req.ttmlText && (await writeSidecar(`${base}.ttml`, req.ttmlText)));
+    complete = complete && saved;
+  }
+  return complete;
 };
 
 const waitForResolution = (taskId: string, signal: AbortSignal): Promise<DownloadResolution> =>
@@ -245,15 +268,6 @@ const runTask = async (
     const finalNoExt = path.join(targetDir, baseName);
     const policy = store.get("download.overwritePolicy");
 
-    const guessExt = resolveExtension(req.declaredFormat, null, audioUrl);
-    if (policy === "skip" && fs.existsSync(`${finalNoExt}${guessExt}`)) {
-      task.status = "done";
-      task.filePath = `${finalNoExt}${guessExt}`;
-      task.finishedAt = Date.now();
-      broadcastState(task);
-      return;
-    }
-
     await fsp.mkdir(tmpDir(), { recursive: true });
     await fsp.mkdir(targetDir, { recursive: true });
 
@@ -263,6 +277,15 @@ const runTask = async (
     }
     const mime = response.headers.get("content-type");
     if (isRejectedMime(mime)) throw new Error(`rejected mime ${mime}`);
+    const ext = resolveExtension(req.declaredFormat, mime, audioUrl);
+    if (policy === "skip" && fs.existsSync(`${finalNoExt}${ext}`)) {
+      await response.body.cancel();
+      task.status = "done";
+      task.filePath = `${finalNoExt}${ext}`;
+      task.finishedAt = Date.now();
+      broadcastState(task);
+      return;
+    }
     const total = Number(response.headers.get("content-length")) || req.declaredSize || 0;
 
     const received = await streamToFile(
@@ -275,18 +298,32 @@ const runTask = async (
     if (received === 0) throw new Error("empty body");
     if (!(await looksLikeAudio(partPath))) throw new Error("not audio");
 
-    const ext = resolveExtension(req.declaredFormat, mime, audioUrl);
-    const finalPath = policy === "rename" ? dedupePath(finalNoExt, ext) : `${finalNoExt}${ext}`;
-    await moveFile(partPath, finalPath);
-
-    await writeLyricFiles(req, finalPath);
-    const tagOk = await applyTags(req, finalPath);
+    controller.signal.throwIfAborted();
+    let finalPath: string;
+    let written = false;
+    for (;;) {
+      finalPath = policy === "rename" ? dedupePath(finalNoExt, ext) : `${finalNoExt}${ext}`;
+      try {
+        await moveFile(partPath, finalPath, policy === "overwrite");
+        written = true;
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        if (policy === "rename") continue;
+        if (policy !== "skip") throw error;
+        await fsp.unlink(partPath);
+        break;
+      }
+    }
+    task.filePath = finalPath;
+    const lyricOk = written ? await writeLyricFiles(req, finalPath) : true;
+    const tagOk = written ? await applyTags(req, finalPath) : true;
 
     task.status = "done";
     task.received = received;
     task.total = total || received;
     task.filePath = finalPath;
-    task.tagWarning = !tagOk;
+    task.tagWarning = !tagOk || !lyricOk;
     task.finishedAt = Date.now();
     broadcastState(task);
     downloadLog.info(`完成 ${req.track.title} → ${finalPath}`);
@@ -314,10 +351,12 @@ const pump = async (): Promise<void> => {
   pending.task.status = "downloading";
   broadcastState(pending.task);
   try {
-    await runTask(pending.req, pending.task, pending.controller);
+    activeRun = runTask(pending.req, pending.task, pending.controller);
+    await activeRun;
   } finally {
     tasks.delete(taskId);
     active = null;
+    activeRun = null;
     void pump();
   }
 };
@@ -385,28 +424,43 @@ const LYRIC_SIDECAR_EXTS = [".lrc", ".qrc", ".yrc", ".krc", ".ttml", ".lys"];
 /**
  */
 const deleteDownloadedFile = async (filePath: string): Promise<void> => {
-  await fsp.unlink(filePath).catch(() => {});
+  await fsp.unlink(filePath).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error;
+  });
   const base = filePath.slice(0, filePath.length - path.extname(filePath).length);
-  await Promise.all(LYRIC_SIDECAR_EXTS.map((ext) => fsp.unlink(`${base}${ext}`).catch(() => {})));
+  await Promise.all(
+    LYRIC_SIDECAR_EXTS.map((ext) =>
+      fsp.unlink(`${base}${ext}`).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      }),
+    ),
+  );
 };
 
 /**
  */
-export const remove = (taskId: string): void => {
+export const remove = async (taskId: string): Promise<void> => {
   const pending = tasks.get(taskId);
   if (pending) {
     pending.removed = true;
     if (active === taskId) {
       pending.controller.abort();
+      await activeRun;
     } else {
       const idx = queue.indexOf(taskId);
       if (idx !== -1) queue.splice(idx, 1);
       tasks.delete(taskId);
     }
   }
-  const filePath = db.findById(taskId)?.filePath;
+  const filePath = pending?.task.filePath ?? db.findById(taskId)?.filePath;
+  if (filePath) await deleteDownloadedFile(filePath);
   db.remove(taskId);
-  if (filePath) void deleteDownloadedFile(filePath);
+};
+
+/** 清理数据前等待所有下载停止，防止迟到写入恢复已清理的记录。 */
+export const cancelAll = async (): Promise<void> => {
+  for (const taskId of [...tasks.keys()]) cancel(taskId);
+  await activeRun;
 };
 
 export const clearFinished = (): void => db.clearFinished();

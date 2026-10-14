@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 
 /** 当前 schema 版本 */
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 type TableInfoRow = { name: string };
 
@@ -124,6 +124,18 @@ export const migrate = (d: Database.Database): void => {
       `);
     }
     v = 8;
+  }
+
+  if (v < 9) {
+    d.exec(`
+      DELETE FROM tracks_fts;
+      INSERT INTO tracks_fts(id, title, artist, album)
+      SELECT id, title,
+        COALESCE((SELECT group_concat(json_extract(value, '$.name'), ' ') FROM json_each(artists)), ''),
+        COALESCE(json_extract(album, '$.name'), '')
+      FROM tracks;
+    `);
+    v = 9;
   }
 
   // 版本无关部分

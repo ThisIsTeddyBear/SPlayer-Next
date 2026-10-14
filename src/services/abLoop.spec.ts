@@ -1,18 +1,19 @@
 import { createPinia, setActivePinia } from "pinia";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const seek = vi.hoisted(() => vi.fn(() => Promise.resolve()));
-
-vi.mock("@/core/player", () => ({ seek }));
+const sync = vi.fn();
 
 import { useStatusStore } from "@/stores/status";
-import { checkLoop, reset, setA, setB, setEnabled } from "./abLoop";
+import { disposeAbLoopSync, installAbLoopSync, reset, setA, setB, setEnabled } from "./abLoop";
 
 describe("abLoop", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-    seek.mockClear();
+    sync.mockReset().mockResolvedValue({ success: true });
+    window.api = { player: { setAbLoop: sync } } as unknown as typeof window.api;
   });
+
+  afterEach(disposeAbLoopSync);
 
   it("只有 A、B 合法且 B 大于 A 时才能启用", () => {
     const status = useStatusStore();
@@ -30,17 +31,31 @@ describe("abLoop", () => {
     expect(status.abLoop).toEqual({ enable: true, pointA: 2_000, pointB: 3_000 });
   });
 
-  it("到达 B 点时跳回 A 点且不会提前触发", () => {
+  it("只同步循环配置，由主进程处理循环边界", () => {
+    installAbLoopSync();
     setA(1_000);
     setB(2_000);
     setEnabled(true);
+    expect(sync).toHaveBeenLastCalledWith({ pointA: 1_000, pointB: 2_000 });
+    reset();
+    expect(sync).toHaveBeenLastCalledWith(null);
+  });
 
-    checkLoop(1_999);
-    expect(seek).not.toHaveBeenCalled();
-
-    checkLoop(2_000);
-    expect(seek).toHaveBeenCalledOnce();
-    expect(seek).toHaveBeenCalledWith(1_000);
+  it("旧配置同步失败不会禁用新的循环", async () => {
+    let fail!: (value: { success: boolean }) => void;
+    installAbLoopSync();
+    setA(1_000);
+    setB(2_000);
+    sync.mockReturnValueOnce(
+      new Promise((resolve) => {
+        fail = resolve;
+      }),
+    );
+    setEnabled(true);
+    setB(3_000);
+    fail({ success: false });
+    await Promise.resolve();
+    expect(useStatusStore().abLoop.enable).toBe(true);
   });
 
   it("切歌重置会清空 AB 循环状态", () => {

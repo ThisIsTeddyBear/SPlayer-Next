@@ -21,6 +21,20 @@ const metadataProviders = new Set(["spotify", "netease"]);
 export const validateIpcArgs = (channel: string, args: unknown[]): void => {
   const range = numberRanges[channel];
   const value = args[0];
+  if (channel === "player:setAbLoop" && value !== null) {
+    const range = value as { pointA?: unknown; pointB?: unknown } | undefined;
+    if (
+      !range ||
+      typeof range.pointA !== "number" ||
+      typeof range.pointB !== "number" ||
+      !Number.isFinite(range.pointA) ||
+      !Number.isFinite(range.pointB) ||
+      range.pointA < 0 ||
+      range.pointB <= range.pointA
+    ) {
+      throw new Error("Invalid AB loop range");
+    }
+  }
   if (
     range &&
     (typeof value !== "number" || !Number.isFinite(value) || value < range[0] || value > range[1])

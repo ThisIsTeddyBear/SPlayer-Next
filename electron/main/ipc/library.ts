@@ -1,6 +1,7 @@
 import { ipcMain } from "./trusted";
 import { dialog, shell } from "electron";
 import fs from "node:fs/promises";
+import path from "node:path";
 import { store } from "@main/store";
 import {
   getAllTracks,
@@ -171,9 +172,26 @@ export const registerLibraryIpc = (): void => {
       return { success: false, error: ErrorCode.SCAN_DIR_NOT_SELECTED };
     }
     const dir = result.filePaths[0];
-    const dirs = store.get("library.scanDirs") as string[];
+    const dirs = [...store.get("library.scanDirs")];
     if (dirs.includes(dir)) {
       return { success: false, error: ErrorCode.SCAN_DIR_EXISTS };
+    }
+    const normalized = process.platform === "win32" ? dir.toLowerCase() : dir;
+    if (
+      dirs.some((existing) => {
+        const other = process.platform === "win32" ? existing.toLowerCase() : existing;
+        const relative = path.relative(other, normalized);
+        const reverse = path.relative(normalized, other);
+        return (
+          !relative ||
+          (relative !== ".." &&
+            !relative.startsWith(`..${path.sep}`) &&
+            !path.isAbsolute(relative)) ||
+          (reverse !== ".." && !reverse.startsWith(`..${path.sep}`) && !path.isAbsolute(reverse))
+        );
+      })
+    ) {
+      return { success: false, error: "nested" };
     }
     dirs.push(dir);
     store.set("library.scanDirs", dirs);

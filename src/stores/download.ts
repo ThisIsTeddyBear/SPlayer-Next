@@ -7,6 +7,8 @@
 
 import type { DownloadTask, DownloadProgress, DownloadStatus } from "@shared/types/download";
 import { initDownloadResolver } from "@/services/download/resolver";
+import { toast } from "@/composables/useToast";
+import i18n from "@/i18n";
 
 export const useDownloadStore = defineStore("download", () => {
   /** 是否尚未结束 */
@@ -67,10 +69,15 @@ export const useDownloadStore = defineStore("download", () => {
 
   const cancel = (taskId: string): void => void window.api.download.cancel(taskId);
 
-  const remove = (taskId: string): void => {
-    activeTasks.value = activeTasks.value.filter((item) => item.taskId !== taskId);
-    historyTasks.value = historyTasks.value.filter((item) => item.taskId !== taskId);
-    void window.api.download.remove(taskId);
+  const remove = async (taskId: string): Promise<void> => {
+    try {
+      await window.api.download.remove(taskId);
+      activeTasks.value = activeTasks.value.filter((item) => item.taskId !== taskId);
+      historyTasks.value = historyTasks.value.filter((item) => item.taskId !== taskId);
+    } catch (error) {
+      console.error("[download] remove failed", error);
+      toast.error(i18n.global.t("download.deleteFailed"));
+    }
   };
 
   const clearFinished = (): void => {

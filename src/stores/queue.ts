@@ -94,18 +94,23 @@ export const updateQueueTracks = (updates: readonly Track[]): void => {
   if (updates.length === 0) return;
   const byId = new Map(updates.map((item) => [item.id, item]));
   const touched =
-    queueEntries.value.some((item) => byId.has(item.track.id)) ||
-    (originalQueue.value?.some((item) => byId.has(item.track.id)) ?? false);
+    queueEntries.value.some(
+      (item) => byId.has(item.track.id) && byId.get(item.track.id) !== item.track,
+    ) ||
+    (originalQueue.value?.some(
+      (item) => byId.has(item.track.id) && byId.get(item.track.id) !== item.track,
+    ) ??
+      false);
   if (!touched) return;
-  queueEntries.value = queueEntries.value.map((item) => ({
-    ...item,
-    track: byId.get(item.track.id) ?? item.track,
-  }));
+  queueEntries.value = queueEntries.value.map((item) => {
+    const track = byId.get(item.track.id);
+    return track && track !== item.track ? { ...item, track } : item;
+  });
   if (originalQueue.value) {
-    originalQueue.value = originalQueue.value.map((item) => ({
-      ...item,
-      track: byId.get(item.track.id) ?? item.track,
-    }));
+    originalQueue.value = originalQueue.value.map((item) => {
+      const track = byId.get(item.track.id);
+      return track && track !== item.track ? { ...item, track } : item;
+    });
   }
   save();
 };

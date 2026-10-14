@@ -159,3 +159,10 @@ export const cancelStreamingSync = (serverId: string): void => {
   syncedServers.delete(serverId);
   pendingServers.delete(serverId);
 };
+
+/** 数据清理时停止所有同步任务，禁止旧请求提交下一页。 */
+export const cancelAllStreamingSync = (): void => {
+  for (const serverId of runningServers) cancelledServers.add(serverId);
+  pendingServers.clear();
+  syncedServers.clear();
+};

@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import log from "electron-log";
-import { isDev } from "./config";
+import { is } from "@electron-toolkit/utils";
 import { logsDir as logsBaseDir } from "./paths";
+const isDev = is.dev;
 
 /** 日志根目录：开发模式放 dev 子目录，生产模式直接放 logs/ */
 export const logsDir = isDev ? path.join(logsBaseDir, "dev") : logsBaseDir;

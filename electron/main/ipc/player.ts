@@ -66,6 +66,10 @@ const isNativeSourceNotFoundError = (error: unknown): boolean =>
   String(error).includes("[SourceNotFound]");
 const isNativeNetworkError = (error: unknown): boolean =>
   String(error).includes("[NetworkUnreachable]");
+
+let abLoopRange: { pointA: number; pointB: number } | null = null;
+let boundaryPending = false;
+let cueEndedGeneration: number | null = null;
 const isNativeCancelledError = (error: unknown): boolean => String(error).includes("[Cancelled]");
 
 const classifyLoadError = (error: unknown, source: string): ErrorCode => {
@@ -144,6 +148,38 @@ const registerNativeEvents = (inst: InstanceType<AudioEngineModule["AudioPlayer"
       case "position": {
         const posMs = toDisplayPositionMs(toMs(event.position ?? 0));
         const durMs = toDisplayDurationMs(toMs(event.duration ?? 0));
+        const generation = getPlaybackGeneration();
+        if (inst.getStatus().state === "playing") {
+          if (abLoopRange && posMs >= abLoopRange.pointB) {
+            if (!boundaryPending) {
+              boundaryPending = true;
+              const targetMs = abLoopRange.pointA;
+              void inst
+                .seek(toEnginePositionMs(targetMs) / 1000)
+                .then(() => {
+                  if (!isCurrentPlaybackLoad(generation)) return;
+                  sendToMain("player:event", { type: "seek", data: { position: targetMs } });
+                })
+                .catch((error) => {
+                  if (!isCurrentPlaybackLoad(generation)) return;
+                  abLoopRange = null;
+                  playerLog.warn("AB 循环跳转失败", error);
+                  sendToMain("player:event", { type: "error", error: ErrorCode.UNKNOWN });
+                })
+                .finally(() => {
+                  if (isCurrentPlaybackLoad(generation)) boundaryPending = false;
+                });
+            }
+            break;
+          }
+          if (getCueRange() && posMs >= durMs && cueEndedGeneration !== generation) {
+            cueEndedGeneration = generation;
+            inst.pauseImmediately();
+            sendToMain("player:event", { type: "ended" });
+            wsBroadcast({ type: "ended" });
+            break;
+          }
+        }
         const positionEvent = {
           type: "position",
           data: { position: posMs, duration: durMs },
@@ -180,6 +216,9 @@ export const registerPlayerIpc = (): void => {
   onPlayerCreated(startDeviceMonitoring);
   ipcMain.handle("player:load", async (_event, source: string, options: LoadOptions = {}) => {
     cancelPendingReinit();
+    abLoopRange = null;
+    boundaryPending = false;
+    cueEndedGeneration = null;
     const autoPlay = options.autoPlay ?? true;
     const authoritative = options.meta ?? null;
     const seq = beginPlaybackLoad(authoritative);
@@ -336,6 +375,9 @@ export const registerPlayerIpc = (): void => {
 
   ipcMain.handle("player:stop", () => {
     try {
+      abLoopRange = null;
+      boundaryPending = false;
+      cueEndedGeneration = null;
       cancelPendingReinit();
       clearPlaybackTimeline();
       getPlayer().stop();
@@ -352,12 +394,13 @@ export const registerPlayerIpc = (): void => {
       const positionSecs = enginePositionMs / 1000;
       await getPlayer().seek(positionSecs);
       if (!isCurrentPlaybackLoad(generation)) return fail(ErrorCode.LOAD_SUPERSEDED);
+      cueEndedGeneration = null;
       mediaService.setTimeline({
         currentMs: toDisplayPositionMs(enginePositionMs),
         totalMs: toDisplayDurationMs(toMs(getPlayer().getDuration())),
         seeked: true,
       });
-      return { success: true };
+      return { success: true, data: { position: toDisplayPositionMs(enginePositionMs) } };
     } catch (error) {
       return fail(ErrorCode.UNKNOWN, error);
     }
@@ -371,6 +414,13 @@ export const registerPlayerIpc = (): void => {
     } catch (error) {
       return fail(ErrorCode.UNKNOWN, error);
     }
+  });
+
+  ipcMain.handle("player:setAbLoop", (_event, range: { pointA: number; pointB: number } | null) => {
+    const duration = toDisplayDurationMs(toMs(getPlayer().getDuration()));
+    if (range && duration > 0 && range.pointB > duration) return fail(ErrorCode.UNKNOWN);
+    abLoopRange = range;
+    return { success: true };
   });
 
   ipcMain.handle("player:setPauseOnDeviceSwitch", (_event, enabled: boolean) => {
@@ -635,19 +685,28 @@ export const registerPlayerIpc = (): void => {
           inst.pause();
           break;
         case "Stop":
+          clearPlaybackTimeline();
+          abLoopRange = null;
           inst.stop();
           break;
         case "Seek":
           if (event.positionMs != null) {
-            const targetMs = event.positionMs;
-            sendToMain("player:event", { type: "seek", data: { position: targetMs } });
-            void inst.seek(targetMs / 1000).then(() => {
-              mediaService.setTimeline({
-                currentMs: targetMs,
-                totalMs: toMs(inst.getDuration()),
-                seeked: true,
-              });
-            });
+            const generation = getPlaybackGeneration();
+            const engineMs = toEnginePositionMs(event.positionMs);
+            const targetMs = toDisplayPositionMs(engineMs);
+            void inst
+              .seek(engineMs / 1000)
+              .then(() => {
+                if (!isCurrentPlaybackLoad(generation)) return;
+                cueEndedGeneration = null;
+                sendToMain("player:event", { type: "seek", data: { position: targetMs } });
+                mediaService.setTimeline({
+                  currentMs: targetMs,
+                  totalMs: toDisplayDurationMs(toMs(inst.getDuration())),
+                  seeked: true,
+                });
+              })
+              .catch((error) => playerLog.warn("系统媒体跳转失败", error));
           }
           break;
         case "SetVolume":

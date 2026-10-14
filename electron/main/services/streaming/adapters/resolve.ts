@@ -26,6 +26,12 @@ export const invalidateStreamingSession = (serverId: string): void => {
   pendingLogins.delete(serverId);
 };
 
+/** 清空全部鉴权状态，迟到登录结果无法重新进入缓存。 */
+export const clearStreamingSessions = (): void => {
+  sessionCache.clear();
+  pendingLogins.clear();
+};
+
 export interface ResolvedStreamingAdapter {
   config: StreamingRuntimeConfig;
   adapter: StreamingAdapter;

@@ -20,6 +20,9 @@ import { ALL_PLATFORMS } from "@shared/types/platform";
 import { defaultSystemConfig } from "@shared/defaults/settings";
 import { setByPath } from "@shared/utils/path";
 import { DEFAULT_SKIP_TRACK_KEYWORDS } from "@/utils/preset/skipKeywords";
+import { toast } from "@/composables/useToast";
+import i18n from "@/i18n";
+import { getByPath } from "@shared/utils/path";
 
 /**
  */
@@ -203,6 +206,25 @@ export const useSettingsStore = defineStore(
     });
 
     const system = reactive<SystemConfig>(structuredClone(defaultSystemConfig));
+    const initial = {
+      appearance: structuredClone(toRaw(appearance)),
+      player: structuredClone(toRaw(player)),
+      preset: structuredClone(toRaw(preset)),
+      lyric: structuredClone(toRaw(lyric)),
+    };
+
+    /** 重置设置时保留响应式对象身份，避免已挂载组件失去绑定。 */
+    const $reset = (): void => {
+      locale.value = "en-US";
+      Object.assign(appearance, structuredClone(initial.appearance));
+      Object.assign(player, structuredClone(initial.player));
+      Object.assign(preset, structuredClone(initial.preset));
+      Object.assign(lyric, structuredClone(initial.lyric));
+      deepAssign(
+        system as unknown as Record<string, unknown>,
+        structuredClone(defaultSystemConfig) as unknown as Record<string, unknown>,
+      );
+    };
 
     const isDesktopLyricOpen = ref(false);
 
@@ -285,11 +307,15 @@ export const useSettingsStore = defineStore(
     /**
      */
     const setSystem = async (keyPath: string, value: unknown): Promise<void> => {
+      const previous = getByPath(system, keyPath);
       setByPath(system, keyPath, value);
       try {
         await window.api.config.set(keyPath, value);
       } catch (err) {
+        setByPath(system, keyPath, previous);
+        toast.error(i18n.global.t("settings.persistenceFailed"));
         console.error("[settings] config.set failed", keyPath, err);
+        throw err;
       }
       if (keyPath === "player.fadeEnabled" || keyPath === "player.fadeDuration") {
         await window.api.player.setFadeDuration(
@@ -320,6 +346,7 @@ export const useSettingsStore = defineStore(
       syncSystem,
       setSystem,
       afterLocalChange,
+      $reset,
     };
   },
   {

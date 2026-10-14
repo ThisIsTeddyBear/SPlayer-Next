@@ -8,7 +8,39 @@
  */
 
 import { useStatusStore } from "@/stores/status";
-import * as player from "@/core/player";
+let stopSync: (() => void) | null = null;
+let syncGeneration = 0;
+
+/** 将低频循环配置同步到主进程，隐藏窗口时仍由引擎位置驱动循环。 */
+export const installAbLoopSync = (): void => {
+  if (stopSync) return;
+  const status = useStatusStore();
+  stopSync = watch(
+    () => [status.abLoop.enable, status.abLoop.pointA, status.abLoop.pointB] as const,
+    ([enabled, pointA, pointB]) => {
+      const generation = ++syncGeneration;
+      const range = enabled && pointA !== null && pointB !== null ? { pointA, pointB } : null;
+      void window.api.player
+        .setAbLoop(range)
+        .then((result) => {
+          if (generation === syncGeneration && !result.success) status.abLoop.enable = false;
+        })
+        .catch((error) => {
+          if (generation !== syncGeneration) return;
+          status.abLoop.enable = false;
+          console.error("[abLoop] sync failed", error);
+        });
+    },
+    { flush: "sync" },
+  );
+};
+
+/** 释放循环配置监听。 */
+export const disposeAbLoopSync = (): void => {
+  ++syncGeneration;
+  stopSync?.();
+  stopSync = null;
+};
 
 /** 设 A 点（毫秒）；自动校验 B 关系，非法则 disable */
 export const setA = (positionMs: number): void => {
@@ -70,18 +102,4 @@ export const reset = (): void => {
   abLoop.enable = false;
   abLoop.pointA = null;
   abLoop.pointB = null;
-};
-
-/**
- * 位置事件钩子：到达 B 点跳回 A
- * 由 core/player.ts::onEnginePosition 每次拿到位置时调用
- */
-export const checkLoop = (positionMs: number): void => {
-  const { abLoop } = useStatusStore();
-  if (!abLoop.enable) return;
-  if (abLoop.pointA === null || abLoop.pointB === null) return;
-  if (abLoop.pointB <= abLoop.pointA) return;
-  if (positionMs >= abLoop.pointB) {
-    player.seek(abLoop.pointA).catch(() => {});
-  }
 };

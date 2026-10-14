@@ -273,10 +273,10 @@ const scrollToIndex = (index: number, behavior: ScrollBehavior = "auto"): void =
   const targetIndex = Math.max(0, Math.min(index, props.items.length - 1));
   let top = 0;
   if (props.itemFixed) {
-    top = targetIndex * props.itemHeight;
+    top = targetIndex * props.itemHeight + props.paddingTop;
   } else {
     if (itemTops.value.length <= targetIndex) initializeHeights();
-    top = itemTops.value[targetIndex] || 0;
+    top = (itemTops.value[targetIndex] || 0) + props.paddingTop;
   }
   scrollToPosition(top, behavior);
 };

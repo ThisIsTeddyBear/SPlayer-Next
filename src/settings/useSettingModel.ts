@@ -32,7 +32,7 @@ export const useSettingModel = (binding: {
     const ipcPath = binding.path.slice(7);
     return computed({
       get: () => getByPath(store.system, ipcPath),
-      set: (v) => store.setSystem(ipcPath, v),
+      set: (v) => void store.setSystem(ipcPath, v).catch(() => {}),
     });
   }
 

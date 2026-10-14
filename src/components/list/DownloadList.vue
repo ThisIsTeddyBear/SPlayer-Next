@@ -152,8 +152,11 @@ defineExpose({ playAll });
           @dblclick="isDone(item) ? playTask(item) : undefined"
         >
           <!-- 序号 / 状态图标 -->
-          <div
-            class="w-8 shrink-0 flex items-center justify-center relative"
+          <button
+            type="button"
+            class="w-8 shrink-0 flex items-center justify-center relative border-none bg-transparent p-0 rounded focus-visible:outline-2 focus-visible:outline-primary"
+            :disabled="!isDone(item)"
+            :aria-label="t(isPlaying(item) && status.isPlaying ? 'player.pause' : 'player.play')"
             :class="isPlaying(item) ? 'text-primary' : 'text-on-surface-variant'"
             @click.stop="onIndexClick(item)"
           >
@@ -182,7 +185,7 @@ defineExpose({ playAll });
               />
               <IconLucideDownload v-else class="size-4" />
             </template>
-          </div>
+          </button>
           <!-- 信息 -->
           <div class="flex-1 min-w-0 flex items-center gap-3">
             <SImg :src="item.track.cover" class="size-12 rounded-lg shrink-0" />

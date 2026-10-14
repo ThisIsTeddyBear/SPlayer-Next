@@ -98,6 +98,9 @@ export type LoadOutcome = { ok: true; track: Track | null } | { ok: false; error
  */
 const resetForLoad = (duration: number): void => {
   const status = useStatusStore();
+  ++seekToken;
+  seekTarget = null;
+  playback.setSeeking(false);
   status.trackLoading = true;
   status.position = 0;
   status.duration = duration;
@@ -255,10 +258,34 @@ const loadTrack = async (
     settings.preset.skipKeywordsSongs &&
     shouldSkipKeywordTrack(track, settings.preset.skipTrackKeywords)
   ) {
-    await nextTrack("skip", autoPlay);
-    return;
+    const status = useStatusStore();
+    if (status.fmMode) {
+      await stop();
+      return;
+    }
+    const tracks = queue.queue.value;
+    let candidate = -1;
+    for (let step = 1; step <= tracks.length; step++) {
+      const index = (status.playIndex + step + tracks.length) % tracks.length;
+      if (!shouldSkipKeywordTrack(tracks[index], settings.preset.skipTrackKeywords)) {
+        candidate = index;
+        break;
+      }
+    }
+    if (candidate === -1) {
+      await stop();
+      toast.info(i18n.global.t("player.allTracksFiltered"));
+      return;
+    }
+    status.playIndex = candidate;
+    track = queue.getTrack(candidate);
+    context = status.currentPlaybackContext;
+    if (!track) return;
   }
+  isRestoringLastTrack = false;
+  pendingPlayAfterRestore = false;
   const myToken = ++trackToken;
+  ++loadToken;
   const preloaded = consumePreloadedTrack(track);
   const media = useMediaStore();
   media.setTrack(track);
@@ -320,6 +347,7 @@ export const reloadCurrentTrack = async (forcePlay?: boolean): Promise<boolean> 
   const shouldPlay = forcePlay ?? status.isPlaying;
   const resumePosition = Math.round(playback.getCurrentTime());
   const myToken = ++trackToken;
+  ++loadToken;
   status.trackLoading = true;
   const loaded = await loadTrackSourceWithFallback(
     track,
@@ -335,7 +363,9 @@ export const reloadCurrentTrack = async (forcePlay?: boolean): Promise<boolean> 
   }
   if (!loaded.result.ok) return false;
   if (resumePosition > 0) await seek(resumePosition);
+  if (myToken !== trackToken) return true;
   if (shouldPlay) await play();
+  if (myToken !== trackToken) return true;
   if (loaded.resolved.cacheRequest) {
     cacheScheduler.schedule(track.id, loaded.resolved.cacheRequest);
   }
@@ -372,9 +402,9 @@ export const recoverFromSourceFailure = async (): Promise<void> => {
   }
 };
 
-/** Indicates whether cold-start playback restoration is in progress */
+/** 是否正在恢复启动前的歌曲。 */
 let isRestoringLastTrack = false;
-/** Queued play intent during cold-start restoration */
+/** 恢复期间排队的播放操作。 */
 let pendingPlayAfterRestore = false;
 
 export const play = async (): Promise<void> => {
@@ -428,12 +458,20 @@ export const pause = async (): Promise<void> => {
 };
 
 export const stop = async (): Promise<void> => {
+  const token = ++trackToken;
+  ++loadToken;
+  ++seekToken;
+  seekTarget = null;
+  isRestoringLastTrack = false;
+  pendingPlayAfterRestore = false;
+  cacheScheduler.cancel();
   const status = useStatusStore();
   status.trackLoading = false;
   const result = await window.api.player.stop();
-  if (result.success) {
+  if (result.success && token === trackToken) {
     status.state = "stopped";
     status.position = 0;
+    status.currentSource = null;
     playback.reset();
   }
 };
@@ -441,6 +479,7 @@ export const stop = async (): Promise<void> => {
 /**
  */
 let seekTarget: number | null = null;
+let seekToken = 0;
 
 /**
  */
@@ -461,16 +500,33 @@ export const isSeeking = (): boolean => seekTarget !== null;
 export const seek = async (posMs: number): Promise<void> => {
   const status = useStatusStore();
   if (status.trackLoading) return;
+  if (!Number.isFinite(posMs)) return;
+  const target = Math.max(0, status.duration > 0 ? Math.min(posMs, status.duration) : posMs);
+  const previous = playback.getCurrentTime();
+  const token = ++seekToken;
+  const trackGeneration = trackToken;
   playback.setSeeking(true);
-  status.position = posMs;
-  playback.setCurrentTime(posMs);
+  status.position = target;
+  playback.setCurrentTime(target, { force: true });
 
-  seekTarget = posMs;
+  seekTarget = target;
 
-  const result = await window.api.player.seek(posMs);
-  if (result.success) {
-    status.position = posMs;
-    playback.setCurrentTime(posMs);
+  try {
+    const result = await window.api.player.seek(target);
+    if (token !== seekToken || trackGeneration !== trackToken) return;
+    const position = result.success ? (result.data?.position ?? target) : previous;
+    status.position = playback.setCurrentTime(position, { force: true });
+    if (!result.success) handleError(result.error ?? ErrorCode.UNKNOWN);
+  } catch (error) {
+    if (token !== seekToken || trackGeneration !== trackToken) return;
+    status.position = playback.setCurrentTime(previous, { force: true });
+    console.error("[player] seek failed", error);
+    handleError(ErrorCode.UNKNOWN);
+  } finally {
+    if (token === seekToken && trackGeneration === trackToken) {
+      seekTarget = null;
+      playback.setSeeking(false);
+    }
   }
 };
 
@@ -479,10 +535,11 @@ export const seek = async (posMs: number): Promise<void> => {
 export const markSeek = (posMs: number): void => {
   const status = useStatusStore();
   if (status.trackLoading) return;
-  playback.setSeeking(true);
+  ++seekToken;
+  playback.setSeeking(false);
   status.position = posMs;
-  playback.setCurrentTime(posMs);
-  seekTarget = posMs;
+  playback.setCurrentTime(posMs, { force: true });
+  seekTarget = null;
 };
 
 /**
@@ -854,6 +911,35 @@ export const purgeDeletedTracks = async (ids: readonly string[]): Promise<void> 
 };
 
 /**
+ * 移除服务器队列条目并保留当前歌曲位置。
+ * @param serverId - 已删除的服务器 ID
+ */
+export const removeStreamingServerTracks = async (serverId: string): Promise<void> => {
+  const status = useStatusStore();
+  const media = useMediaStore();
+  const current = media.track;
+  const previousIndex = status.playIndex;
+  const wasPlaying = status.isPlaying;
+  queue.removeServerTracks(serverId);
+  if (current?.source === "streaming" && current.serverId === serverId) {
+    const stopping = stop();
+    const generation = trackToken;
+    await stopping;
+    if (generation !== trackToken) return;
+    status.playIndex = Math.min(previousIndex, queue.queueLength.value - 1);
+    if (status.currentTrack) {
+      await loadTrack(status.currentTrack, status.currentPlaybackContext, wasPlaying);
+    } else {
+      media.clear();
+    }
+  } else if (current) {
+    status.playIndex = queue.findTrackIndex(current.id);
+  } else {
+    status.playIndex = Math.min(previousIndex, queue.queueLength.value - 1);
+  }
+};
+
+/**
  */
 export const insertToQueue = (
   item: Track,
@@ -1032,6 +1118,7 @@ export const initPlayer = async (): Promise<void> => {
     console.error("[player] requestSnapshot failed", error);
   }
   installNextTrackPreloadWatchers();
+  abLoop.installAbLoopSync();
   scheduleNextTrackPreload();
 };
 
@@ -1045,6 +1132,8 @@ export const restoreLastTrack = async (): Promise<void> => {
     return;
   }
   isRestoringLastTrack = true;
+  const myToken = ++trackToken;
+  ++loadToken;
   pendingPlayAfterRestore = false;
   const lastPosition = status.position;
   media.setTrack(lastTrack);
@@ -1055,34 +1144,40 @@ export const restoreLastTrack = async (): Promise<void> => {
       lastTrack,
       status.currentPlaybackContext,
       settings.system.player.autoPlay,
-      () => true,
+      () => myToken === trackToken,
     );
+    if (myToken !== trackToken) return;
     if (loaded.status === "loaded" && loaded.result.ok) {
       if (settings.system.player.rememberLastTrack && lastPosition > 0) {
         await seek(lastPosition);
+        if (myToken !== trackToken) return;
       }
       if (loaded.resolved.cacheRequest) {
         cacheScheduler.schedule(lastTrack.id, loaded.resolved.cacheRequest);
       }
       if (pendingPlayAfterRestore) {
         pendingPlayAfterRestore = false;
+        isRestoringLastTrack = false;
         await play();
       }
     } else {
       status.state = "idle";
-      // Retain remembered position on restore failure to avoid reset to 0
+      // 恢复失败仍保留位置，以便重试时继续播放。
       if (lastPosition > 0) {
         status.position = lastPosition;
         playback.setCurrentTime(lastPosition);
       }
     }
   } finally {
-    isRestoringLastTrack = false;
-    pendingPlayAfterRestore = false;
+    if (myToken === trackToken) {
+      isRestoringLastTrack = false;
+      pendingPlayAfterRestore = false;
+    }
   }
 };
 
 export const disposePlayer = (): void => {
+  abLoop.disposeAbLoopSync();
   disposeNextTrackPreload();
   if (unsubscribe) {
     unsubscribe();

@@ -308,6 +308,7 @@ export interface ConfigApi {
   set: (keyPath: string, value: unknown) => Promise<void>;
   getAll: () => Promise<SystemConfig>;
   reset: () => Promise<void>;
+  clearAllData: () => Promise<void>;
   replaceAll: (config: unknown) => Promise<void>;
   exportToFile: (payload: unknown) => Promise<{ ok: boolean; reason?: "canceled" | "writeFailed" }>;
   importFromFile: () => Promise<

@@ -21,11 +21,21 @@ const emit = defineEmits<{
 
 const isLoaded = ref(false);
 
-const onLoad = (e: Event) => {
+const onLoad = async (e: Event): Promise<void> => {
   const target = e.target as HTMLImageElement;
+  try {
+    await target.decode();
+  } catch {
+    return;
+  }
+  if (target.getAttribute("src") !== props.src) return;
   target.style.opacity = "1";
   isLoaded.value = true;
   emit("load", target);
+};
+
+const onError = (e: Event): void => {
+  if ((e.target as HTMLImageElement).getAttribute("src") === props.src) isLoaded.value = false;
 };
 
 watch(
@@ -45,6 +55,7 @@ watch(
         :src="fallback"
         :alt="alt"
         class="absolute w-full h-full object-cover z-0"
+        decoding="async"
       />
     </Transition>
     <!-- 封面：Transition 控制外层 div 的交叉淡入淡出，img 的 opacity 由 @load 单独控制 -->
@@ -62,7 +73,7 @@ watch(
           decoding="async"
           loading="lazy"
           @load="onLoad"
-          @error="isLoaded = false"
+          @error="onError"
         />
       </div>
     </Transition>

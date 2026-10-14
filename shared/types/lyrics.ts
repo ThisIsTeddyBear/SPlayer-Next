@@ -96,4 +96,5 @@ export interface LyricsApi {
   fetchTTMLOverlay: (track: Track, platform: "netease" | "qqmusic") => Promise<LyricTTMLResponse>;
   matchLocalTTML: (track: Track) => Promise<LyricTTMLResponse>;
   pickLyricRepoDir: () => Promise<string | null>;
+  refreshLocalRepo: () => Promise<void>;
 }

@@ -4,13 +4,13 @@
  */
 
 /** 最大时间戳（999:59.999） */
-export const MAX_TIME = 60039999;
+export const MAX_TIME = 59999999;
 
 /**
  * 匹配方括号时间戳 [mm:ss.xxx] / [mm:ss:xxx] / [mm:ss.xx] / [mm:ss.x]
  * 使用时注意 lastIndex（全局正则）
  */
-export const BRACKET_TIME_RE = /\[(\d+):(\d+)[.:](\d{1,3})\]/g;
+export const BRACKET_TIME_RE = /\[(\d+):(\d+)(?:[.:](\d{1,3}))?\]/g;
 
 /**
  * 匹配尖括号时间戳 <mm:ss.xxx> / <mm:ss:xxx> / <mm:ss.xx> / <mm:ss.x>
@@ -51,9 +51,9 @@ export const parseTime = (
  * @returns 毫秒数，解析失败返回 -1
  */
 export const parseBracketTag = (tag: string): number => {
-  const m = /^\[(\d+):(\d+)[.:](\d{1,3})\]$/.exec(tag);
+  const m = /^\[(\d+):(\d+)(?:[.:](\d{1,3}))?\]$/.exec(tag);
   if (!m) return -1;
-  return parseTime(m[1], m[2], m[3]);
+  return parseTime(m[1], m[2], m[3] ?? "0");
 };
 
 /**

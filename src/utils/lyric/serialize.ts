@@ -56,7 +56,14 @@ const toEnhancedLrc = (lines: LyricLine[]): string => {
     if (line.words.length === 0) continue;
     const lineTs = `[${formatLrcTime(line.startTime)}]`;
     const body = line.words
-      .map((word) => `<${formatLrcTime(word.startTime)}>${getWordText(word)}`)
+      .map((word, index) => {
+        const next = line.words[index + 1];
+        const end =
+          word.endTime > word.startTime && (!next || word.endTime < next.startTime)
+            ? `<${formatLrcTime(word.endTime)}>`
+            : "";
+        return `<${formatLrcTime(word.startTime)}>${getWordText(word)}${end}`;
+      })
       .join("");
     if (!body.trim()) continue;
     out.push(`${lineTs}${body}`);

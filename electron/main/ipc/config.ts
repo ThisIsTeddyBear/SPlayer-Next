@@ -34,6 +34,7 @@ import { setOrpheusProtocolRegistered } from "@main/services/orpheus";
 import { setTaskbarThumbnailEnabled } from "@main/services/thumbnail";
 import { applyChannelChange } from "@main/services/updater";
 import { UPDATE_CHANNELS, type UpdateChannel } from "@shared/types/settings";
+import { clearUserData } from "@main/services/dataReset";
 
 /**
  * 应用配置写入后的副作用
@@ -137,10 +138,21 @@ export const registerConfigIpc = (): void => {
     }
     const previous = store.get(keyPath as ConfigPath);
     store.set(keyPath, value);
+    try {
+      store.flushImmediate();
+    } catch (error) {
+      store.set(keyPath, previous);
+      throw error;
+    }
     applyConfigChange(keyPath, value, previous);
   });
   ipcMain.handle("config:getAll", () => store.store);
-  ipcMain.handle("config:reset", () => store.clear());
+  ipcMain.handle("config:clearAllData", () => clearUserData());
+  ipcMain.handle("config:reset", async () => {
+    await stopServer();
+    await stopMcpServer();
+    store.clear();
+  });
 
   /** 替换整盘配置 */
   ipcMain.handle("config:replaceAll", (_event, payload: unknown) => {

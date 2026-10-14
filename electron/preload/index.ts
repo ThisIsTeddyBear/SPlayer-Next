@@ -47,6 +47,7 @@ const api = {
     set: (keyPath: string, value: unknown) => ipcRenderer.invoke("config:set", keyPath, value),
     getAll: () => ipcRenderer.invoke("config:getAll"),
     reset: () => ipcRenderer.invoke("config:reset"),
+    clearAllData: () => ipcRenderer.invoke("config:clearAllData"),
     replaceAll: (config: unknown) => ipcRenderer.invoke("config:replaceAll", config),
     exportToFile: (
       payload: unknown,
@@ -63,6 +64,8 @@ const api = {
     pause: () => ipcRenderer.invoke("player:pause"),
     stop: () => ipcRenderer.invoke("player:stop"),
     seek: (position: number) => ipcRenderer.invoke("player:seek", position),
+    setAbLoop: (range: { pointA: number; pointB: number } | null) =>
+      ipcRenderer.invoke("player:setAbLoop", range),
     setVolume: (volume: number) => ipcRenderer.invoke("player:setVolume", volume),
     setPauseOnDeviceSwitch: (enabled: boolean) =>
       ipcRenderer.invoke("player:setPauseOnDeviceSwitch", enabled),
@@ -290,6 +293,7 @@ const api = {
       ipcRenderer.invoke("lyrics:fetchTTMLOverlay", track, platform),
     matchLocalTTML: (track: unknown) => ipcRenderer.invoke("lyrics:matchLocalTTML", track),
     pickLyricRepoDir: () => ipcRenderer.invoke("lyrics:pickLyricRepoDir"),
+    refreshLocalRepo: () => ipcRenderer.invoke("lyrics:refreshLocalRepo"),
   },
   opencc: {
     convert: (text: string, config: CjkTransformMode): Promise<string> =>

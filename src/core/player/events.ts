@@ -5,10 +5,10 @@ import { useSettingsStore } from "@/stores/settings";
 import { useFavorite } from "@/composables/useFavorite";
 import * as playback from "@/services/playback";
 import * as autoClose from "@/services/autoClose";
-import * as abLoop from "@/services/abLoop";
 import * as cacheScheduler from "@/services/cacheScheduler";
 import { setDeviceVolume } from "@/services/deviceVolume";
 import * as playStats from "./stats";
+import { handleError } from "@/utils/errors";
 import {
   applySavedVolumeForActiveDevice,
   getActiveDeviceId,
@@ -63,6 +63,10 @@ const finishCurrentTrack = async (): Promise<void> => {
 export const handleEvent = async (event: PlayerEvent): Promise<void> => {
   const status = useStatusStore();
   switch (event.type) {
+    case "error":
+      status.abLoop.enable = false;
+      handleError(event.error);
+      break;
     case "status":
       // 歌曲加载中或 loading 事件不更新 UI，保持当前封面/进度/播放状态平滑过渡
       if (event.data.state === "loading" || status.trackLoading) break;
@@ -104,14 +108,8 @@ export const handleEvent = async (event: PlayerEvent): Promise<void> => {
       }
       // 歌词索引叠加用户设置的偏移；进度条仍走 adjusted 不受影响
       useMediaStore().updateLyricIndex(adjusted + status.lyricOffsetMs);
-      // AB 循环：到达 B 点 seek 回 A
-      abLoop.checkLoop(adjusted);
       // 推进延时缓存调度
       cacheScheduler.tick(adjusted);
-      const track = useMediaStore().track;
-      if (track?.cueEndMs != null && status.isPlaying && status.duration > 0) {
-        if (adjusted >= status.duration - 250) await finishCurrentTrack();
-      }
       break;
     }
     case "fftData":

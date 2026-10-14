@@ -116,6 +116,18 @@ describe("queue", () => {
     expect(originalQueue.value).toBeNull();
   });
 
+  it("更新歌曲只替换对应队列项，相同对象不触发持久化", () => {
+    const first = entry("a");
+    const second = entry("b");
+    queueEntries.value = [first, second];
+    updateQueueTracks([first.track]);
+    expect(storage.setItem).not.toHaveBeenCalled();
+    updateQueueTracks([{ ...first.track, title: "updated" }]);
+    expect(queueEntries.value[1]).toBe(second);
+    expect(queueEntries.value[0]).not.toBe(first);
+    expect(storage.setItem).toHaveBeenCalledTimes(2);
+  });
+
   it("播放上下文跟随队列项插入、移动和随机播放", () => {
     setQueue([track("a"), track("b")], context);
     insertToQueue(track("c"), 1, { ...context, originId: "789", originType: "album" });

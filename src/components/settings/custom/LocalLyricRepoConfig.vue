@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import IconLucideFolder from "~icons/lucide/folder";
-import IconLucideFolderPlus from "~icons/lucide/folder-plus";
-import IconLucideTrash2 from "~icons/lucide/trash-2";
+import { loadForTrack } from "@/services/lyric/loader";
+import { useMediaStore } from "@/stores/media";
+import { toast } from "@/composables/useToast";
 
 defineOptions({ inheritAttrs: false });
 
@@ -11,6 +11,21 @@ const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 const { t } = useI18n();
 
 const open = ref(false);
+const refreshing = ref(false);
+
+const refresh = async (): Promise<void> => {
+  refreshing.value = true;
+  try {
+    await window.api.lyrics.refreshLocalRepo();
+    await loadForTrack(useMediaStore().detail);
+    toast.success(t("settings.localLyricRepoDir.refreshed"));
+  } catch (error) {
+    console.error("[localLyric] refresh failed", error);
+    toast.error(t("settings.storageOperationFailed"));
+  } finally {
+    refreshing.value = false;
+  }
+};
 
 const folderName = (dir: string): string => {
   const parts = dir.replace(/\\/g, "/").split("/").filter(Boolean);
@@ -59,6 +74,10 @@ const clear = () => emit("update:modelValue", "");
       <SButton class="mt-1" variant="secondary" block @click="choose">
         <template #icon><IconLucideFolderPlus /></template>
         {{ t("settings.localLyricRepoDir.choose") }}
+      </SButton>
+      <SButton v-if="modelValue" variant="secondary" block :loading="refreshing" @click="refresh">
+        <template #icon><IconLucideRefreshCw /></template>
+        {{ t("settings.localLyricRepoDir.refresh") }}
       </SButton>
     </div>
   </SDialog>

@@ -487,6 +487,7 @@
     }
   },
   "player": {
+    "allTracksFiltered": "Every queued song matches your skip rules. Change the rules or choose another queue.",
     "play": "Play",
     "pause": "Pause",
     "seek": "Playback position",
@@ -719,7 +720,8 @@
     "deleteFile": "Delete file",
     "deleteConfirmTitle": "Delete downloaded file",
     "deleteConfirmContent": "This permanently deletes the song file from disk and cannot be undone. Delete it?",
-    "tagWarning": "Failed to write tags; file saved",
+    "tagWarning": "Audio saved, but lyrics, artwork or tags could not be saved",
+    "deleteFailed": "The file could not be deleted. Close any app using it and try again; its record has been kept.",
     "resolveFailed": "Cannot download: {title}",
     "alreadyQueued": "Already in the download queue",
     "alreadyDownloaded": "Already downloaded",
@@ -770,6 +772,8 @@
     "nestedHint": "Folder is nested with an existing one; skipped"
   },
   "settings": {
+    "persistenceFailed": "Settings could not be saved. Check storage access or restore a settings backup.",
+    "storageOperationFailed": "The operation could not be completed. Your remaining data has been kept; check storage access and try again.",
     "title": "Settings",
     "subtitle": "Tailor your experience",
     "search": "Search settings...",
@@ -1973,16 +1977,16 @@
       "label": "Reset Settings",
       "description": "Restore all settings to defaults. Playlists and local library are not affected.",
       "button": "Reset",
-      "confirmTitle": "Reset settings?",
-      "confirmDesc": "All settings will be restored to their defaults. This cannot be undone.",
+      "confirmTitle": "Reset settings and relaunch?",
+      "confirmDesc": "All settings will be restored to their defaults and the app will relaunch. This cannot be undone.",
       "done": "Settings have been reset"
     },
     "resetAll": {
       "label": "Clear All Data",
-      "description": "Wipe all playlists, sign-in state and caches, then reset settings",
+      "description": "Clear library records, playlists, history, sign-ins and caches, reset settings, then relaunch",
       "button": "Clear",
       "confirmTitle": "Clear all data?",
-      "confirmDesc": "All playlists, sign-in state and caches will be wiped and settings reset. This cannot be undone.",
+      "confirmDesc": "Library records, playlists, history, sign-ins and caches will be cleared, settings reset, and the app relaunched. Music files and installed plugins are kept. This cannot be undone.",
       "done": "All data has been cleared"
     },
     "plugins": {
@@ -2077,6 +2081,8 @@
     "localLyricRepoDir": {
       "label": "Library Folder",
       "description": "Choose a folder containing TTML lyrics; the app searches it by metadata",
+      "refresh": "Refresh lyric library",
+      "refreshed": "Lyric library refreshed",
       "choose": "Choose",
       "clear": "Clear",
       "unset": "Not set"

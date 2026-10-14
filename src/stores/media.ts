@@ -51,7 +51,7 @@ export const useMediaStore = defineStore("media", () => {
    */
   const setTrack = (newTrack: Track, newDetail?: TrackDetail): void => {
     track.value = newTrack;
-    if (newDetail) detail.value = newDetail;
+    detail.value = newDetail ?? null;
   };
 
   /**

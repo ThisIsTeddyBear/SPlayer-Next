@@ -2,7 +2,9 @@
 import localforage from "localforage";
 import { toast } from "@/composables/useToast";
 import { dialog } from "@/composables/useDialog";
-import { usePlaylistStore } from "@/stores/playlist";
+import * as player from "@/core/player";
+import * as queue from "@/stores/queue";
+import { useMediaStore } from "@/stores/media";
 import { useSettingsStore } from "@/stores/settings";
 import { APP_VERSION } from "@/utils/config";
 
@@ -116,9 +118,9 @@ const handleResetSettings = async (): Promise<void> => {
   });
   if (!confirmed) return;
   const settingsStore = useSettingsStore();
-  settingsStore.$reset();
   await window.api.config.reset();
-  toast.success(t("settings.resetSettings.done"));
+  settingsStore.$reset();
+  await window.api.system.relaunch();
 };
 
 /** 清除全部数据 */
@@ -129,16 +131,16 @@ const handleResetAll = async (): Promise<void> => {
     type: "error",
   });
   if (!confirmed) return;
-  const stores = ["playlists", "queue", "library"];
-  await Promise.all(
-    stores.map((name) => localforage.createInstance({ name: "splayer", storeName: name }).clear()),
-  );
-  const settingsStore = useSettingsStore();
-  settingsStore.$reset();
-  await window.api.config.reset();
-  const playlistStore = usePlaylistStore();
-  await playlistStore.clear();
-  toast.success(t("settings.resetAll.done"));
+  await player.stop();
+  await window.api.config.clearAllData();
+  player.disposePlayer();
+  useMediaStore().clear();
+  queue.clearQueue();
+  await nextTick();
+  await localforage.dropInstance({ name: "splayer" });
+  localStorage.clear();
+  sessionStorage.clear();
+  await window.api.system.relaunch();
 };
 
 /** 按 key 分发并互斥执行 */
@@ -150,6 +152,9 @@ const runAction = async (key: ActionKey): Promise<void> => {
     else if (key === "restore") await handleRestore();
     else if (key === "resetSettings") await handleResetSettings();
     else await handleResetAll();
+  } catch (error) {
+    console.error("[storage] operation failed", error);
+    toast.error(t("settings.storageOperationFailed"));
   } finally {
     running.value = null;
   }

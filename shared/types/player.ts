@@ -187,7 +187,8 @@ export interface PlayerApi {
   play: () => Promise<IpcResponse>;
   pause: () => Promise<IpcResponse>;
   stop: () => Promise<IpcResponse>;
-  seek: (positionMs: number) => Promise<IpcResponse>;
+  seek: (positionMs: number) => Promise<IpcResponse<{ position: number }>>;
+  setAbLoop: (range: { pointA: number; pointB: number } | null) => Promise<IpcResponse>;
   setVolume: (volume: number) => Promise<IpcResponse<number>>;
   setPauseOnDeviceSwitch: (enabled: boolean) => Promise<IpcResponse>;
   getVolume: () => Promise<IpcResponse<number>>;

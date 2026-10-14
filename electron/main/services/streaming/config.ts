@@ -157,6 +157,12 @@ export const setActiveStreamingServer = (serverId: string | null): void => {
   save();
 };
 
+/** 清空服务器配置并使原有解密快照失效。 */
+export const clearStreamingConfig = (): void => {
+  state = { servers: [], activeServerId: null };
+  save();
+};
+
 /**
  */
 export const markStreamingServerConnected = (serverId: string): StreamingServerConfig => {

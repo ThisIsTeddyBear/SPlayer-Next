@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+import { writeFile as atomicWrite } from "atomically";
 import { searchSpotifyArtistImage } from "@main/services/metadataLookup";
 import { getArtistCacheDir } from "@main/utils/config";
 import { libraryLog } from "@main/utils/logger";
@@ -15,6 +17,9 @@ const PREFETCH_CONCURRENCY = 8;
 const SPOTIFY_INTERVAL_MS = 500;
 const REQUEST_ATTEMPTS = 3;
 const USER_AGENT = "SPlayer-Next/1.0 (https://github.com/ThisIsTeddyBear/SPlayer-Next)";
+const MAX_INDEX_ENTRIES = 5000;
+let cacheGeneration = 0;
+let cacheController = new AbortController();
 
 interface CacheEntry {
   checkedAt: number;
@@ -30,12 +35,14 @@ let cacheIndex: CacheIndex | undefined;
 let cacheIndexLoad: Promise<CacheIndex> | undefined;
 let indexWriteQueue = Promise.resolve();
 let nextSpotifyRequestAt = 0;
+let invalidating: Promise<void> | null = null;
 
 const normalizeName = (name: string): string => name.trim().replace(/\s+/g, " ").toLowerCase();
 
 const fileId = (value: string): string => createHash("sha256").update(value).digest("hex");
 
-const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (ms: number): Promise<void> =>
+  sleep(ms, undefined, { signal: cacheController.signal });
 
 /** 限制批量预取时的 Spotify 请求频率 */
 const waitForSpotifyTurn = async (): Promise<void> => {
@@ -47,21 +54,38 @@ const waitForSpotifyTurn = async (): Promise<void> => {
 
 const readIndex = async (): Promise<CacheIndex> => {
   if (cacheIndex) return cacheIndex;
+  const generation = cacheGeneration;
   cacheIndexLoad ??= fs
     .readFile(path.join(getArtistCacheDir(), INDEX_FILE), "utf8")
-    .then((contents) => JSON.parse(contents) as CacheIndex)
+    .then((contents) => {
+      const entries = Object.entries(JSON.parse(contents) as CacheIndex);
+      entries.sort((a, b) => b[1].checkedAt - a[1].checkedAt);
+      return Object.fromEntries(entries.slice(0, MAX_INDEX_ENTRIES));
+    })
     .catch(() => ({}));
-  cacheIndex = await cacheIndexLoad;
+  const index = await cacheIndexLoad;
+  if (generation !== cacheGeneration) return {};
+  cacheIndex = index;
   return cacheIndex;
 };
 
 const writeIndex = async (): Promise<void> => {
+  const generation = cacheGeneration;
   const dir = getArtistCacheDir();
   const index = await readIndex();
-  indexWriteQueue = indexWriteQueue.then(async () => {
-    await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, INDEX_FILE), JSON.stringify(index), "utf8");
-  });
+  indexWriteQueue = indexWriteQueue
+    .catch(() => {})
+    .then(async () => {
+      if (generation !== cacheGeneration) return;
+      const entries = Object.entries(index);
+      if (entries.length > MAX_INDEX_ENTRIES) {
+        entries.sort((a, b) => a[1].checkedAt - b[1].checkedAt);
+        for (const [name] of entries.slice(0, entries.length - MAX_INDEX_ENTRIES))
+          delete index[name];
+      }
+      await fs.mkdir(dir, { recursive: true });
+      await atomicWrite(path.join(dir, INDEX_FILE), JSON.stringify(index));
+    });
   await indexWriteQueue;
 };
 
@@ -78,7 +102,7 @@ const downloadImage = async (
           Accept: "image/avif,image/webp,image/*,*/*;q=0.8",
           "User-Agent": USER_AGENT,
         },
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.any([AbortSignal.timeout(15_000), cacheController.signal]),
       });
       const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
       if (!response.ok) {
@@ -95,6 +119,7 @@ const downloadImage = async (
           total += value.length;
           if (total > MAX_IMAGE_BYTES) {
             lastError = "image exceeds size limit";
+            await reader.cancel();
             break;
           }
           chunks.push(value);
@@ -124,9 +149,11 @@ const existingCachedImage = async (fileName: string | undefined): Promise<string
 };
 
 const resolve = async (artistName: string): Promise<string | undefined> => {
+  const generation = cacheGeneration;
   const normalizedName = normalizeName(artistName);
   if (!normalizedName) return;
   const index = await readIndex();
+  if (generation !== cacheGeneration) return;
   const cached = index[normalizedName];
   const cachedImage = await existingCachedImage(cached?.fileName);
   const age = Date.now() - (cached?.checkedAt ?? 0);
@@ -139,11 +166,13 @@ const resolve = async (artistName: string): Promise<string | undefined> => {
   let imageUrl: string | undefined;
   try {
     await waitForSpotifyTurn();
+    if (generation !== cacheGeneration) return;
     imageUrl = await searchSpotifyArtistImage(artistName);
   } catch (error) {
     libraryLog.warn(`Spotify 歌手图片查询失败，将在下次重试: ${artistName}`, error);
     return cachedImage;
   }
+  if (generation !== cacheGeneration) return;
   if (!imageUrl) {
     index[normalizedName] = { checkedAt: Date.now(), confirmedMiss: true };
     await writeIndex();
@@ -151,19 +180,40 @@ const resolve = async (artistName: string): Promise<string | undefined> => {
   }
 
   const image = await downloadImage(imageUrl, artistName);
+  if (generation !== cacheGeneration) return;
   if (!image.ok) return cachedImage;
 
   const fileName = `${fileId(`spotify:${normalizedName}`)}.jpg`;
   const filePath = path.join(getArtistCacheDir(), fileName);
   await fs.mkdir(getArtistCacheDir(), { recursive: true });
   await fs.writeFile(filePath, image.value);
+  if (generation !== cacheGeneration) return;
   index[normalizedName] = { checkedAt: Date.now(), fileName };
   await writeIndex();
   return toCacheUrl(filePath);
 };
 
+/** 清理前终止缓存任务并等待已开始的文件操作完成。 */
+export const invalidateArtistImages = (): Promise<void> => {
+  invalidating ??= (async () => {
+    ++cacheGeneration;
+    cacheController.abort();
+    try {
+      await Promise.allSettled([...inFlight.values(), indexWriteQueue]);
+      cacheController = new AbortController();
+      cacheIndex = undefined;
+      cacheIndexLoad = undefined;
+      nextSpotifyRequestAt = 0;
+    } finally {
+      invalidating = null;
+    }
+  })();
+  return invalidating;
+};
+
 /** 获取单个歌手头像，重复请求复用同一任务 */
 export const getArtistImage = (artistName: string): Promise<string | undefined> => {
+  if (invalidating) return Promise.resolve(undefined);
   const normalizedName = normalizeName(artistName);
   if (!normalizedName) return Promise.resolve(undefined);
   const existing = inFlight.get(normalizedName);

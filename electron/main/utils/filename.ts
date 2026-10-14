@@ -14,15 +14,22 @@ interface TemplateVars {
 
 /** 文件名非法字符 */
 const ILLEGAL = /[\\/:*?"<>|]/g;
+const RESERVED = /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i;
+// Windows 文件名禁止 ASCII 控制字符，需保留该范围匹配。
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTERS = /[\u0000-\u001f]/g;
 
 /** 清洗单个路径段：去非法字符、压缩空白、去首尾空白与点 */
-export const sanitizeSegment = (name: string): string =>
-  name
+export const sanitizeSegment = (name: string): string => {
+  const sanitized = name
     .replace(ILLEGAL, " ")
+    .replace(CONTROL_CHARACTERS, " ")
     .replace(/\s+/g, " ")
     .trim()
     .replace(/^\.+|\.+$/g, "")
     .trim();
+  return RESERVED.test(sanitized) ? `_${sanitized}` : sanitized;
+};
 
 /** 填充占位符 {artist} {title} {album} */
 const fillTemplate = (template: string, vars: TemplateVars): string =>

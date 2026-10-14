@@ -135,17 +135,6 @@ export const useLibraryStore = defineStore("library", () => {
     const res = await window.api.library.addScanDir();
     if (res.success) {
       const newDir = res.data as string;
-      const nested = scanDirs.value.some(
-        (d) =>
-          newDir.startsWith(d + "\\") ||
-          newDir.startsWith(d + "/") ||
-          d.startsWith(newDir + "\\") ||
-          d.startsWith(newDir + "/"),
-      );
-      if (nested) {
-        await window.api.library.removeScanDir(newDir);
-        return { success: false, error: "nested" };
-      }
       scanDirs.value = [...scanDirs.value, newDir];
     }
     return res;

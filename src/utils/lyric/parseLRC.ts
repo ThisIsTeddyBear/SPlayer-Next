@@ -20,7 +20,7 @@ const extractHeaderTimes = (line: string): { times: number[]; textStart: number 
   let match: RegExpExecArray | null;
   while ((match = BRACKET_TIME_RE.exec(line)) !== null) {
     if (match.index !== textStart) break;
-    times.push(parseTime(match[1], match[2], match[3]));
+    times.push(parseTime(match[1], match[2], match[3] ?? "0"));
     textStart = BRACKET_TIME_RE.lastIndex;
   }
   return { times, textStart };
@@ -77,7 +77,7 @@ const parseLrcWords = (line: string): LyricWord[] | null => {
   // 逐个扫描时间戳，两个时间戳之间的文本为一个单词
   let match: RegExpExecArray | null;
   while ((match = BRACKET_TIME_RE.exec(line)) !== null) {
-    const time = parseTime(match[1], match[2], match[3]);
+    const time = parseTime(match[1], match[2], match[3] ?? "0");
     tagCount++;
     // 上一个时间戳到当前时间戳之间的文本
     if (prevTime >= 0 && prevTextStart >= 0) {
@@ -126,9 +126,17 @@ const parseLrcPayload = (line: string, detectBackground: boolean = true): LyricL
   const eslrcWords = parseEslrcWords(content);
   if (eslrcWords) {
     const lines: LyricLine[] = [];
-    for (const _ of times) {
+    for (const time of times) {
       // 多时间戳时克隆单词数组
       const words = times.length > 1 ? eslrcWords.map((w) => ({ ...w })) : eslrcWords;
+      const shift = time - times[0];
+      if (shift !== 0) {
+        for (const word of words) {
+          const hasEnd = word.endTime > word.startTime;
+          word.startTime += shift;
+          if (hasEnd) word.endTime += shift;
+        }
+      }
       lines.push({
         words,
         translatedLyric: "",
@@ -217,6 +225,7 @@ const parseLrcLine = (line: string, detectBackground: boolean = true): LyricLine
  */
 export const parseLRC = (text: string, detectBackground = true): LyricLine[] => {
   const lines: LyricLine[] = [];
+  const offset = Number(text.match(/^\s*\[offset:([+-]?\d+)\]\s*$/im)?.[1] ?? 0);
   for (const rawLine of text.split("\n")) {
     lines.push(...parseLrcLine(rawLine, detectBackground));
   }
@@ -224,9 +233,10 @@ export const parseLRC = (text: string, detectBackground = true): LyricLine[] => 
   lines.sort((a, b) => a.startTime - b.startTime);
   // 合并同 startTime 的隔行翻译：第一行为主；第二行为 translation；第三行为 romaji；再多忽略
   const merged: LyricLine[] = [];
+  let previousMain: LyricLine | undefined;
   for (const line of lines) {
-    const prev = merged[merged.length - 1];
-    if (prev && prev.startTime === line.startTime) {
+    const prev = previousMain;
+    if (prev && !prev.isBG && !line.isBG && prev.startTime === line.startTime) {
       const text = line.words
         .map((w) => w.word)
         .join("")
@@ -237,6 +247,7 @@ export const parseLRC = (text: string, detectBackground = true): LyricLine[] => 
       continue;
     }
     merged.push(line);
+    if (!line.isBG) previousMain = line;
   }
 
   // 反向遍历填充 endTime
@@ -256,7 +267,18 @@ export const parseLRC = (text: string, detectBackground = true): LyricLine[] => 
     if (line.words.length === 1 && line.words[0].endTime <= line.words[0].startTime) {
       line.words[0].endTime = line.endTime;
     }
-    lastStartTime = line.startTime;
+    if (!line.isBG) lastStartTime = line.startTime;
+  }
+  if (offset !== 0) {
+    for (const line of merged) {
+      // LRC offset 正值表示提前显示，导出时仅保留调整后的时间戳。
+      line.startTime = Math.max(0, Math.min(MAX_TIME, line.startTime - offset));
+      line.endTime = Math.max(0, Math.min(MAX_TIME, line.endTime - offset));
+      for (const word of line.words) {
+        word.startTime = Math.max(0, Math.min(MAX_TIME, word.startTime - offset));
+        word.endTime = Math.max(0, Math.min(MAX_TIME, word.endTime - offset));
+      }
+    }
   }
   return merged.filter(
     (line) =>
