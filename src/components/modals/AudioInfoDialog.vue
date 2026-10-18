@@ -12,13 +12,14 @@ const loading = ref(false);
 const error = ref("");
 let requestId = 0;
 
-const formatRate = (rate: number): string => `${(rate / 1000).toFixed(1)} kHz`;
+const formatRate = (rate: number): string =>
+  rate > 0 ? `${rate / 1000} kHz` : t("quality.unknown");
 const formatChannels = (channels: number): string => {
+  if (channels <= 0) return t("quality.unknown");
   const label = channels === 1 ? "mono" : channels === 2 ? "stereo" : "multiChannel";
   return `${t(`quality.${label}`)} · ${channels}`;
 };
-const stateLabel = (active: boolean): string =>
-  t(active ? "quality.active" : "quality.inactive");
+const stateLabel = (active: boolean): string => t(active ? "quality.active" : "quality.inactive");
 
 const refresh = async (): Promise<void> => {
   const currentRequest = ++requestId;

@@ -123,7 +123,7 @@ const kgTrackQuality = (
     fileSize: number,
     bitRate: number,
     bitsPerSample: number,
-    sampleRate = 44100,
+    sampleRate = 0,
   ) => ({
     fileSize,
     quality: {
@@ -136,7 +136,7 @@ const kgTrackQuality = (
   });
 
   const sizes = song.sizes;
-  if (sizes?.flac24bit) return create("flac", sizes.flac24bit, 0, 24, 96000);
+  if (sizes?.flac24bit) return create("flac", sizes.flac24bit, 0, 24);
   if (sizes?.flac) return create("flac", sizes.flac, 0, 16);
   if (sizes?.["320k"]) return create("mp3", sizes["320k"], 320000, 16);
   if (sizes?.["128k"]) return create("mp3", sizes["128k"], 128000, 16);

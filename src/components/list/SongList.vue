@@ -13,7 +13,7 @@ import { usePlaylistPicker } from "@/composables/usePlaylistPicker";
 import { useFloatingPlayerBar } from "@/composables/useFloatingPlayerBar";
 import { formatTime } from "@/utils/time";
 import { formatFileSize } from "@/utils/format";
-import { isLosslessQuality, getQualityLabel } from "@/utils/quality";
+import { isLosslessQuality, getQualityDescription, getQualityLabel } from "@/utils/quality";
 import { navigateToAlbum, navigateToArtist } from "@/utils/navigate";
 import type { SVirtualListExposed } from "@/components/ui/SVirtualList.vue";
 import * as player from "@/core/player";
@@ -587,6 +587,7 @@ defineExpose({
                   >
                     <span
                       v-if="item.quality && !settings.preset.hideQualityTag"
+                      :title="getQualityDescription(item.quality)"
                       class="shrink-0 px-1 rounded text-[10px] leading-[18px] font-bold border border-solid"
                       :class="
                         isLosslessQuality(item.quality)

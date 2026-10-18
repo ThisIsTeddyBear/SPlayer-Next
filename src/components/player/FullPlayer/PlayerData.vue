@@ -176,26 +176,27 @@ const alignItems = computed(() => {
           <div class="flex flex-col gap-1.5 text-cover/70">
             <div class="flex justify-between">
               <span class="text-cover/40">{{ t("quality.codec") }}</span>
-              <span>{{ quality.codec.toUpperCase() }}</span>
+              <span>{{ quality.codec.trim().toUpperCase() || t("quality.unknown") }}</span>
             </div>
-            <div class="flex justify-between">
+            <div v-if="quality.sampleRate > 0" class="flex justify-between">
               <span class="text-cover/40">{{ t("quality.sampleRate") }}</span>
-              <span>{{ (quality.sampleRate / 1000).toFixed(1) }} kHz</span>
+              <span>{{ quality.sampleRate / 1000 }} kHz</span>
             </div>
             <div v-if="quality.bitsPerSample > 0" class="flex justify-between">
               <span class="text-cover/40">{{ t("quality.bitDepth") }}</span>
               <span>{{ quality.bitsPerSample }} bit</span>
             </div>
-            <div class="flex justify-between">
+            <div v-if="quality.bitRate > 0" class="flex justify-between">
               <span class="text-cover/40">{{ t("quality.bitRate") }}</span>
               <span>{{ Math.round(quality.bitRate / 1000) }} kbps</span>
             </div>
-            <div class="flex justify-between">
+            <div v-if="quality.channels > 0" class="flex justify-between">
               <span class="text-cover/40">{{ t("quality.channels") }}</span>
               <span>{{ channelText }} · {{ quality.channels }}</span>
             </div>
           </div>
         </div>
+        <div v-else class="text-xs text-cover/70">{{ t("quality.unknown") }}</div>
       </SPopover>
       <span
         class="inline-flex items-center justify-center leading-none px-1.5 py-1.2 rounded-md border border-solid border-cover/30"

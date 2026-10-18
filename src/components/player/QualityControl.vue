@@ -3,7 +3,7 @@ import type { SSelectOption } from "@/components/ui/SSelect.vue";
 import type { QualityLevel } from "@/utils/quality";
 import { useMediaStore } from "@/stores/media";
 import { useSettingsStore } from "@/stores/settings";
-import { getQualityLabel } from "@/utils/quality";
+import { getQualityDescription, getQualityLabel } from "@/utils/quality";
 import * as player from "@/core/player";
 import { isPlatform } from "@shared/types/platform";
 
@@ -19,6 +19,7 @@ const canSwitchQuality = computed(() => isPlatform(media.track?.source) && !medi
 /** 实际播放音质；详情加载前使用歌曲自身的音质信息。 */
 const quality = computed(() => media.detail?.quality ?? media.track?.quality);
 const qualityLabel = computed(() => getQualityLabel(quality.value));
+const qualityDescription = computed(() => getQualityDescription(quality.value));
 
 /** 音质偏好下拉选项 */
 const qualityOptions = computed<SSelectOption[]>(() => [
@@ -66,6 +67,7 @@ const onQualityChange = (value: string | number | boolean): void => {
     </template>
     <template #trigger>
       <span
+        :title="qualityDescription"
         :class="[
           chipBase,
           'cursor-pointer transition-colors',
@@ -80,7 +82,7 @@ const onQualityChange = (value: string | number | boolean): void => {
   </SPopselect>
   <STooltip
     v-else-if="media.track"
-    :content="t('settings.songLevel.unsupportedHint')"
+    :content="`${qualityDescription} — ${t('settings.songLevel.unsupportedHint')}`"
     :side-offset="16"
     side="top"
   >

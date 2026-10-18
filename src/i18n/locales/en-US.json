@@ -610,6 +610,7 @@
   },
   "quality": {
     "details": "Audio Quality",
+    "unknown": "Unknown",
     "outputInfo": "Audio Output Info",
     "noOutput": "No audio stream is open",
     "loadFailed": "Could not load audio output information",
@@ -937,9 +938,9 @@
       "switchTitle": "Switch Quality",
       "switchHint": "Subject to your account permissions",
       "unsupportedHint": "Quality switching is not supported for this track",
-      "lq": "Standard (LQ)",
-      "sq": "Higher (SQ)",
-      "hq": "Extreme (HQ)",
+      "lq": "Low Quality (LQ)",
+      "sq": "Standard Quality (SQ)",
+      "hq": "High Quality (HQ)",
       "lossless": "Lossless",
       "hi-res": "Hi-Res"
     },

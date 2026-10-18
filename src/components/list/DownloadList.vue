@@ -6,7 +6,7 @@ import { useStatusStore } from "@/stores/status";
 import { useDownloadStore } from "@/stores/download";
 import { useDownload } from "@/composables/useDownload";
 import { dialog } from "@/composables/useDialog";
-import { isLosslessQuality, getQualityLabel } from "@/utils/quality";
+import { isLosslessQuality, getQualityDescription, getQualityLabel } from "@/utils/quality";
 import { formatTime } from "@/utils/time";
 import { formatFileSize } from "@/utils/format";
 import * as player from "@/core/player";
@@ -209,6 +209,7 @@ defineExpose({ playAll });
               >
                 <span
                   v-if="item.track.quality"
+                  :title="getQualityDescription(item.track.quality)"
                   class="shrink-0 px-1 rounded text-[10px] leading-[18px] font-bold border border-solid"
                   :class="
                     isLosslessQuality(item.track.quality)

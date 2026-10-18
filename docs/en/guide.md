@@ -8,6 +8,23 @@ This page covers the basics of SPlayer-Next. See [Download](/en/download) for in
 - **Queue:** Use sequential, shuffle, and repeat-one modes, and drag tracks to reorder them.
 - **Quality and effects:** Select audio quality and enable fades, loudness normalization, the equalizer, playback speed, and pitch controls in Settings.
 
+### Audio quality badges
+
+The player badge describes the loaded source audio. Playback and download quality settings are requests; the delivered audio may differ. Before playback, list badges use the available library or provider metadata, which may describe the highest available version. Hover over a badge to see its source parameters, or open the full player's quality details.
+
+| Badge        | Classification                                                                                                                                        |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Hi-Res**   | Lossless or uncompressed linear PCM with at least 44.1 kHz and 16-bit resolution, and either a sample rate above 48 kHz or a bit depth above 16 bits. |
+| **Lossless** | A recognized lossless codec or uncompressed linear PCM that does not qualify as Hi-Res. There is no minimum bitrate.                                  |
+| **HQ**       | A recognized lossy codec at 320 kbps or above.                                                                                                        |
+| **SQ**       | A recognized lossy codec at 192 kbps or above, below 320 kbps.                                                                                        |
+| **LQ**       | A recognized lossy codec below 192 kbps.                                                                                                              |
+| **Unknown**  | The codec is missing or unrecognized, or a lossy codec's bitrate is unavailable.                                                                      |
+
+The Hi-Res rule follows the [JEITA examples published by the Japan Audio Society](https://www.jas-audio.or.jp/hi-res/definition). For example, 16-bit / 44.1 kHz PCM WAV is Lossless; 24-bit / 44.1 kHz, 24-bit / 48 kHz, and 16-bit / 88.2 kHz lossless audio are Hi-Res. Lossless audio with missing resolution metadata remains Lossless until its resolution can be established.
+
+LQ, SQ, and HQ are SPlayer's bitrate categories, rather than universal quality standards. Bitrate does not indicate equal fidelity across different codecs. File extensions alone do not establish the encoding: WAV and AIFF containers require a recognized audio codec. Badges describe encoding and resolution; they do not verify recording provenance or detect upsampling. Audio output settings and Bit Perfect status are shown separately.
+
 ## Local music
 
 1. Open **Settings → Local Music** or the library page and add folders to scan.

@@ -80,7 +80,7 @@ const qqTrackQuality = (song: QMSong): { quality: AudioQuality; fileSize: number
     fileSize: number,
     bitRate: number,
     bitsPerSample: number,
-    sampleRate = 44100,
+    sampleRate = 0,
   ) => ({
     fileSize,
     quality: {
@@ -92,18 +92,12 @@ const qqTrackQuality = (song: QMSong): { quality: AudioQuality; fileSize: number
     },
   });
   if (song.sizeHiRes) {
-    return create(
-      "flac",
-      song.sizeHiRes,
-      0,
-      song.hiResBitDepth || 24,
-      song.hiResSampleRate || 96000,
-    );
+    return create("flac", song.sizeHiRes, 0, song.hiResBitDepth || 24, song.hiResSampleRate || 0);
   }
   if (song.sizeFlac) return create("flac", song.sizeFlac, 0, 16);
   if (song.sizeApe) return create("ape", song.sizeApe, 0, 16);
   if (song.size320) return create("mp3", song.size320, 320000, 16);
-  if (song.sizeOgg) return create("ogg", song.sizeOgg, 0, 16);
+  if (song.sizeOgg) return create("vorbis", song.sizeOgg, 0, 16);
   if (song.size128) return create("mp3", song.size128, 128000, 16);
   return undefined;
 };
