@@ -1592,10 +1592,6 @@
       "label": "Custom Theme Color",
       "description": "Primary color used by the custom source"
     },
-    "globalTint": {
-      "label": "Global Tint",
-      "description": "Apply theme color tint to the entire interface"
-    },
     "appearanceStyle": {
       "label": "Appearance Style",
       "description": "How the application background is rendered",

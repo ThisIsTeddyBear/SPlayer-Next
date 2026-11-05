@@ -69,14 +69,6 @@ const appearanceCategory: SettingCategory = {
             },
           ],
         },
-        {
-          key: "globalTint",
-          type: "switch",
-          binding: { store: "theme", path: "globalTint" },
-          defaultValue: false,
-          disabled: () =>
-            useThemeStore().songThemeEnabled || useThemeStore().appearanceStyle === "image",
-        },
       ],
     },
     {

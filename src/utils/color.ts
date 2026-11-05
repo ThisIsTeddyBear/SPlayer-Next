@@ -159,7 +159,7 @@ export const hexToRgb = (hex: string): string => {
 };
 
 /** 根据主色 HEX 和明暗模式生成色板 */
-export const generatePalette = (hex: string, isDark: boolean, globalTint = false): ThemePalette => {
+export const generatePalette = (hex: string, isDark: boolean): ThemePalette => {
   const safeHex = typeof hex === "string" && hex.startsWith("#") ? hex : DEFAULT_PRIMARY;
   const theme: Theme = themeFromSourceColor(argbFromHex(safeHex));
   // 用 secondary palette 生成主色
@@ -176,23 +176,6 @@ export const generatePalette = (hex: string, isDark: boolean, globalTint = false
     onPrimary: isDark ? toneColor(10) : toneColor(100),
     onPrimaryContainer: isDark ? toneColor(90) : toneColor(10),
   };
-  // 全局着色
-  if (globalTint) {
-    return {
-      ...primaryColors,
-      secondary: isDark ? toneColor(80) : toneColor(40),
-      secondaryContainer: isDark ? toneColor(30) : toneColor(90),
-      surface: isDark ? toneColor(20) : toneColor(94),
-      surfaceAlt: isDark ? toneColor(25) : toneColor(86),
-      surfacePanel: isDark ? toneColor(16) : toneColor(92),
-      surfaceBright: isDark ? toneColor(40) : toneColor(95),
-      onSurface: primary,
-      onSurfaceVariant: isDark ? toneColor(70) : toneColor(30),
-      outline: isDark ? toneColor(40) : toneColor(60),
-      outlineVariant: isDark ? toneColor(25) : toneColor(80),
-    };
-  }
-  // 非全局着色
   const base = isDark ? SOLID_PALETTE_DARK : SOLID_PALETTE_LIGHT;
   return { ...base, ...primaryColors };
 };

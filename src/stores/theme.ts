@@ -21,8 +21,6 @@ export const useThemeStore = defineStore(
     const source = ref<ThemeSource>("default");
     /** 自定义主色 HEX */
     const customColor = ref(DEFAULT_PRIMARY);
-    /** 全局着色 */
-    const globalTint = ref(false);
     /** 歌曲主题独立于用户保存的基础主题，关闭后直接恢复原设置。 */
     const songThemeEnabled = ref(true);
     const songLoaded = ref(false);
@@ -69,10 +67,6 @@ export const useThemeStore = defineStore(
       return DEFAULT_PRIMARY;
     });
 
-    /** 实际生效的全局着色 */
-    const effectiveGlobalTint = computed(() =>
-      effectiveStyle.value === "image" ? true : globalTint.value,
-    );
     /** 实际生效的封面颜色 */
     const trackedColorForCover = computed(() =>
       effectiveStyle.value === "image" ? imageBackgroundColor.value : coverColor.value,
@@ -95,7 +89,7 @@ export const useThemeStore = defineStore(
           : neutral
         : useSolid
           ? neutral
-          : generatePalette(effectiveColor.value, isDark.value, effectiveGlobalTint.value);
+          : generatePalette(effectiveColor.value, isDark.value);
       applyThemeToDOM(palette, coverColor.value, coverSingerColors.value, isDark.value);
       document.documentElement.dataset.appearanceStyle = effectiveStyle.value;
       document.documentElement.dataset.songTheme = songThemeActive.value ? "active" : "off";
@@ -144,7 +138,6 @@ export const useThemeStore = defineStore(
           isDark,
           effectiveColor,
           source,
-          effectiveGlobalTint,
           coverColor,
           coverSingerColors,
           effectiveStyle,
@@ -160,7 +153,6 @@ export const useThemeStore = defineStore(
       mode,
       source,
       customColor,
-      globalTint,
       songThemeEnabled,
       songLoaded,
       songColors,
@@ -187,7 +179,6 @@ export const useThemeStore = defineStore(
         "mode",
         "source",
         "customColor",
-        "globalTint",
         "songThemeEnabled",
         "appearanceStyle",
         "imageBackground",

@@ -31,7 +31,6 @@ it("enables song theming by default and restores saved settings when turned off"
   theme.mode = "dark";
   theme.source = "custom";
   theme.customColor = "#2563eb";
-  theme.globalTint = true;
   theme.songLoaded = true;
   theme.songColors = ["#dc2626"];
   scope.run(theme.init);
@@ -44,11 +43,13 @@ it("enables song theming by default and restores saved settings when turned off"
   await nextTick();
   expect(document.documentElement.dataset.songTheme).toBe("off");
   expect(document.documentElement.style.getPropertyValue("--s-primary")).toBe(
-    generatePalette("#2563eb", true, true).primary,
+    generatePalette("#2563eb", true).primary,
+  );
+  expect(document.documentElement.style.getPropertyValue("--s-surface")).toBe(
+    SOLID_PALETTE_DARK.surface,
   );
   expect(theme.source).toBe("custom");
   expect(theme.customColor).toBe("#2563eb");
-  expect(theme.globalTint).toBe(true);
 });
 
 it("restores the base theme when the loaded song is cleared", async () => {
@@ -69,7 +70,6 @@ it("uses neutral light and dark palettes for a loaded song without useful artwor
   theme.mode = "light";
   theme.source = "custom";
   theme.customColor = "#dc2626";
-  theme.globalTint = true;
   theme.songLoaded = true;
   scope.run(theme.init);
   expect(document.documentElement.style.getPropertyValue("--s-primary")).toBe(
