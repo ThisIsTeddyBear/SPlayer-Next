@@ -99,7 +99,9 @@ it.each([true, false])("keeps text neutral and readable across song hues (dark: 
     const neutral = isDark ? SOLID_PALETTE_DARK : SOLID_PALETTE_LIGHT;
     expect(palette.onSurface).toBe(neutral.onSurface);
     expect(contrast(palette.onPrimary, palette.primary)).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(palette.onPrimaryContainer, palette.primaryContainer)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(palette.onPrimaryContainer, palette.primaryContainer)).toBeGreaterThanOrEqual(
+      4.5,
+    );
     for (const surface of [palette.surface, palette.surfacePanel, palette.surfaceBright]) {
       expect(contrast(palette.onSurface, surface)).toBeGreaterThanOrEqual(4.5);
       expect(contrast(palette.onSurfaceVariant, surface)).toBeGreaterThanOrEqual(4.5);
@@ -168,8 +170,8 @@ it("uses at most three colors sampled from the artwork for ambient gradients", (
   );
   for (const color of result.ambientColors) {
     const actual = hexToRgb(color).split(" ").map(Number);
-    expect(sampled.some((rgb) => rgb.every((channel, i) => Math.abs(channel - actual[i]) <= 8))).toBe(
-      true,
-    );
+    expect(
+      sampled.some((rgb) => rgb.every((channel, i) => Math.abs(channel - actual[i]) <= 8)),
+    ).toBe(true);
   }
 });

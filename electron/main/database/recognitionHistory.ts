@@ -35,7 +35,9 @@ export const recordRecognition = (candidate: RecognitionCandidate): void => {
  * 获取按最近识别时间倒序排列的歌曲历史
  * @param limit - 返回条数上限，首页只读取少量最近记录
  */
-export const getRecognitionHistory = (limit = MAX_RECOGNITION_HISTORY): RecognitionHistoryEntry[] => {
+export const getRecognitionHistory = (
+  limit = MAX_RECOGNITION_HISTORY,
+): RecognitionHistoryEntry[] => {
   const rows = getDb()
     .prepare(
       `SELECT candidate_json, recognized_at FROM recognition_history

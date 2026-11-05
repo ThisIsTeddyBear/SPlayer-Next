@@ -269,13 +269,7 @@ const start = (): void => void session.start();
       <SButton v-else-if="isBusy" variant="secondary" size="large" block @click="session.stop()">
         {{ t("recognition.cancel") }}
       </SButton>
-      <SButton
-        v-else-if="candidate"
-        variant="secondary"
-        size="large"
-        block
-        @click="reset"
-      >
+      <SButton v-else-if="candidate" variant="secondary" size="large" block @click="reset">
         <template #icon><IconLucideArrowLeft /></template>
         {{ t("common.back") }}
       </SButton>

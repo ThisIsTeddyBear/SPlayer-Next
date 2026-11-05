@@ -30,6 +30,12 @@ export default defineConfig({
   ],
   test: {
     environment: "happy-dom",
+    server: {
+      deps: {
+        // 该包包含省略扩展名的 ESM 导入，需要由 Vite 解析。
+        inline: ["@material/material-color-utilities"],
+      },
+    },
     include: [
       "src/**/*.spec.ts",
       "shared/**/*.spec.ts",

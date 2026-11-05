@@ -26,7 +26,9 @@ const imageStyle = computed<Record<string, string>>(() => ({
       class="absolute inset-0 transition-opacity"
       :style="{
         backgroundColor: theme.isDark ? '#000' : '#fff',
-        opacity: theme.isDark ? theme.imageBackground.dim : Math.max(0.75, theme.imageBackground.dim),
+        opacity: theme.isDark
+          ? theme.imageBackground.dim
+          : Math.max(0.75, theme.imageBackground.dim),
       }"
     />
   </div>

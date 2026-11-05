@@ -218,7 +218,9 @@ const openRecognition = (candidate?: RecognitionCandidate): void => {
             :playing="status.isPlaying"
             :action-label="
               t(
-                isCurrentTrack(item.track) && status.isPlaying ? 'home.pauseTrack' : 'home.playTrack',
+                isCurrentTrack(item.track) && status.isPlaying
+                  ? 'home.pauseTrack'
+                  : 'home.playTrack',
                 { title: item.track.title },
               )
             "
