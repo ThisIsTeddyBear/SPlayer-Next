@@ -79,8 +79,6 @@ export interface Track {
   fileSize?: number;
   mtime?: number;
   ctime?: number;
-  /** 首次加入本地音乐库的时间（毫秒） */
-  addedAt?: number;
   quality?: AudioQuality;
   fee?: TrackFee;
   cloud?: boolean;
