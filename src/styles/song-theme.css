@@ -8,15 +8,6 @@ html[data-song-theme="active"] [data-app-theme].glass-panel {
   background-color: rgb(var(--s-surface-panel) / 0.76);
 }
 
-html[data-song-theme="active"] [data-app-theme] .home-feature {
-  background-color: rgb(var(--s-surface-panel) / 0.76);
-  background-image: radial-gradient(
-    ellipse at 0% 0%,
-    rgb(var(--s-primary) / 0.12),
-    transparent 75%
-  );
-}
-
 html[data-song-theme="active"] [data-app-theme] :where(h1, h2, h3) {
   color: color-mix(in srgb, rgb(var(--s-primary)) 30%, rgb(var(--s-on-surface)));
   transition: color 350ms ease;

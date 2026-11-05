@@ -280,12 +280,9 @@
       "evening": "Good evening"
     },
     "stats": {
-      "weekDuration": "This week",
-      "newFavorites": "New favorites",
-      "listenStreak": "Streak",
-      "unitHour": "h",
-      "unitSong": "songs",
-      "unitDay": "days",
+      "activity": "Listening activity",
+      "weekSummary": "{duration} this week",
+      "view": "Listening stats",
       "open": "View listening statistics"
     },
     "duration": {
@@ -294,15 +291,15 @@
       "minutes": "{minutes} min"
     },
     "subtitle": {
-      "plain1": "May good music keep you company today",
-      "plain2": "Put on your headphones and let the world quiet down",
-      "plain3": "Music's ready — pick a track to start",
+      "plain1": "Find your next favorite.",
+      "plain2": "Put on your headphones. Make yourself at home.",
+      "plain3": "What sounds good today?",
       "streak": "You've listened {days} days straight, keep it up",
       "weekListened": "You've listened for {duration} this week",
       "weekMore": "That's {duration} more than last week",
       "weekLess": "That's {duration} less than last week",
       "favorites": "You added {count} new favorites this week",
-      "recent": "What to play today? Pick up your {count} recently played"
+      "recent": "Pick up where you left off, or find something new."
     },
     "quickActions": {
       "luck": {
@@ -351,24 +348,25 @@
       "subtitle": "Freshly released albums"
     },
     "hero": {
-      "play": "Play now",
-      "addQueue": "Add to queue",
+      "play": "Play Mix",
+      "trackCount": "{count} song | {count} songs",
+      "addQueue": "Add {count} song to the queue | Add {count} songs to the queue",
       "empty": "No playable tracks",
       "added": "Added {count} tracks to the queue",
       "daily": {
         "tag": "Daily Mix",
         "title": "Your daily mix",
-        "subtitle": "Picked for your taste · {count} tracks"
+        "subtitle": "A fresh selection of your daily recommendations."
       },
       "local": {
-        "tag": "Local",
-        "title": "Rediscover your collection",
-        "subtitle": "Random picks from your library · {count} tracks"
+        "tag": "Library Mix",
+        "title": "Rediscover your library",
+        "subtitle": "Familiar favorites. A few forgotten gems. A fresh shuffle."
       },
       "liked": {
         "tag": "Favorites",
         "title": "Favorites for today",
-        "subtitle": "All your liked music · {count} tracks"
+        "subtitle": "The songs you love, together in one mix."
       },
       "refresh": "Find another mix",
       "surprise": "Surprise me",
@@ -379,9 +377,12 @@
       "openLibrary": "Open library"
     },
     "playTrack": "Play {title}",
+    "pauseTrack": "Pause {title}",
+    "nowPlaying": "Now playing",
+    "currentTrack": "Current track",
     "recent": {
       "title": "Jump back in",
-      "viewHistory": "View listening history",
+      "viewHistory": "View history",
       "emptyTitle": "Your next favorite starts here",
       "emptyDescription": "Play a song and come back to it here whenever you like."
     },

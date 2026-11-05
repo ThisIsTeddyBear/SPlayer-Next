@@ -2,13 +2,6 @@ import type { PlayStatsSummary } from "@shared/types/stats";
 import { useUserStore } from "@/stores/user";
 import { useHistoryStore } from "@/stores/history";
 
-/** 单个统计卡片 */
-export interface HeaderStat {
-  value: string;
-  unit: string;
-  label: string;
-}
-
 /** 一条副标题 */
 interface SubtitlePick {
   key: string;
@@ -25,7 +18,7 @@ const PLAIN_KEYS = ["home.subtitle.plain1", "home.subtitle.plain2", "home.subtit
 const pickRandom = <T>(list: T[]): T => list[Math.floor(Math.random() * list.length)];
 
 /**
- * 首页头部数据：按时段问候语、随机副标题、右侧统计
+ * 首页头部数据：按时段问候语、随机副标题、简洁聆听摘要
  *
  * 副标题每次进入随机挑一条（连续天数 / 本周时长 / 环比 / 新增收藏 / 最近播放），
  * 数据不足的条目自动不入池，纯问候恒在
@@ -65,26 +58,11 @@ export const useHomeHeader = () => {
 
   const stats = ref<PlayStatsSummary | null>(null);
 
-  /** 右侧三项统计 */
-  const headerStats = computed<HeaderStat[]>(() => {
+  const listeningSummary = computed(() => {
     const data = stats.value;
-    return [
-      {
-        value: data ? (data.weekListenedMs / 3600000).toFixed(1) : "—",
-        unit: t("home.stats.unitHour"),
-        label: t("home.stats.weekDuration"),
-      },
-      {
-        value: data ? String(data.weekFavoriteAdds) : "—",
-        unit: t("home.stats.unitSong"),
-        label: t("home.stats.newFavorites"),
-      },
-      {
-        value: data ? String(data.streakDays) : "—",
-        unit: t("home.stats.unitDay"),
-        label: t("home.stats.listenStreak"),
-      },
-    ];
+    return data && data.weekListenedMs > 0
+      ? t("home.stats.weekSummary", { duration: formatHm(data.weekListenedMs) })
+      : null;
   });
 
   /** 副标题候选池 */
@@ -109,10 +87,7 @@ export const useHomeHeader = () => {
         pool.push({ key: "home.subtitle.favorites", count: data.weekFavoriteAdds });
       }
     }
-    const recentCount = history.tracks.length;
-    if (recentCount > 0) {
-      pool.push({ key: "home.subtitle.recent", count: recentCount });
-    }
+    if (history.tracks.length > 0) pool.push({ key: "home.subtitle.recent" });
     return pool;
   };
 
@@ -141,5 +116,5 @@ export const useHomeHeader = () => {
     subtitlePick.value = pickRandom(buildSubtitles());
   };
 
-  return { greetingTitle, greetingSub, headerStats, load };
+  return { greetingTitle, greetingSub, listeningSummary, load };
 };

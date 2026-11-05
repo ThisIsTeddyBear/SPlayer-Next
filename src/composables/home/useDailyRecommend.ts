@@ -16,8 +16,8 @@ export interface HeroContent {
   title: string;
   /** 副标题 */
   subtitle: string;
-  /** 代表曲目，仅包含轻量元数据 */
-  track: Track;
+  trackCount: number;
+  artworks: string[];
 }
 
 /** 选中的来源：曲目 + 代表曲目下标 */
@@ -59,13 +59,18 @@ export const useDailyRecommend = () => {
   const hero = computed<HeroContent | null>(() => {
     const current = slide.value;
     if (!current) return null;
-    const featured = current.tracks[current.featuredIndex];
+    const artworks: string[] = [];
+    for (let offset = 0; offset < current.tracks.length && artworks.length < 4; offset++) {
+      const cover = current.tracks[(current.featuredIndex + offset) % current.tracks.length].cover;
+      if (cover && !artworks.includes(cover)) artworks.push(cover);
+    }
     return {
       kind: current.kind,
       tag: t(`home.hero.${current.kind}.tag`),
       title: t(`home.hero.${current.kind}.title`),
-      subtitle: t(`home.hero.${current.kind}.subtitle`, { count: current.tracks.length }),
-      track: featured,
+      subtitle: t(`home.hero.${current.kind}.subtitle`),
+      trackCount: current.tracks.length,
+      artworks,
     };
   });
 
