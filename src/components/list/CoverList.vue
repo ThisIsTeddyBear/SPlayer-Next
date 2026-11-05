@@ -1,11 +1,11 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends CoverItem">
 import type { CoverItem } from "@/types/artist";
 import type { SVirtualListExposed } from "@/components/ui/SVirtualList.vue";
 import { useFloatingPlayerBar } from "@/composables/useFloatingPlayerBar";
 
-export interface CoverListProps {
+export interface CoverListProps<T extends CoverItem = CoverItem> {
   /** 列表数据 */
-  items: CoverItem[];
+  items: T[];
   /** 列表类型 */
   type?: "default" | "artist";
   /** 是否虚拟滚动 */
@@ -30,7 +30,7 @@ export interface CoverListProps {
   loadingMore?: boolean;
 }
 
-const props = withDefaults(defineProps<CoverListProps>(), {
+const props = withDefaults(defineProps<CoverListProps<T>>(), {
   type: "default",
   virtual: true,
   minSize: 140,
@@ -53,8 +53,12 @@ const virtualPaddingBottom = computed(() =>
 );
 
 const emit = defineEmits<{
-  click: [item: CoverItem];
+  click: [item: T];
   reachBottom: [];
+}>();
+
+defineSlots<{
+  item?: (props: { item: T }) => unknown;
 }>();
 
 const virtualListRef = ref<SVirtualListExposed | null>(null);
@@ -91,7 +95,7 @@ const rowHeight = computed(() => colWidth.value + INFO_HEIGHT + props.gap);
 
 interface Row {
   id: string;
-  items: CoverItem[];
+  items: T[];
 }
 
 /** 把 items 按列数切成行 */
@@ -148,15 +152,17 @@ const getRowKey = (row: Row): string => row.id;
           gap: `${gap}px`,
         }"
       >
-        <CoverCard
-          v-for="item in row.items"
-          :key="item.id"
-          :item="item"
-          :type="type"
-          :rounded="rounded"
-          :fallback="fallback"
-          @click="emit('click', item)"
-        />
+        <template v-for="item in row.items" :key="item.id">
+          <slot name="item" :item="item">
+            <CoverCard
+              :item="item"
+              :type="type"
+              :rounded="rounded"
+              :fallback="fallback"
+              @click="emit('click', item)"
+            />
+          </slot>
+        </template>
       </div>
     </template>
   </SVirtualList>
@@ -170,14 +176,16 @@ const getRowKey = (row: Row): string => row.id;
       gap: `${gap}px`,
     }"
   >
-    <CoverCard
-      v-for="item in items"
-      :key="item.id"
-      :item="item"
-      :type="type"
-      :rounded="rounded"
-      :fallback="fallback"
-      @click="emit('click', item)"
-    />
+    <template v-for="item in items" :key="item.id">
+      <slot name="item" :item="item">
+        <CoverCard
+          :item="item"
+          :type="type"
+          :rounded="rounded"
+          :fallback="fallback"
+          @click="emit('click', item)"
+        />
+      </slot>
+    </template>
   </div>
 </template>

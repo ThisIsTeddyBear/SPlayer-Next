@@ -27,6 +27,7 @@ interface TrackRow {
   file_size: number;
   file_mtime: number | null;
   file_ctime: number | null;
+  added_at: number;
   scanned_at: number;
 }
 
@@ -61,6 +62,7 @@ const rowToTrack = (row: TrackRow): Track => {
     fileSize: row.file_size ?? undefined,
     mtime: row.file_mtime ?? undefined,
     ctime: row.file_ctime ?? undefined,
+    addedAt: row.added_at,
     quality,
   };
 };
@@ -152,9 +154,9 @@ export const upsertTracks = (tracks: UpsertTrack[]): void => {
   const d = getDb();
   const stmt = d.prepare(`
     INSERT INTO tracks
-      (id, path, cue_path, cue_audio_path, cue_start_ms, cue_end_ms, title, isrc, track, artists, album, duration, cover, codec, sample_rate, bit_rate, channels, bits_per_sample, file_size, file_mtime, file_ctime, scanned_at)
+      (id, path, cue_path, cue_audio_path, cue_start_ms, cue_end_ms, title, isrc, track, artists, album, duration, cover, codec, sample_rate, bit_rate, channels, bits_per_sample, file_size, file_mtime, file_ctime, added_at, scanned_at)
     VALUES
-      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       path = excluded.path,
       cue_path = excluded.cue_path,
@@ -203,6 +205,7 @@ export const upsertTracks = (tracks: UpsertTrack[]): void => {
         t.fileSize,
         t.mtime,
         t.ctime,
+        now,
         now,
       );
     }

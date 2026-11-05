@@ -40,6 +40,7 @@ const props = withDefaults(
     showDuration?: boolean;
     showSize?: boolean;
     enableSort?: boolean;
+    compact?: boolean;
     source?: TrackSource;
     collectionType?: CollectionType;
     collectionId?: string;
@@ -55,6 +56,7 @@ const props = withDefaults(
     showDuration: true,
     showSize: false,
     enableSort: false,
+    compact: false,
     source: "local",
     collectionType: undefined,
     collectionId: undefined,
@@ -251,9 +253,9 @@ const onTrackTagsSaved = (updated: Track[]): void => {
 onActivated(batch.exit);
 
 /**
- * Handle track double click to play
- * @param item - Track item
- * @param index - Index in list
+ * 从当前筛选和排序后的列表开始播放。
+ * @param item - 选中的曲目
+ * @param index - 曲目在列表中的位置
  */
 const onTrackDblClick = (item: Track, index: number): void => {
   if (batch.active.value) return;
@@ -266,11 +268,16 @@ const onTrackDblClick = (item: Track, index: number): void => {
 
 defineExpose({
   enterBatch: batch.enter,
+  getPlaybackItems: (): Track[] => sortedItems.value,
 });
 </script>
 
 <template>
-  <div class="relative h-full" @contextmenu.capture="onListContextMenu">
+  <div
+    class="song-list relative h-full"
+    :class="{ 'song-list-compact': compact }"
+    @contextmenu.capture="onListContextMenu"
+  >
     <SContextMenu :items="contextMenuItems" @select="onContextMenu">
       <template #header>
         <div v-if="contextTrack">
@@ -290,7 +297,7 @@ defineExpose({
       <SVirtualList
         ref="virtualListRef"
         :items="sortedItems"
-        :item-height="88"
+        :item-height="compact ? 56 : 88"
         :padding-bottom="isFloatingPlayerBar ? PLAYER_BAR_GAP : 80"
         :get-item-key="(item: Track) => item.id"
         item-fixed
@@ -309,10 +316,10 @@ defineExpose({
         </template>
         <template #header>
           <slot name="topInfo" />
-          <div class="pr-1.5">
+          <div class="song-list-header pr-1.5">
             <div
               v-if="batch.active.value"
-              class="flex items-center gap-2 pl-3 pr-3 mx-3 h-10 text-sm"
+              class="song-list-batch flex items-center gap-2 pl-3 pr-3 mx-3 h-10 text-sm"
             >
               <div v-if="showIndex" class="w-8 shrink-0 flex items-center justify-center">
                 <SCheckbox
@@ -415,14 +422,14 @@ defineExpose({
             </div>
             <div
               v-else
-              class="flex items-center gap-3 pl-3 pr-6 mx-3 h-10 text-sm text-on-surface-variant/60"
+              class="song-list-columns flex items-center gap-3 pl-3 pr-6 mx-3 h-10 text-sm text-on-surface-variant/60"
             >
               <div v-if="showIndex" class="w-8 shrink-0 flex items-center justify-center">
                 <span>#</span>
               </div>
               <div class="flex-1 min-w-0">
                 <SPopover
-                  v-if="enableSort"
+                  v-if="enableSort && !compact"
                   :side-offset="6"
                   trigger="click"
                   side="bottom"
@@ -474,10 +481,10 @@ defineExpose({
                   {{ t("songList.title") }}
                 </div>
               </div>
-              <div v-if="showAlbum" class="flex-1 min-w-0">
+              <div v-if="showAlbum" class="song-album flex-1 min-w-0">
                 {{ t("songList.album") }}
               </div>
-              <div class="w-16 shrink-0 text-center">
+              <div class="song-actions w-16 shrink-0 text-center">
                 {{ t("songList.actions") }}
               </div>
               <div v-if="showDuration" class="w-16 shrink-0 text-center">
@@ -490,10 +497,16 @@ defineExpose({
           </div>
         </template>
         <template #default="{ item, index }: { item: Track; index: number }">
-          <div class="px-3 pb-3">
+          <div class="song-list-item px-3 pb-3">
             <div
               data-song-item
-              class="group flex items-center gap-3 pl-3 pr-6 h-19 rounded-xl cursor-pointer border-2 border-solid transition-[background-color,border-color] duration-200"
+              class="song-row group flex items-center gap-3 pl-3 pr-6 h-19 rounded-xl cursor-pointer border-2 border-solid transition-[background-color,border-color] duration-200"
+              :data-playing="playingId === item.id"
+              :data-selected="batch.active.value && batch.selectedIds.value.has(item.id)"
+              :data-even="index % 2 === 0"
+              :role="compact ? 'group' : undefined"
+              :aria-label="compact ? item.title : undefined"
+              :aria-current="compact && playingId === item.id ? 'true' : undefined"
               :class="
                 batch.active.value
                   ? batch.selectedIds.value.has(item.id)
@@ -517,13 +530,7 @@ defineExpose({
                       ? 'text-primary'
                       : 'text-on-surface-variant'
                 "
-                @click.stop="
-                  batch.active.value
-                    ? batch.toggle(item.id)
-                    : playingId === item.id
-                      ? player.togglePlay()
-                      : player.playNow(item, props.playbackContext)
-                "
+                @click.stop="batch.active.value ? batch.toggle(item.id) : undefined"
               >
                 <SCheckbox
                   v-if="batch.active.value"
@@ -532,7 +539,22 @@ defineExpose({
                   @update:checked="batch.toggle(item.id)"
                   @click.stop
                 />
-                <template v-else>
+                <button
+                  v-else
+                  type="button"
+                  class="song-play-button"
+                  :aria-label="
+                    t(playingId === item.id && status.isPlaying ? 'player.pause' : 'player.play')
+                  "
+                  @click.stop="
+                    playingId === item.id
+                      ? player.togglePlay()
+                      : compact
+                        ? onTrackDblClick(item, index)
+                        : player.playNow(item, props.playbackContext)
+                  "
+                  @dblclick.stop
+                >
                   <span
                     v-if="playingId !== item.id"
                     class="text-sm font-bold tabular-nums group-hover:opacity-0 transition-opacity duration-300"
@@ -543,7 +565,7 @@ defineExpose({
                     v-else
                     class="size-5 group-hover:opacity-0 transition-opacity duration-300"
                   />
-                  <div
+                  <span
                     class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-[opacity,transform] duration-300 group-hover:scale-100 scale-80 cursor-pointer"
                   >
                     <IconLucidePause
@@ -551,15 +573,15 @@ defineExpose({
                       class="size-5"
                     />
                     <IconLucidePlay v-else class="size-5" />
-                  </div>
-                </template>
+                  </span>
+                </button>
               </div>
               <div class="flex-1 min-w-0 flex items-center gap-3">
-                <SImg :src="item.cover" class="size-12 rounded-lg shrink-0" />
+                <SImg :src="item.cover" class="song-cover size-12 rounded-lg shrink-0" />
                 <div class="flex-1 min-w-0">
                   <div class="flex items-baseline gap-1.5 min-w-0">
                     <span
-                      class="text-base font-medium truncate"
+                      class="song-title text-base font-medium truncate"
                       :class="playingId === item.id ? 'text-primary' : ''"
                     >
                       {{ item.title }}
@@ -573,7 +595,7 @@ defineExpose({
                     />
                     <span
                       v-if="item.comment && settings.preset.showSubtitle"
-                      class="flex-1 min-w-0 text-base truncate"
+                      class="song-comment flex-1 min-w-0 text-base truncate"
                       :class="
                         playingId === item.id ? 'text-primary/60' : 'text-on-surface-variant/60'
                       "
@@ -582,13 +604,13 @@ defineExpose({
                     </span>
                   </div>
                   <div
-                    class="text-sm mt-1 truncate flex items-center gap-1"
+                    class="song-meta text-sm mt-1 truncate flex items-center gap-1"
                     :class="playingId === item.id ? 'text-primary/70' : 'text-on-surface-variant'"
                   >
                     <span
                       v-if="item.quality && !settings.preset.hideQualityTag"
                       :title="getQualityDescription(item.quality)"
-                      class="shrink-0 px-1 rounded text-[10px] leading-[18px] font-bold border border-solid"
+                      class="song-quality shrink-0 px-1 rounded text-[10px] leading-[18px] font-bold border border-solid"
                       :class="
                         isLosslessQuality(item.quality)
                           ? 'text-amber-500 border-amber-500/40'
@@ -609,7 +631,7 @@ defineExpose({
                     >
                       EP
                     </span>
-                    <span class="truncate">
+                    <span class="song-artists truncate">
                       <template v-for="(artist, i) in item.artists" :key="artist.id ?? i">
                         <span
                           class="transition-opacity"
@@ -619,6 +641,9 @@ defineExpose({
                               : 'opacity-50'
                           "
                           @click.stop="goArtist(item, artist)"
+                          :role="compact && isArtistLinkable(item, artist) ? 'link' : undefined"
+                          :tabindex="compact && isArtistLinkable(item, artist) ? 0 : undefined"
+                          @keydown.enter.stop.prevent="goArtist(item, artist)"
                         >
                           {{ artist.name }}
                         </span>
@@ -633,21 +658,27 @@ defineExpose({
               </div>
               <div
                 v-if="showAlbum"
-                class="flex-1 min-w-0 truncate text-sm"
+                class="song-album flex-1 min-w-0 truncate text-sm"
                 :class="playingId === item.id ? 'text-primary/70' : 'text-on-surface'"
               >
                 <span
                   class="transition-opacity"
                   :class="isAlbumLinkable(item) ? 'cursor-pointer hover:opacity-70' : 'opacity-50'"
                   @click.stop="goAlbum(item)"
+                  :role="compact && isAlbumLinkable(item) ? 'link' : undefined"
+                  :tabindex="compact && isAlbumLinkable(item) ? 0 : undefined"
+                  @keydown.enter.stop.prevent="goAlbum(item)"
                 >
                   {{ item.album?.name || t("collection.unknownAlbum") }}
                 </span>
               </div>
               <div
                 v-if="!batch.active.value"
-                class="w-16 shrink-0 flex items-center justify-center"
+                class="song-actions w-16 shrink-0 flex items-center justify-center"
+                :data-liked="fav.isLiked(item)"
                 @click.stop
+                @focusin="contextTrack = item"
+                @pointerdown="contextTrack = item"
               >
                 <SButton
                   type="primary"
@@ -655,6 +686,7 @@ defineExpose({
                   circle
                   :size="28"
                   :icon-size="20"
+                  :aria-label="t(fav.isLiked(item) ? 'songList.unlike' : 'songList.like')"
                   @click="fav.toggle(item)"
                 >
                   <template #icon>
@@ -664,11 +696,30 @@ defineExpose({
                     </SIconSwap>
                   </template>
                 </SButton>
+                <SDropdownMenu
+                  v-if="compact"
+                  :items="contextMenuItems"
+                  align="end"
+                  @select="onContextMenu"
+                >
+                  <template #trigger>
+                    <SButton
+                      variant="ghost"
+                      circle
+                      :size="28"
+                      :aria-label="t('songList.context.more')"
+                      @click="contextTrack = item"
+                      @focus="contextTrack = item"
+                    >
+                      <template #icon><IconLucideEllipsis /></template>
+                    </SButton>
+                  </template>
+                </SDropdownMenu>
               </div>
               <div v-else class="w-16 shrink-0" />
               <div
                 v-if="showDuration"
-                class="w-16 shrink-0 text-center text-sm tabular-nums"
+                class="song-duration w-16 shrink-0 text-center text-sm tabular-nums"
                 :class="playingId === item.id ? 'text-primary/60' : 'text-on-surface-variant'"
               >
                 {{ formatTime(item.duration) }}
@@ -752,3 +803,152 @@ defineExpose({
     />
   </div>
 </template>
+
+<style scoped>
+.song-play-button {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.song-play-button:focus-visible > :first-child {
+  opacity: 0;
+}
+
+.song-play-button:focus-visible > :last-child {
+  opacity: 1;
+  transform: none;
+}
+
+.song-list-compact {
+  container-type: inline-size;
+}
+
+.song-list-compact .song-list-header {
+  padding-right: 0;
+}
+
+.song-list-compact .song-list-columns {
+  height: 36px;
+  margin-right: 0;
+  margin-left: 0;
+  padding-right: 12px;
+  border-bottom: 1px solid rgb(var(--s-on-surface) / 0.08);
+  font-size: 11px;
+}
+
+.song-list-compact .song-list-batch {
+  height: auto;
+  min-height: 40px;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 8px 12px;
+}
+
+.song-list-compact .song-list-item {
+  padding: 0;
+}
+
+.song-list-compact .song-row {
+  height: 56px;
+  padding-right: 12px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+}
+
+.song-list-compact .song-row[data-even="true"] {
+  background: rgb(var(--s-on-surface) / 0.025);
+}
+
+.song-list-compact .song-row:hover,
+.song-list-compact .song-row:focus-within {
+  background: rgb(var(--s-on-surface) / 0.06);
+}
+
+.song-list-compact .song-row[data-playing="true"],
+.song-list-compact .song-row[data-selected="true"] {
+  background: rgb(var(--s-primary) / 0.1);
+}
+
+.song-list-compact .song-row:focus-visible {
+  outline-offset: -2px;
+}
+
+.song-list-compact .song-cover {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+}
+
+.song-list-compact .song-title,
+.song-list-compact .song-comment,
+.song-list-compact .song-album {
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.song-list-compact .song-play-button > span,
+.song-list-compact .song-duration {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.song-list-compact .song-album {
+  color: rgb(var(--s-on-surface-variant) / 0.75);
+}
+
+.song-list-compact .song-meta {
+  margin-top: 2px;
+  color: rgb(var(--s-on-surface-variant) / 0.65);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.song-list-compact .song-quality {
+  order: 1;
+  border: 0;
+  background: rgb(var(--s-on-surface) / 0.05);
+  color: rgb(var(--s-on-surface-variant) / 0.7);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 14px;
+}
+
+.song-list-compact .song-actions :deep(.s-button) {
+  opacity: 0;
+}
+
+.song-list-compact .song-row:hover .song-actions :deep(.s-button),
+.song-list-compact .song-row:focus-within .song-actions :deep(.s-button),
+.song-list-compact .song-actions[data-liked="true"] > :deep(.s-button) {
+  opacity: 1;
+}
+
+@container (max-width: 640px) {
+  .song-list-compact .song-album {
+    display: none;
+  }
+}
+
+@media (hover: none) {
+  .song-list-compact .song-actions :deep(.s-button) {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .song-list-compact .song-row {
+    transition: none;
+  }
+}
+</style>

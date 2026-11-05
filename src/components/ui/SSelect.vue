@@ -14,6 +14,8 @@ export interface SSelectProps {
   options?: SSelectOption[];
   disabled?: boolean;
   placeholder?: string;
+  /** 无可见标签时提供给屏幕阅读器的名称 */
+  ariaLabel?: string;
   /** 全圆角胶囊形 */
   round?: boolean;
 }
@@ -49,6 +51,7 @@ const handleChange = (val: string) => {
     @update:open="onOpenChange"
   >
     <SelectTrigger
+      :aria-label="ariaLabel"
       class="group flex w-full items-center justify-between gap-2 h-8.5 px-3 text-sm text-on-surface bg-field border border-solid border-on-surface/20 cursor-pointer outline-none focus-visible:outline-none transition-[border-color,box-shadow,opacity] duration-250 hover:border-on-surface/50 data-[state=open]:border-primary data-[state=open]:ring-2 data-[state=open]:ring-primary/25 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden"
       :class="round ? 'rounded-full' : 'rounded-lg'"
     >

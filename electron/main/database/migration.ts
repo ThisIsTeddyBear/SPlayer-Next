@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 
 /** 当前 schema 版本 */
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 type TableInfoRow = { name: string };
 
@@ -136,6 +136,17 @@ export const migrate = (d: Database.Database): void => {
       FROM tracks;
     `);
     v = 9;
+  }
+
+  if (v < 10) {
+    if (!hasColumn(d, "tracks", "added_at")) {
+      d.exec("ALTER TABLE tracks ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0");
+    }
+    // 旧曲库无法还原首次入库时间，以文件创建时间保留已有收藏的大致顺序。
+    d.exec(
+      "UPDATE tracks SET added_at = COALESCE(NULLIF(file_ctime, 0), scanned_at) WHERE added_at = 0",
+    );
+    v = 10;
   }
 
   // 版本无关部分

@@ -17,15 +17,32 @@ import { buildRegistry, dispatch } from "./registry";
 /**
  * 焦点元素是否吃掉快捷键
  * - input/textarea/select/contenteditable：拦截所有按键
- * - slider / spinbutton：保留方向键；button 保留 Enter / Space 原生激活
+ * - 选择器和菜单保留导航按键；button 保留 Enter / Space 原生激活
  */
 const isInputFocused = (event: KeyboardEvent): boolean => {
   const el = document.activeElement as HTMLElement | null;
   if (!el) return false;
   if (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT") return true;
   if (el.isContentEditable) return true;
-  if (["slider", "spinbutton"].includes(el.getAttribute("role") ?? "")) return true;
-  if (el.tagName === "BUTTON" || el.getAttribute("role") === "button") {
+  const role = el.getAttribute("role");
+  if (role === "link" && event.code === "Enter") return true;
+  if (
+    [
+      "slider",
+      "spinbutton",
+      "combobox",
+      "option",
+      "menuitem",
+      "menuitemcheckbox",
+      "menuitemradio",
+    ].includes(role ?? "")
+  ) {
+    return true;
+  }
+  if (role === "tab" && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+    return true;
+  }
+  if (el.tagName === "BUTTON" || role === "button") {
     return event.code === "Enter" || event.code === "Space";
   }
   return false;
