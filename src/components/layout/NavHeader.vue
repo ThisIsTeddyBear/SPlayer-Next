@@ -39,7 +39,7 @@ const menuItems = computed<DropdownMenuItem[]>(() => [
     key: "theme",
     label: themeLabel.value,
     icon: themeIcon.value,
-    disabled: theme.appearanceStyle === "image",
+    disabled: theme.appearanceStyle === "image" && !theme.songThemeEnabled,
   },
   { key: "uiZoom", label: t("uiZoom.title"), icon: IconScaling },
   { key: "reload", label: t("nav.reload"), icon: IconRefreshCw, separator: true },

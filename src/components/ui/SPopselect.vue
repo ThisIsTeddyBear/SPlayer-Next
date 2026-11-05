@@ -65,6 +65,7 @@ const handleChange = (val: string): void => {
 
     <SelectPortal>
       <SelectContent
+        :data-app-theme="cover ? undefined : ''"
         position="popper"
         :side="side"
         :align="align"

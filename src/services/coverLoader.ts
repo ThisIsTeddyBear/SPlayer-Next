@@ -8,7 +8,6 @@
 import type { Track } from "@shared/types/player";
 import { useMediaStore } from "@/stores/media";
 import { usePluginsStore } from "@/stores/plugins";
-import { extractColorFromUrl } from "@/utils/color";
 
 /** 竞态 token */
 let currentToken = 0;
@@ -37,8 +36,6 @@ export const loadCoverForTrack = async (track: Track): Promise<void> => {
       // 期间可能已切歌
       if (media.track?.id !== track.id) return;
       media.patchCover(resp.data.url);
-      // 封面晚到，按这张重新提色（加载时那次是空封面，未提到色）
-      extractColorFromUrl(resp.data.url);
       return;
     }
   }

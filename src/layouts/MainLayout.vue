@@ -2,6 +2,8 @@
 import { useStatusStore } from "@/stores/status";
 import { useMediaStore } from "@/stores/media";
 import { useSettingsStore } from "@/stores/settings";
+import { useThemeStore } from "@/stores/theme";
+import SongBackground from "@/components/SongBackground.vue";
 import { useOrpheusProtocol } from "@/composables/useOrpheusProtocol";
 import { useExternalFileHandler } from "@/composables/useExternalFileHandler";
 import AudioInfoDialog from "@/components/modals/AudioInfoDialog.vue";
@@ -9,6 +11,7 @@ import AudioInfoDialog from "@/components/modals/AudioInfoDialog.vue";
 const route = useRoute();
 const status = useStatusStore();
 const settings = useSettingsStore();
+const theme = useThemeStore();
 
 // 接入 orpheus 协议唤起与外部音频文件播放
 useOrpheusProtocol();
@@ -116,10 +119,12 @@ const playerBarInnerClass = computed(() => {
 <template>
   <!-- 主界面 -->
   <div
-    class="h-screen flex overflow-hidden bg-app text-on-surface transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.7,0,0.3,1)] origin-center"
+    data-app-theme
+    class="relative isolate h-screen flex overflow-hidden bg-app text-on-surface transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.7,0,0.3,1)] origin-center"
     :class="isPlayerExpanded ? 'scale-95 opacity-0 pointer-events-none' : ''"
     :inert="isPlayerExpanded"
   >
+    <SongBackground v-if="theme.songThemeActive" />
     <!-- 侧边栏 -->
     <aside
       class="shrink-0 bg-surface-panel overflow-y-auto z-10 transition-[width,margin] duration-300"
@@ -156,7 +161,7 @@ const playerBarInnerClass = computed(() => {
     leave-to-class="translate-y-full"
   >
     <div v-if="showPlayerBar" :class="playerBarWrapperClass">
-      <footer :class="playerBarInnerClass" :inert="isPlayerExpanded">
+      <footer data-app-theme :class="playerBarInnerClass" :inert="isPlayerExpanded">
         <PlayerBar />
       </footer>
     </div>

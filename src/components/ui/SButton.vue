@@ -217,6 +217,8 @@ const variantClass = computed(() => {
     :type="attrType"
     :disabled="isDisabled"
     :aria-busy="loading || undefined"
+    :data-button-type="type"
+    :data-button-variant="variant"
     class="s-button inline-flex items-center gap-1.5 font-sans select-none outline-none cursor-pointer transition-[color,background-color,border-color,opacity,transform] duration-200 disabled:cursor-not-allowed disabled:op-50"
     :class="[
       block && 'w-full',

@@ -1,6 +1,7 @@
 import type { ThemeMode, ThemeSource, AppearanceStyle, ImageBackgroundConfig } from "@/types/theme";
 import {
   generatePalette,
+  generateSongPalette,
   applyThemeToDOM,
   extractColorFromImageUrl,
   DEFAULT_PRIMARY,
@@ -22,6 +23,10 @@ export const useThemeStore = defineStore(
     const customColor = ref(DEFAULT_PRIMARY);
     /** 全局着色 */
     const globalTint = ref(false);
+    /** 歌曲主题独立于用户保存的基础主题，关闭后直接恢复原设置。 */
+    const songThemeEnabled = ref(true);
+    const songLoaded = ref(false);
+    const songColors = shallowRef<string[]>([]);
     /** 封面取色 HEX */
     const coverColor = ref<string | null>(null);
     /** 封面提取出的歌手轨道颜色 */
@@ -43,12 +48,15 @@ export const useThemeStore = defineStore(
       appearanceStyle.value === "image" && !imageBackground.src ? "solid" : appearanceStyle.value,
     );
 
+    const songThemeInUse = computed(() => songThemeEnabled.value && songLoaded.value);
+    const songThemeActive = computed(() => songThemeInUse.value && songColors.value.length > 0);
+
     /** 系统暗色偏好 */
     const systemDark = usePreferredDark();
 
     /** 当前是否为暗色 */
     const isDark = computed(() => {
-      if (effectiveStyle.value === "image") return true;
+      if (effectiveStyle.value === "image" && !songThemeEnabled.value) return true;
       if (mode.value === "dark") return true;
       if (mode.value === "light") return false;
       return systemDark.value;
@@ -80,13 +88,17 @@ export const useThemeStore = defineStore(
     const apply = (): void => {
       const useSolid =
         source.value === "solid" || (source.value === "cover" && !trackedColorForCover.value);
-      const palette = useSolid
-        ? isDark.value
-          ? SOLID_PALETTE_DARK
-          : SOLID_PALETTE_LIGHT
-        : generatePalette(effectiveColor.value, isDark.value, effectiveGlobalTint.value);
+      const neutral = isDark.value ? SOLID_PALETTE_DARK : SOLID_PALETTE_LIGHT;
+      const palette = songThemeInUse.value
+        ? songThemeActive.value
+          ? generateSongPalette(songColors.value[0], isDark.value)
+          : neutral
+        : useSolid
+          ? neutral
+          : generatePalette(effectiveColor.value, isDark.value, effectiveGlobalTint.value);
       applyThemeToDOM(palette, coverColor.value, coverSingerColors.value, isDark.value);
       document.documentElement.dataset.appearanceStyle = effectiveStyle.value;
+      document.documentElement.dataset.songTheme = songThemeActive.value ? "active" : "off";
     };
 
     /** 循环切换主题模式 */
@@ -136,6 +148,9 @@ export const useThemeStore = defineStore(
           coverColor,
           coverSingerColors,
           effectiveStyle,
+          songThemeEnabled,
+          songLoaded,
+          songColors,
         ],
         () => apply(),
       );
@@ -146,6 +161,11 @@ export const useThemeStore = defineStore(
       source,
       customColor,
       globalTint,
+      songThemeEnabled,
+      songLoaded,
+      songColors,
+      songThemeInUse,
+      songThemeActive,
       coverColor,
       coverSingerColors,
       appearanceStyle,
@@ -168,6 +188,7 @@ export const useThemeStore = defineStore(
         "source",
         "customColor",
         "globalTint",
+        "songThemeEnabled",
         "appearanceStyle",
         "imageBackground",
         "imageBackgroundColor",

@@ -1584,6 +1584,10 @@
       "cover": "From Cover / Background",
       "solid": "No Theme Color"
     },
+    "songTheme": {
+      "label": "Follow Playing Song",
+      "description": "Bring the current song’s colors to backgrounds, panels, and controls. Turn off to restore your saved theme. Custom wallpapers are preserved."
+    },
     "customColor": {
       "label": "Custom Theme Color",
       "description": "Primary color used by the custom source"

@@ -4,7 +4,6 @@ import type { Track } from "@shared/types/player";
 import type { SVirtualListExposed } from "@/components/ui/SVirtualList.vue";
 import { useStatusStore } from "@/stores/status";
 import { useMediaStore } from "@/stores/media";
-import { useThemeStore } from "@/stores/theme";
 import { clearQueue, queue, queueLength } from "@/stores/queue";
 import * as player from "@/core/player";
 
@@ -47,9 +46,6 @@ export const useQueuePanel = (options: UseQueuePanelOptions) => {
     statusStore.playIndex = -1;
     clearQueue();
     mediaStore.clear();
-    const theme = useThemeStore();
-    theme.coverColor = null;
-    theme.coverSingerColors = [];
     clearConfirmOpen.value = false;
   };
 

@@ -19,11 +19,15 @@ const imageStyle = computed<Record<string, string>>(() => ({
       class="w-full h-full select-none"
       :style="imageStyle"
       draggable="false"
+      decoding="async"
       alt=""
     />
     <div
-      class="absolute inset-0 bg-black transition-opacity"
-      :style="{ opacity: theme.imageBackground.dim }"
+      class="absolute inset-0 transition-opacity"
+      :style="{
+        backgroundColor: theme.isDark ? '#000' : '#fff',
+        opacity: theme.isDark ? theme.imageBackground.dim : Math.max(0.75, theme.imageBackground.dim),
+      }"
     />
   </div>
 </template>

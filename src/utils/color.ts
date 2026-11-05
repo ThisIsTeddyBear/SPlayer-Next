@@ -26,6 +26,7 @@ const SINGER_LANE_COUNT = 6;
 interface CoverColorExtraction {
   primary: string | null;
   singerColors: string[];
+  ambientColors: string[];
 }
 
 /** 将 ARGB 整数转为 HEX 字符串 */
@@ -108,6 +109,34 @@ const pickSingerCoverColors = (colors: Map<number, number>, primary: number): st
   return selected.map(toCoverBaseColor);
 };
 
+/**
+ * 从真实封面颜色中保留最多三种衬色，不使用歌手轨道的补充色相。
+ * @param colors - 封面量化颜色及其权重
+ * @param primary - 已选定的封面代表色
+ * @returns 按代表色、衬色排列的有限色组
+ */
+const pickAmbientCoverColors = (colors: Map<number, number>, primary: number): string[] => {
+  const total = [...colors.values()].reduce((sum, count) => sum + count, 0);
+  const selected = [primary];
+  const candidates = [...colors.entries()].sort(([, a], [, b]) => b - a);
+  for (const [candidate, count] of candidates) {
+    if (selected.length === 3) break;
+    if (count / total < 0.03) continue;
+    const color = Hct.fromInt(candidate);
+    if (color.tone < 10 || color.tone > 94) continue;
+    if (
+      selected.every((picked) => {
+        const previous = Hct.fromInt(picked);
+        const hueDistance = Math.abs(((previous.hue - color.hue + 540) % 360) - 180);
+        return hueDistance >= 24 || Math.abs(previous.tone - color.tone) >= 20;
+      })
+    ) {
+      selected.push(candidate);
+    }
+  }
+  return selected.map(argbToHex);
+};
+
 /** 把真实代表色约束到适合作为背景基色的范围 */
 const toCoverBaseColor = (argb: number): string => {
   const hct = Hct.fromInt(argb);
@@ -168,6 +197,38 @@ export const generatePalette = (hex: string, isDark: boolean, globalTint = false
   return { ...base, ...primaryColors };
 };
 
+/**
+ * 生成全局歌曲色板，保留中性正文并分别控制强调色与表面色度。
+ * @param hex - 当前封面的代表色
+ * @param isDark - 是否使用暗色模式
+ * @returns 按明暗模式约束过亮度的歌曲色板
+ */
+export const generateSongPalette = (hex: string, isDark: boolean): ThemePalette => {
+  const cover = Hct.fromInt(argbFromHex(hex));
+  const base = isDark ? SOLID_PALETTE_DARK : SOLID_PALETTE_LIGHT;
+  const toneColor = (tone: number, chroma: number): string =>
+    hexToRgb(argbToHex(Hct.from(cover.hue, chroma, tone).toInt()));
+  const accentChroma = Math.min(64, Math.max(40, cover.chroma));
+  const surfaceChroma = Math.min(24, cover.chroma * 0.4);
+
+  return {
+    ...base,
+    primary: toneColor(isDark ? 80 : 36, accentChroma),
+    onPrimary: toneColor(isDark ? 12 : 100, 12),
+    primaryContainer: toneColor(isDark ? 26 : 90, accentChroma * 0.6),
+    onPrimaryContainer: toneColor(isDark ? 92 : 18, 18),
+    secondary: toneColor(isDark ? 74 : 40, 24),
+    secondaryContainer: toneColor(isDark ? 22 : 92, 18),
+    surface: toneColor(isDark ? 8 : 97, surfaceChroma),
+    surfaceAlt: toneColor(isDark ? 16 : 94, surfaceChroma),
+    surfacePanel: toneColor(isDark ? 12 : 96, surfaceChroma),
+    surfaceBright: toneColor(isDark ? 22 : 98, surfaceChroma),
+    onSurfaceVariant: isDark ? "184 184 193" : "91 91 101",
+    outline: toneColor(isDark ? 42 : 64, 12),
+    outlineVariant: toneColor(isDark ? 28 : 82, 12),
+  };
+};
+
 /** 纯色色板 — 浅色（基于 Zinc 色系，带微弱冷色调） */
 export const SOLID_PALETTE_LIGHT: ThemePalette = {
   primary: "24 24 27",
@@ -206,33 +267,42 @@ export const SOLID_PALETTE_DARK: ThemePalette = {
 
 /**
  * 从 HTMLImageElement 提取主色并应用
- * 缩放到 50×50 降低计算量，经 QuantizerCelebi 量化 + Score 评分
- * @param img 封面图片元素，无封面传 null
+ * 缩放到 64×64 降低计算量，复用封面量化结果。
+ * @param img - 封面图片元素，无封面传 null
  */
 export const extractColorFromImage = (img: HTMLImageElement | null): void => {
-  const themeStore = useThemeStore();
-  if (!img || !useSettingsStore().player.followCoverColor) {
-    themeStore.coverColor = null;
-    themeStore.coverSingerColors = [];
+  ++coverColorToken;
+  const theme = useThemeStore();
+  if (!img || (!theme.songThemeEnabled && !useSettingsStore().player.followCoverColor)) {
+    applyCoverColors(null);
     return;
   }
-  const colors = extractColorFromImageElement(img);
-  themeStore.coverColor = colors.primary;
-  themeStore.coverSingerColors = colors.singerColors;
+  applyCoverColors(extractColorFromImageElement(img));
+};
+
+/**
+ * 共用一次取色结果，播放器前景仍遵循原有独立开关。
+ * @param colors - 当前封面颜色；空值清除上首歌曲的衬色
+ */
+const applyCoverColors = (colors: CoverColorExtraction | null): void => {
+  const theme = useThemeStore();
+  const followCover = useSettingsStore().player.followCoverColor;
+  theme.coverColor = followCover ? (colors?.primary ?? null) : null;
+  theme.coverSingerColors = followCover ? (colors?.singerColors ?? []) : [];
+  theme.songColors = colors?.primary ? colors.ambientColors : [];
 };
 
 /**
  * 从图片 URL 提取主色并应用（不依赖 DOM 渲染）
  * 适用于启动时组件还未挂载的场景
  * http(s) URL 走主进程取字节构造 blob URL，避免跨域 canvas tainted
- * @param url 封面图片 URL，传 null 清除颜色
+ * @param url - 封面图片 URL，传 null 清除颜色
  */
 export const extractColorFromUrl = (url: string | null): void => {
-  const themeStore = useThemeStore();
+  const theme = useThemeStore();
   const token = ++coverColorToken;
-  if (!url || !useSettingsStore().player.followCoverColor) {
-    themeStore.coverColor = null;
-    themeStore.coverSingerColors = [];
+  if (!url || (!theme.songThemeEnabled && !useSettingsStore().player.followCoverColor)) {
+    applyCoverColors(null);
     return;
   }
   if (/^https?:\/\//i.test(url)) {
@@ -242,42 +312,34 @@ export const extractColorFromUrl = (url: string | null): void => {
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.onload = () => {
-    if (token !== coverColorToken || !useSettingsStore().player.followCoverColor) return;
-    const colors = extractColorFromImageElement(img);
-    themeStore.coverColor = colors.primary;
-    themeStore.coverSingerColors = colors.singerColors;
+    if (token !== coverColorToken) return;
+    applyCoverColors(extractColorFromImageElement(img));
   };
   img.onerror = () => {
     if (token !== coverColorToken) return;
-    themeStore.coverColor = null;
-    themeStore.coverSingerColors = [];
+    applyCoverColors(null);
   };
   img.src = url;
 };
 
 /** 跨域封面：主进程拉字节 → blob URL → 同源 canvas 取色 */
 const loadColorFromRemote = async (url: string, token: number): Promise<void> => {
-  const settings = useSettingsStore();
-  const themeStore = useThemeStore();
   try {
     const result = await window.api.system.fetchRemoteBytes(url);
-    if (token !== coverColorToken || !settings.player.followCoverColor) return;
+    if (token !== coverColorToken) return;
     if (!result.success || !result.data) {
-      themeStore.coverColor = null;
-      themeStore.coverSingerColors = [];
+      applyCoverColors(null);
       return;
     }
     const blob = new Blob([new Uint8Array(result.data)]);
     const blobUrl = URL.createObjectURL(blob);
     const img = new Image();
     img.onload = () => {
-      if (token !== coverColorToken || !settings.player.followCoverColor) {
+      if (token !== coverColorToken) {
         URL.revokeObjectURL(blobUrl);
         return;
       }
-      const colors = extractColorFromImageElement(img);
-      themeStore.coverColor = colors.primary;
-      themeStore.coverSingerColors = colors.singerColors;
+      applyCoverColors(extractColorFromImageElement(img));
       URL.revokeObjectURL(blobUrl);
     };
     img.onerror = () => {
@@ -285,15 +347,13 @@ const loadColorFromRemote = async (url: string, token: number): Promise<void> =>
         URL.revokeObjectURL(blobUrl);
         return;
       }
-      themeStore.coverColor = null;
-      themeStore.coverSingerColors = [];
+      applyCoverColors(null);
       URL.revokeObjectURL(blobUrl);
     };
     img.src = blobUrl;
   } catch {
     if (token !== coverColorToken) return;
-    themeStore.coverColor = null;
-    themeStore.coverSingerColors = [];
+    applyCoverColors(null);
   }
 };
 
@@ -320,7 +380,11 @@ export const extractColorFromImageElement = (img: HTMLImageElement): CoverColorE
   canvas.width = COVER_SAMPLE_SIZE;
   canvas.height = COVER_SAMPLE_SIZE;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) return { primary: null, singerColors: [] };
+  if (!ctx) {
+    canvas.width = 0;
+    canvas.height = 0;
+    return { primary: null, singerColors: [], ambientColors: [] };
+  }
   // 跨域无 CORS 头会污染 canvas；图片状态异常时 drawImage 也可能抛错
   let data: Uint8ClampedArray;
   try {
@@ -339,7 +403,7 @@ export const extractColorFromImageElement = (img: HTMLImageElement): CoverColorE
   } catch {
     canvas.width = 0;
     canvas.height = 0;
-    return { primary: null, singerColors: [] };
+    return { primary: null, singerColors: [], ambientColors: [] };
   }
   // RGBA → ARGB int
   const pixels: number[] = [];
@@ -352,16 +416,17 @@ export const extractColorFromImageElement = (img: HTMLImageElement): CoverColorE
       for (let j = 0; j < weight; j++) pixels.push(argb);
     }
   }
-  if (pixels.length === 0) return { primary: null, singerColors: [] };
-  const quantized = QuantizerCelebi.quantize(pixels, 128);
-  const picked = pickRepresentativeCoverColor(quantized);
-  if (!picked) return { primary: null, singerColors: [] };
-  // 释放 canvas GPU 资源
+  // 量化只保留像素数组，读取后立即释放离屏位图。
   canvas.width = 0;
   canvas.height = 0;
+  if (pixels.length === 0) return { primary: null, singerColors: [], ambientColors: [] };
+  const quantized = QuantizerCelebi.quantize(pixels, 128);
+  const picked = pickRepresentativeCoverColor(quantized);
+  if (!picked) return { primary: null, singerColors: [], ambientColors: [] };
   return {
     primary: toCoverBaseColor(picked),
     singerColors: pickSingerCoverColors(quantized, picked),
+    ambientColors: pickAmbientCoverColors(quantized, picked),
   };
 };
 

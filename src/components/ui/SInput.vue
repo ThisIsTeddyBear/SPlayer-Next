@@ -124,7 +124,8 @@ const handleEscape = (event: KeyboardEvent): void => {
 
 <template>
   <div
-    class="text-on-surface border border-solid transition-[border-color,box-shadow,background-color,width,opacity] duration-250"
+    class="s-input text-on-surface border border-solid transition-[border-color,box-shadow,background-color,width,opacity] duration-250"
+    :data-input-status="status"
     :class="[
       isTextarea ? 'relative block' : 'flex items-center gap-2',
       sizeClasses,

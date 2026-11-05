@@ -92,6 +92,7 @@ const menuItemClass = computed(() =>
 
     <DropdownMenuPortal>
       <DropdownMenuContent
+        :data-app-theme="cover ? undefined : ''"
         :side="side"
         :align="align"
         :side-offset="sideOffset"
@@ -111,6 +112,7 @@ const menuItemClass = computed(() =>
             </DropdownMenuSubTrigger>
             <DropdownMenuPortal>
               <DropdownMenuSubContent
+                :data-app-theme="cover ? undefined : ''"
                 :side-offset="4"
                 :avoid-collisions="true"
                 :collision-padding="12"

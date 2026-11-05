@@ -118,6 +118,7 @@ const setOpen = (val: boolean): void => {
         ]"
       />
       <DialogContent
+        :data-app-theme="cover ? undefined : ''"
         :style="[containerStyle, { zIndex: activeZIndex }]"
         :class="[
           'fixed left-1/2 -translate-x-1/2',

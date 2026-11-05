@@ -136,6 +136,7 @@ const bridgeClasses = computed(() =>
 
     <PopoverPortal>
       <PopoverContent
+        :data-app-theme="cover ? undefined : ''"
         :side="side"
         :align="align"
         :side-offset="sideOffset"

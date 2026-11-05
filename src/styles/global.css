@@ -1,5 +1,6 @@
 @import "/fonts/font.css";
 @import "./markdown.css";
+@import "./song-theme.css";
 
 * {
   margin: 0;

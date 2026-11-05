@@ -27,7 +27,6 @@ import {
 } from "@/services/nextTrackPreloader";
 import { installPlayStats } from "./stats";
 import { useFavorite } from "@/composables/useFavorite";
-import { extractColorFromUrl } from "@/utils/color";
 import { handleError, isSkippableError } from "@/utils/errors";
 import { ErrorCode } from "@shared/types/errors";
 import { shouldSkipKeywordTrack } from "@/utils/preset/skipKeywords";
@@ -127,7 +126,6 @@ export const load = async (
   const isOnline = meta?.source !== "local";
   if (isOnline) {
     void lyricLoader.loadForTrack(null);
-    extractColorFromUrl(meta?.cover ?? meta?.coverOriginal ?? null);
     if (meta) void coverLoader.loadCoverForTrack(meta);
   }
   try {
@@ -148,7 +146,6 @@ export const load = async (
       }
       if (!isOnline) {
         lyricLoader.loadForTrack(detail);
-        extractColorFromUrl(enriched?.cover ?? null);
         if (enriched) void coverLoader.loadCoverForTrack(enriched);
       }
       const dur = enriched?.duration ?? mediaInfo.duration;

@@ -190,6 +190,7 @@ const compareByValue = (a: unknown, b: unknown): boolean => {
 
     <ComboboxPortal>
       <ComboboxContent
+        data-app-theme
         position="popper"
         :side-offset="4"
         :collision-padding="12"

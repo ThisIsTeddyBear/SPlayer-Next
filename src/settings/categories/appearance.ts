@@ -23,8 +23,14 @@ const appearanceCategory: SettingCategory = {
             { value: "system", labelKey: "settings.themeMode.system" },
           ],
           defaultValue: "system",
-          // 图片背景下强制暗色，禁用此开关
-          disabled: () => useThemeStore().appearanceStyle === "image",
+          disabled: () =>
+            useThemeStore().appearanceStyle === "image" && !useThemeStore().songThemeEnabled,
+        },
+        {
+          key: "songTheme",
+          type: "switch",
+          binding: { store: "theme", path: "songThemeEnabled" },
+          defaultValue: true,
         },
         {
           key: "themeSource",
@@ -37,6 +43,7 @@ const appearanceCategory: SettingCategory = {
             { value: "solid", labelKey: "settings.themeSource.solid" },
           ],
           defaultValue: "default",
+          disabled: () => useThemeStore().songThemeEnabled,
           childrenCondition: () => useThemeStore().source === "custom",
           hideChildren: true,
           children: [
@@ -58,6 +65,7 @@ const appearanceCategory: SettingCategory = {
               defaultValue: "#fe7971",
               showAlpha: false,
               colorFormat: "hex",
+              disabled: () => useThemeStore().songThemeEnabled,
             },
           ],
         },
@@ -66,8 +74,8 @@ const appearanceCategory: SettingCategory = {
           type: "switch",
           binding: { store: "theme", path: "globalTint" },
           defaultValue: false,
-          // 图片背景下强制开启全局着色，禁用切换
-          disabled: () => useThemeStore().appearanceStyle === "image",
+          disabled: () =>
+            useThemeStore().songThemeEnabled || useThemeStore().appearanceStyle === "image",
         },
       ],
     },

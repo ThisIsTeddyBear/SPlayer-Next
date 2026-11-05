@@ -64,6 +64,7 @@ const handleChange = (val: string) => {
 
     <SelectPortal>
       <SelectContent
+        data-app-theme
         position="popper"
         :side-offset="4"
         :collision-padding="12"
